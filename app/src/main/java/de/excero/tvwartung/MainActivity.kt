@@ -22,6 +22,7 @@ import de.excero.tvwartung.ui.screens.ExportScreen
 import de.excero.tvwartung.ui.screens.HomeScreen
 import de.excero.tvwartung.ui.screens.PruefbogenScreen
 import de.excero.tvwartung.ui.screens.RoomDetailScreen
+import de.excero.tvwartung.ui.screens.SettingsScreen
 import de.excero.tvwartung.ui.theme.KKHTheme
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -29,6 +30,7 @@ import java.net.URLEncoder
 object Routes {
     const val HOME = "home"
     const val EXPORT = "export"
+    const val SETTINGS = "settings"
     fun room(id: String) = "room/${URLEncoder.encode(id, "UTF-8")}"
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
 }
@@ -63,7 +65,8 @@ class MainActivity : ComponentActivity() {
                             HomeScreen(
                                 viewModel = viewModel,
                                 onRoomClick = { navController.navigate(Routes.room(it)) },
-                                onExportClick = { navController.navigate(Routes.EXPORT) }
+                                onExportClick = { navController.navigate(Routes.EXPORT) },
+                                onSettingsClick = { navController.navigate(Routes.SETTINGS) }
                             )
                         }
                         composable("room/{roomId}") { entry ->
@@ -89,6 +92,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(Routes.EXPORT) {
                             ExportScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Routes.SETTINGS) {
+                            SettingsScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() }
                             )

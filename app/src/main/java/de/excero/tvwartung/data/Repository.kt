@@ -1,6 +1,7 @@
 package de.excero.tvwartung.data
 
 import android.content.Context
+import androidx.room.withTransaction
 import de.excero.tvwartung.util.Dates
 import kotlinx.coroutines.flow.Flow
 import org.json.JSONArray
@@ -21,40 +22,68 @@ class Repository(private val db: AppDatabase) {
     fun inspectionsOn(isoDate: String): Flow<List<Inspection>> =
         db.inspectionDao().observeForDate(isoDate)
 
+    fun inspectionsSince(isoStart: String): Flow<List<Inspection>> =
+        db.inspectionDao().observeSince(isoStart)
+
+    fun activityFor(roomId: String): Flow<List<ActivityLog>> =
+        db.activityLogDao().observeForRoom(roomId)
+
+    fun recentActivity(limit: Int = 200): Flow<List<ActivityLog>> =
+        db.activityLogDao().observeRecent(limit)
+
     suspend fun allRooms(): List<TvRoom> = db.tvRoomDao().getAll()
 
     suspend fun allInspections(): List<Inspection> = db.inspectionDao().getAll()
 
-    suspend fun updateRoom(room: TvRoom) = db.tvRoomDao().update(room)
+    /** Interne Protokollierung: wann wurde welches Zimmer bearbeitet (wird nie exportiert). */
+    suspend fun logAction(roomId: String, aktion: String) {
+        db.activityLogDao().insert(
+            ActivityLog(roomId = roomId, zeitpunkt = Dates.nowIsoDateTime(), aktion = aktion)
+        )
+    }
+
+    suspend fun updateRoom(room: TvRoom, logAktion: String = "Stammdaten geändert") {
+        db.withTransaction {
+            db.tvRoomDao().update(room)
+            logAction(room.id, logAktion)
+        }
+    }
 
     suspend fun importRooms(rooms: List<TvRoom>) = db.tvRoomDao().upsertAll(rooms)
 
     /**
-     * Speichert einen ausgefüllten Prüfbogen und schreibt die Ergebnisse in die
-     * Stammdaten zurück: Lebenslauf-Eintrag, letzte Prüfung und – falls Freenet
-     * verlängert wurde – das neue Gültigkeitsdatum.
+     * Speichert einen ausgefüllten Prüfbogen atomar und schreibt alle Ergebnisse in
+     * die Stammdaten zurück: Lebenslauf-Eintrag, letzte Prüfung, korrigierte Werte
+     * (Seriennummer, Freenet-ID, TV-Typ) und ein neues/korrigiertes Gültigkeitsdatum.
      */
     suspend fun saveInspection(
         inspection: Inspection,
         lebenslaufEintrag: String,
-        neuesGueltigBis: String?
+        neuesGueltigBis: String? = null,
+        neueSeriennummer: String? = null,
+        neueFreenetId: String? = null,
+        neuerTvTyp: String? = null
     ) {
-        db.inspectionDao().insert(inspection)
-        val room = db.tvRoomDao().getById(inspection.roomId) ?: return
-        val neueHistorie = if (lebenslaufEintrag.isBlank()) {
-            room.lebenslauf
-        } else if (room.lebenslauf.isBlank()) {
-            lebenslaufEintrag
-        } else {
-            room.lebenslauf.trimEnd() + "\n" + lebenslaufEintrag
-        }
-        db.tvRoomDao().update(
-            room.copy(
-                lebenslauf = neueHistorie,
-                letztePruefung = inspection.datum,
-                gueltigBis = neuesGueltigBis?.takeIf { it.isNotBlank() } ?: room.gueltigBis
+        db.withTransaction {
+            db.inspectionDao().insert(inspection)
+            val room = db.tvRoomDao().getById(inspection.roomId) ?: return@withTransaction
+            val neueHistorie = when {
+                lebenslaufEintrag.isBlank() -> room.lebenslauf
+                room.lebenslauf.isBlank() -> lebenslaufEintrag
+                else -> room.lebenslauf.trimEnd() + "\n" + lebenslaufEintrag
+            }
+            db.tvRoomDao().update(
+                room.copy(
+                    lebenslauf = neueHistorie,
+                    letztePruefung = inspection.datum,
+                    gueltigBis = neuesGueltigBis?.takeIf { it.isNotBlank() } ?: room.gueltigBis,
+                    seriennummer = neueSeriennummer?.takeIf { it.isNotBlank() } ?: room.seriennummer,
+                    freenetId = neueFreenetId?.takeIf { it.isNotBlank() } ?: room.freenetId,
+                    tvTyp = neuerTvTyp?.takeIf { it.isNotBlank() } ?: room.tvTyp
+                )
             )
-        )
+            logAction(inspection.roomId, "Prüfbogen gespeichert")
+        }
     }
 
     /** Lädt die mitgelieferten Stammdaten (Stand der KKH-Übersicht), falls die DB leer ist. */

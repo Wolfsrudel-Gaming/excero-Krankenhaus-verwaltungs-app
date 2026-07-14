@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Card
@@ -48,13 +49,17 @@ import de.excero.tvwartung.util.Dates
 fun HomeScreen(
     viewModel: AppViewModel,
     onRoomClick: (String) -> Unit,
-    onExportClick: () -> Unit
+    onExportClick: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     val rooms by viewModel.rooms.collectAsState()
-    val inspectionsToday by viewModel.inspectionsToday.collectAsState()
+    val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
+    val settings by viewModel.settings.collectAsState()
     var query by remember { mutableStateOf("") }
 
-    val checkedToday = remember(inspectionsToday) { inspectionsToday.map { it.roomId }.toSet() }
+    val checkedInPeriod = remember(inspectionsInPeriod) {
+        inspectionsInPeriod.map { it.roomId }.toSet()
+    }
     val filtered = remember(rooms, query) {
         if (query.isBlank()) rooms
         else rooms.filter {
@@ -65,7 +70,9 @@ fun HomeScreen(
                 it.freenetId.contains(query, true)
         }
     }
-    val grouped = remember(filtered) { filtered.groupBy { it.station } }
+    val grouped = remember(filtered) {
+        filtered.groupBy { it.station }.toSortedMap(stationComparator)
+    }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -73,7 +80,7 @@ fun HomeScreen(
                 Column {
                     Text("TV-Wartung KKH", fontWeight = FontWeight.Bold)
                     Text(
-                        "${Dates.todayGerman()} · ${checkedToday.size} von ${rooms.size} Zimmern geprüft",
+                        "${Dates.todayGerman()} · ${checkedInPeriod.size} von ${rooms.size} geprüft (${settings.beschreibung()})",
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
@@ -81,6 +88,9 @@ fun HomeScreen(
             actions = {
                 IconButton(onClick = onExportClick) {
                     Icon(Icons.Default.Upload, contentDescription = "Export")
+                }
+                IconButton(onClick = onSettingsClick) {
+                    Icon(Icons.Default.Settings, contentDescription = "Einstellungen")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -118,7 +128,7 @@ fun HomeScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "${stationRooms.count { it.id in checkedToday }}/${stationRooms.size} geprüft",
+                            "${stationRooms.count { it.id in checkedInPeriod }}/${stationRooms.size} geprüft",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -127,7 +137,7 @@ fun HomeScreen(
                 items(stationRooms.size, key = { stationRooms[it].id }) { index ->
                     RoomCard(
                         room = stationRooms[index],
-                        checkedToday = stationRooms[index].id in checkedToday,
+                        checkedToday = stationRooms[index].id in checkedInPeriod,
                         onClick = { onRoomClick(stationRooms[index].id) }
                     )
                 }

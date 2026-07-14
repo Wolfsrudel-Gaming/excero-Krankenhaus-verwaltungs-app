@@ -1,0 +1,191 @@
+package de.excero.tvwartung.ui.screens
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import de.excero.tvwartung.data.Pruefzeitraum
+import de.excero.tvwartung.ui.AppViewModel
+import de.excero.tvwartung.util.Dates
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(
+    viewModel: AppViewModel,
+    onBack: () -> Unit
+) {
+    val settings by viewModel.settings.collectAsState()
+    val recentActivity by viewModel.recentActivity.collectAsState()
+    var seitDatumText by remember(settings.seitDatum) {
+        mutableStateOf(Dates.isoToGerman(settings.seitDatum))
+    }
+    var dateError by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text("Einstellungen", fontWeight = FontWeight.Bold) },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        )
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Prüfzeitraum („eine Anfahrt“)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Bestimmt, für welchen Zeitraum Zimmer in der Übersicht als geprüft " +
+                            "abgehakt werden – z. B. die ganze Woche, wenn du täglich vor Ort bist.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Pruefzeitraum.entries.forEach { zeitraum ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.updateSettings(settings.copy(zeitraum = zeitraum))
+                                }
+                        ) {
+                            RadioButton(
+                                selected = settings.zeitraum == zeitraum,
+                                onClick = {
+                                    viewModel.updateSettings(settings.copy(zeitraum = zeitraum))
+                                }
+                            )
+                            Text(zeitraum.label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    if (settings.zeitraum == Pruefzeitraum.SEIT_DATUM) {
+                        OutlinedTextField(
+                            value = seitDatumText,
+                            onValueChange = { neu ->
+                                seitDatumText = neu
+                                val iso = Dates.germanToIso(neu)
+                                if (iso.isNullOrBlank()) {
+                                    dateError = neu.isNotBlank()
+                                } else {
+                                    dateError = false
+                                    viewModel.updateSettings(settings.copy(seitDatum = iso))
+                                }
+                            },
+                            label = { Text("Startdatum (TT.MM.JJJJ)") },
+                            singleLine = true,
+                            isError = dateError,
+                            supportingText = if (dateError) {
+                                { Text("Datum bitte als TT.MM.JJJJ eingeben") }
+                            } else null,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    Text(
+                        "Aktueller Zeitraum: ${settings.beschreibung()} " +
+                            "(ab ${Dates.isoToGerman(settings.zeitraumStartIso())})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Aktivitätsprotokoll",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        "Wann welches Zimmer bearbeitet wurde – nur intern, wird nicht exportiert.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    HorizontalDivider()
+                    if (recentActivity.isEmpty()) {
+                        Text(
+                            "Noch keine Einträge.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        recentActivity.forEach { entry ->
+                            Row(Modifier.fillMaxWidth()) {
+                                Text(
+                                    Dates.isoDateTimeToGerman(entry.zeitpunkt),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.width(130.dp)
+                                )
+                                Text(
+                                    "${entry.roomId} · ${entry.aktion}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}

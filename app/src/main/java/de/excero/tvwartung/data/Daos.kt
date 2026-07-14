@@ -42,6 +42,21 @@ interface InspectionDao {
     @Query("SELECT * FROM inspections WHERE datum = :datum ORDER BY roomId")
     fun observeForDate(datum: String): Flow<List<Inspection>>
 
+    @Query("SELECT * FROM inspections WHERE datum >= :startDatum ORDER BY roomId")
+    fun observeSince(startDatum: String): Flow<List<Inspection>>
+
     @Query("SELECT * FROM inspections ORDER BY datum DESC, roomId")
     suspend fun getAll(): List<Inspection>
+}
+
+@Dao
+interface ActivityLogDao {
+    @Insert
+    suspend fun insert(entry: ActivityLog)
+
+    @Query("SELECT * FROM activity_log WHERE roomId = :roomId ORDER BY zeitpunkt DESC")
+    fun observeForRoom(roomId: String): Flow<List<ActivityLog>>
+
+    @Query("SELECT * FROM activity_log ORDER BY zeitpunkt DESC LIMIT :limit")
+    fun observeRecent(limit: Int): Flow<List<ActivityLog>>
 }

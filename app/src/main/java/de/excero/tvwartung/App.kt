@@ -3,6 +3,7 @@ package de.excero.tvwartung
 import android.app.Application
 import de.excero.tvwartung.data.AppDatabase
 import de.excero.tvwartung.data.Repository
+import de.excero.tvwartung.data.SettingsStore
 import de.excero.tvwartung.files.PhotoStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +14,7 @@ class App : Application() {
 
     val repository: Repository by lazy { Repository(AppDatabase.get(this)) }
     val photoStore: PhotoStore by lazy { PhotoStore(this) }
+    val settingsStore: SettingsStore by lazy { SettingsStore(this) }
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

@@ -45,3 +45,15 @@ data class Inspection(
     val bemerkungHalterung: String = "",
     val bemerkungen: String = ""         // Freitext unten auf dem Bogen
 )
+
+/**
+ * Internes Aktivitätsprotokoll: wann wurde welches Zimmer bearbeitet.
+ * Wird bewusst NICHT exportiert – nur zur eigenen Einsicht in der App.
+ */
+@Entity(tableName = "activity_log")
+data class ActivityLog(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val roomId: String,
+    val zeitpunkt: String,               // ISO-Datum+Zeit, z. B. 2026-07-14T10:32:05
+    val aktion: String                   // z. B. "Prüfbogen gespeichert"
+)

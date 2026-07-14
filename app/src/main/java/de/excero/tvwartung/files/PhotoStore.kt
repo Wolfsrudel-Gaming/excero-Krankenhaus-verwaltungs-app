@@ -23,14 +23,35 @@ class PhotoStore(private val context: Context) {
     fun dirFor(roomId: String, dateFolder: String = Dates.todayFolder()): File =
         File(rootDir(), "$roomId/$dateFolder").apply { mkdirs() }
 
-    /** Legt die Zieldatei für ein neues Foto an ("fern" oder "nah"). */
+    /** Legt die Zieldatei für ein neues Foto an ("fern", "nah" oder "galerie"). */
     fun newPhotoFile(roomId: String, label: String): File {
         val time = LocalTime.now().format(timeFormat)
-        return File(dirFor(roomId), "${roomId}_${Dates.todayFolder()}_${label}_$time.jpg")
+        val dir = dirFor(roomId)
+        var file = File(dir, "${roomId}_${Dates.todayFolder()}_${label}_$time.jpg")
+        var suffix = 1
+        while (file.exists()) {
+            file = File(dir, "${roomId}_${Dates.todayFolder()}_${label}_${time}_$suffix.jpg")
+            suffix++
+        }
+        return file
     }
 
     fun uriFor(file: File): Uri =
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+
+    /** Kopiert ein Bild aus der Galerie (SAF-Uri) in den Zimmerordner des heutigen Tages. */
+    fun importFromGallery(roomId: String, uri: Uri): File? {
+        val target = newPhotoFile(roomId, "galerie")
+        return runCatching {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { input.copyTo(it) }
+            } ?: return null
+            target
+        }.getOrElse {
+            target.delete()
+            null
+        }
+    }
 
     /** Alle heute aufgenommenen Fotos eines Zimmers. */
     fun photosToday(roomId: String): List<File> =

@@ -1,6 +1,7 @@
 package de.excero.tvwartung.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,13 +20,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,13 +39,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -52,9 +56,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import de.excero.tvwartung.data.ActivityLog
 import de.excero.tvwartung.data.TvRoom
 import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.util.Dates
@@ -69,23 +75,34 @@ fun RoomDetailScreen(
     onStartPruefbogen: () -> Unit
 ) {
     val room by viewModel.room(roomId).collectAsState(initial = null)
+    val activity by viewModel.activityFor(roomId).collectAsState(initial = emptyList())
     val current = room ?: return
 
     var photoRefresh by remember { mutableIntStateOf(0) }
     val photos = remember(roomId, photoRefresh) { viewModel.photoStore.photosToday(roomId) }
 
-    var pendingPhoto by remember { mutableStateOf<File?>(null) }
+    var pendingPhoto by remember { mutableStateOf<Pair<File, String>?>(null) }
     val takePicture = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
-        if (!success) pendingPhoto?.delete()
+        pendingPhoto?.let { (file, label) ->
+            if (success) viewModel.logAction(roomId, "Foto aufgenommen ($label)") else file.delete()
+        }
         pendingPhoto = null
         photoRefresh++
     }
 
+    val pickFromGallery = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.importGalleryPhotos(roomId, uris) { photoRefresh++ }
+        }
+    }
+
     fun capture(label: String) {
         val file = viewModel.photoStore.newPhotoFile(roomId, label)
-        pendingPhoto = file
+        pendingPhoto = file to label
         takePicture.launch(viewModel.photoStore.uriFor(file))
     }
 
@@ -125,32 +142,59 @@ fun RoomDetailScreen(
                 Text("Prüfbogen ausfüllen", style = MaterialTheme.typography.titleMedium)
             }
 
-            StammdatenCard(current, onSave = { viewModel.updateRoom(it) })
+            StammdatenCard(
+                room = current,
+                viewModel = viewModel,
+                onSave = { viewModel.updateRoom(it) }
+            )
+
+            FreenetCard(current)
 
             PhotoCard(
                 photos = photos,
                 onCaptureFern = { capture("fern") },
                 onCaptureNah = { capture("nah") },
+                onPickGallery = {
+                    pickFromGallery.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
                 onDelete = {
                     viewModel.photoStore.delete(it)
+                    viewModel.logAction(roomId, "Foto gelöscht")
                     photoRefresh++
                 }
             )
 
             LebenslaufCard(current.lebenslauf)
+
+            ActivityCard(activity)
+
             Spacer(Modifier.height(16.dp))
         }
     }
 }
 
 @Composable
-private fun StammdatenCard(room: TvRoom, onSave: (TvRoom) -> Unit) {
+private fun StammdatenCard(
+    room: TvRoom,
+    viewModel: AppViewModel,
+    onSave: (TvRoom) -> Unit
+) {
     var editing by remember(room.id) { mutableStateOf(false) }
     var tvTyp by remember(room) { mutableStateOf(room.tvTyp) }
     var seriennummer by remember(room) { mutableStateOf(room.seriennummer) }
     var freenetId by remember(room) { mutableStateOf(room.freenetId) }
     var gueltigBis by remember(room) { mutableStateOf(Dates.isoToGerman(room.gueltigBis)) }
     var dateError by remember { mutableStateOf(false) }
+
+    // Duplikate live prüfen – sowohl im Anzeigemodus (Bestand) als auch beim Bearbeiten
+    val freenetDups = viewModel.freenetIdDuplikate(
+        if (editing) freenetId else room.freenetId, room.id
+    )
+    val serialDups = viewModel.seriennummerDuplikate(
+        if (editing) seriennummer else room.seriennummer, room.id
+    )
 
     Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -171,21 +215,27 @@ private fun StammdatenCard(room: TvRoom, onSave: (TvRoom) -> Unit) {
             }
 
             if (editing) {
-                OutlinedTextField(
-                    value = tvTyp, onValueChange = { tvTyp = it },
-                    label = { Text("TV-Typ") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                TvTypAuswahl(
+                    value = tvTyp,
+                    onValueChange = { tvTyp = it },
+                    bekannteTypen = viewModel.bekannteTvTypen()
                 )
                 OutlinedTextField(
                     value = seriennummer, onValueChange = { seriennummer = it },
                     label = { Text("TV Seriennummer") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (serialDups.isNotEmpty()) {
+                    DuplicateWarning("Seriennummer auch hinterlegt bei: ${serialDups.joinToString()}")
+                }
                 OutlinedTextField(
                     value = freenetId, onValueChange = { freenetId = it },
                     label = { Text("Freenet TV-ID") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (freenetDups.isNotEmpty()) {
+                    DuplicateWarning("Freenet-ID auch registriert bei: ${freenetDups.joinToString()}")
+                }
                 OutlinedTextField(
                     value = gueltigBis,
                     onValueChange = { gueltigBis = it; dateError = false },
@@ -230,7 +280,13 @@ private fun StammdatenCard(room: TvRoom, onSave: (TvRoom) -> Unit) {
             } else {
                 InfoRow("TV-Typ", room.tvTyp)
                 InfoRow("TV Seriennummer", room.seriennummer)
+                if (serialDups.isNotEmpty()) {
+                    DuplicateWarning("Seriennummer auch hinterlegt bei: ${serialDups.joinToString()}")
+                }
                 InfoRow("Freenet TV-ID", room.freenetId)
+                if (freenetDups.isNotEmpty()) {
+                    DuplicateWarning("Freenet-ID auch registriert bei: ${freenetDups.joinToString()}")
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "Freenet gültig bis",
@@ -241,6 +297,39 @@ private fun StammdatenCard(room: TvRoom, onSave: (TvRoom) -> Unit) {
                     GueltigBisBadge(room.gueltigBis)
                 }
                 InfoRow("Letzte Prüfung", Dates.isoToGerman(room.letztePruefung))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FreenetCard(room: TvRoom) {
+    val context = LocalContext.current
+    Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Freenet TV", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "ID ${room.freenetId.ifBlank { "–" }} · Verlängerung und Aktivierung laufen über die Freenet-Webseite.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { FreenetLinks.open(context, FreenetLinks.VERLAENGERN) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Verlängern")
+                }
+                OutlinedButton(
+                    onClick = { FreenetLinks.open(context, FreenetLinks.AKTIVIEREN) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Aktivieren")
+                }
             }
         }
     }
@@ -268,6 +357,7 @@ private fun PhotoCard(
     photos: List<File>,
     onCaptureFern: () -> Unit,
     onCaptureNah: () -> Unit,
+    onPickGallery: () -> Unit,
     onDelete: (File) -> Unit
 ) {
     Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
@@ -288,6 +378,11 @@ private fun PhotoCard(
                     Spacer(Modifier.width(6.dp))
                     Text("Foto nah")
                 }
+            }
+            OutlinedButton(onClick = onPickGallery, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Aus Galerie auswählen")
             }
             if (photos.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -357,6 +452,56 @@ private fun LebenslaufCard(lebenslauf: String) {
             } else {
                 entries.forEach { entry ->
                     Text(entry.trim(), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+/** Internes Bearbeitungsprotokoll (mit Uhrzeit) – wird nicht exportiert. */
+@Composable
+private fun ActivityCard(entries: List<ActivityLog>) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "Bearbeitungszeiten (intern)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                if (entries.size > 5) {
+                    TextButton(onClick = { expanded = !expanded }) {
+                        Text(if (expanded) "Weniger" else "Alle ${entries.size}")
+                    }
+                }
+            }
+            Text(
+                "Nur zur eigenen Einsicht – wird nicht exportiert.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            HorizontalDivider()
+            if (entries.isEmpty()) {
+                Text(
+                    "Noch keine Bearbeitungen erfasst.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                (if (expanded) entries else entries.take(5)).forEach { entry ->
+                    Text(
+                        "${Dates.isoDateTimeToGerman(entry.zeitpunkt)} · ${entry.aktion}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }

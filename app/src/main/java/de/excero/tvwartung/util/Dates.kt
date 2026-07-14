@@ -9,7 +9,21 @@ object Dates {
     private val iso: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
     private val folder: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd")
 
+    private val dateTime: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+    private val germanDateTime: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
+
     fun todayIso(): String = LocalDate.now().format(iso)
+
+    fun nowIsoDateTime(): String = java.time.LocalDateTime.now().withNano(0).format(dateTime)
+
+    /** ISO-Datum+Zeit → "14.07.2026 10:32". */
+    fun isoDateTimeToGerman(value: String): String =
+        runCatching { java.time.LocalDateTime.parse(value, dateTime).format(germanDateTime) }
+            .getOrDefault(value)
+
+    /** Montag der aktuellen Woche (ISO). */
+    fun mondayIso(): String =
+        LocalDate.now().with(java.time.DayOfWeek.MONDAY).format(iso)
 
     fun todayGerman(): String = LocalDate.now().format(german)
 
