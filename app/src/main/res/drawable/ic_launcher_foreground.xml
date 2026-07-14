@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Fernseher -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,38 h48 a4,4 0 0 1 4,4 v26 a4,4 0 0 1 -4,4 h-48 a4,4 0 0 1 -4,-4 v-26 a4,4 0 0 1 4,-4 z" />
+    <path
+        android:fillColor="#00695C"
+        android:pathData="M33,42 h42 v22 h-42 z" />
+    <!-- Standfuß -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,74 h16 v3 h-16 z" />
+    <!-- Haken -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M43,53 l7,7 l15,-14" />
+</vector>
