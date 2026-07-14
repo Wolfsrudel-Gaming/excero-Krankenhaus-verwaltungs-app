@@ -24,6 +24,7 @@ import de.excero.tvwartung.ui.screens.HomeScreen
 import de.excero.tvwartung.ui.screens.PruefbogenScreen
 import de.excero.tvwartung.ui.screens.RoomDetailScreen
 import de.excero.tvwartung.ui.screens.SettingsScreen
+import de.excero.tvwartung.ui.screens.StundenzettelScreen
 import de.excero.tvwartung.ui.theme.KKHTheme
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -35,6 +36,7 @@ object Routes {
     fun room(id: String) = "room/${URLEncoder.encode(id, "UTF-8")}"
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
     fun bericht(id: Long) = "bericht/$id"
+    fun stundenzettel(station: String) = "stundenzettel/${URLEncoder.encode(station, "UTF-8")}"
 }
 
 class MainActivity : ComponentActivity() {
@@ -68,7 +70,8 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 onRoomClick = { navController.navigate(Routes.room(it)) },
                                 onExportClick = { navController.navigate(Routes.EXPORT) },
-                                onSettingsClick = { navController.navigate(Routes.SETTINGS) }
+                                onSettingsClick = { navController.navigate(Routes.SETTINGS) },
+                                onStundenzettel = { navController.navigate(Routes.stundenzettel(it)) }
                             )
                         }
                         composable("room/{roomId}") { entry ->
@@ -105,6 +108,16 @@ class MainActivity : ComponentActivity() {
                             BerichtScreen(
                                 viewModel = viewModel,
                                 inspectionId = inspectionId,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("stundenzettel/{station}") { entry ->
+                            val station = URLDecoder.decode(
+                                entry.arguments?.getString("station").orEmpty(), "UTF-8"
+                            )
+                            StundenzettelScreen(
+                                viewModel = viewModel,
+                                station = station,
                                 onBack = { navController.popBackStack() }
                             )
                         }

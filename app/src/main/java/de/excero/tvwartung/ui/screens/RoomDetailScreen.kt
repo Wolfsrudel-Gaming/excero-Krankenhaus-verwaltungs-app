@@ -83,34 +83,6 @@ fun RoomDetailScreen(
     val current = room ?: return
     val blocked = roomId in gesperrt
 
-    var photoRefresh by remember { mutableIntStateOf(0) }
-    val photos = remember(roomId, photoRefresh) { viewModel.photoStore.photosToday(roomId) }
-
-    var pendingPhoto by remember { mutableStateOf<Pair<File, String>?>(null) }
-    val takePicture = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        pendingPhoto?.let { (file, label) ->
-            if (success) viewModel.logAction(roomId, "Foto aufgenommen ($label)") else file.delete()
-        }
-        pendingPhoto = null
-        photoRefresh++
-    }
-
-    val pickFromGallery = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            viewModel.importGalleryPhotos(roomId, uris) { photoRefresh++ }
-        }
-    }
-
-    fun capture(label: String) {
-        val file = viewModel.photoStore.newPhotoFile(roomId, label)
-        pendingPhoto = file to label
-        takePicture.launch(viewModel.photoStore.uriFor(file))
-    }
-
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = {
@@ -211,21 +183,7 @@ fun RoomDetailScreen(
 
             FreenetCard(current)
 
-            PhotoCard(
-                photos = photos,
-                onCaptureFern = { capture("fern") },
-                onCaptureNah = { capture("nah") },
-                onPickGallery = {
-                    pickFromGallery.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                },
-                onDelete = {
-                    viewModel.photoStore.delete(it)
-                    viewModel.logAction(roomId, "Foto gelöscht")
-                    photoRefresh++
-                }
-            )
+            PhotoSection(viewModel = viewModel, roomId = roomId)
 
             BerichteCard(berichte, onOpenBericht)
 
@@ -412,77 +370,6 @@ private fun InfoRow(label: String, value: String) {
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium
         )
-    }
-}
-
-@Composable
-private fun PhotoCard(
-    photos: List<File>,
-    onCaptureFern: () -> Unit,
-    onCaptureNah: () -> Unit,
-    onPickGallery: () -> Unit,
-    onDelete: (File) -> Unit
-) {
-    Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                "Fotos (heute: ${photos.size})",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onCaptureFern, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Foto fern")
-                }
-                FilledTonalButton(onClick = onCaptureNah, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Foto nah")
-                }
-            }
-            OutlinedButton(onClick = onPickGallery, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Aus Galerie auswählen")
-            }
-            if (photos.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(photos.size) { index ->
-                        val file = photos[index]
-                        Box {
-                            AsyncImage(
-                                model = file,
-                                contentDescription = file.name,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(110.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                            )
-                            IconButton(
-                                onClick = { onDelete(file) },
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .size(28.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Foto löschen",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                Text(
-                    "Noch keine Fotos für heute – ein Foto von fern und eins von nah aufnehmen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }
 

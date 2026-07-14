@@ -60,7 +60,8 @@ fun HomeScreen(
     viewModel: AppViewModel,
     onRoomClick: (String) -> Unit,
     onExportClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    onStundenzettel: (String) -> Unit
 ) {
     val rooms by viewModel.rooms.collectAsState()
     val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
@@ -68,15 +69,6 @@ fun HomeScreen(
     val gesperrt by viewModel.gesperrteZimmer.collectAsState()
     var query by remember { mutableStateOf("") }
     var sperrDialogStation by remember { mutableStateOf<String?>(null) }
-
-    // Stundenzettel-PDF: Zielstation merken, dann Datei anlegen lassen
-    var stundenzettelStation by remember { mutableStateOf<String?>(null) }
-    val stundenzettelLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/pdf")
-    ) { uri ->
-        val station = stundenzettelStation
-        if (uri != null && station != null) viewModel.exportStundenzettel(uri, station)
-    }
 
     val checkedInPeriod = remember(inspectionsInPeriod) {
         inspectionsInPeriod.map { it.roomId }.toSet()
@@ -169,12 +161,7 @@ fun HomeScreen(
                                 else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = {
-                            stundenzettelStation = station
-                            stundenzettelLauncher.launch(
-                                "Stundenzettel_${station}_${Dates.todayFolder()}.pdf"
-                            )
-                        }) {
+                        IconButton(onClick = { onStundenzettel(station) }) {
                             Icon(
                                 Icons.AutoMirrored.Filled.Assignment,
                                 contentDescription = "Stundenzettel für Station $station",

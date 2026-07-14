@@ -56,7 +56,6 @@ fun BerichtScreen(
 ) {
     val inspection by viewModel.inspection(inspectionId).collectAsState(initial = null)
     val current = inspection ?: return
-    val photos = remember(current.id) { viewModel.photosForInspection(current) }
 
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
@@ -169,35 +168,12 @@ fun BerichtScreen(
                 }
             }
 
-            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Fotos (${photos.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (photos.isEmpty()) {
-                        Text(
-                            "Keine Fotos zu diesem Prüfdatum vorhanden.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(photos.size) { index ->
-                                AsyncImage(
-                                    model = photos[index],
-                                    contentDescription = photos[index].name,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(140.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            // Fotos ansehen und direkt weitere aufnehmen/hinzufügen
+            PhotoSection(
+                viewModel = viewModel,
+                roomId = current.roomId,
+                dateFolder = Dates.isoToFolder(current.datum)
+            )
             Spacer(Modifier.height(16.dp))
         }
     }

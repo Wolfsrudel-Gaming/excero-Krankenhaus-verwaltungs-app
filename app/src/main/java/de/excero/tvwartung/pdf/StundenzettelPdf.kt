@@ -1,5 +1,6 @@
 package de.excero.tvwartung.pdf
 
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -28,7 +29,14 @@ object StundenzettelPdf {
         val station: String,
         val zeitraum: String,       // z. B. "diese Woche (ab 13.07.2026)"
         val leistungen: List<Leistung>,
-        val material: List<Pair<String, Int>>   // (Bezeichnung, Anzahl)
+        val material: List<Pair<String, Int>>,   // (Bezeichnung, Anzahl)
+        val datum: String = "",                   // Tag der Leistung (deutsch)
+        val arbeitszeit: String = "",             // z. B. "08:00 – 11:30"
+        val arbeitsstunden: String = "",          // z. B. "3,5 Std."
+        val anfahrt: String = "",                 // z. B. "0,5 Std."
+        val techniker: String = "",               // Name Dienstleister
+        val signaturStation: Bitmap? = null,
+        val signaturTechniker: Bitmap? = null
     )
 
     private const val PAGE_W = 595
@@ -59,9 +67,10 @@ object StundenzettelPdf {
             val ctx = Ctx(doc)
             ctx.newPage()
             drawHeader(ctx, zettel)
+            drawZeiten(ctx, zettel)
             drawLeistungen(ctx, zettel)
             drawMaterial(ctx, zettel)
-            drawUnterschriften(ctx)
+            drawUnterschriften(ctx, zettel)
             ctx.finish()
             doc.writeTo(out)
         } finally {
@@ -141,6 +150,32 @@ object StundenzettelPdf {
         ctx.y += boxH + 20f
     }
 
+    private fun drawZeiten(ctx: Ctx, zettel: Stundenzettel) {
+        // Nur zeichnen, wenn mindestens ein Zeitfeld gesetzt ist
+        val hatZeiten = listOf(zettel.datum, zettel.arbeitszeit, zettel.arbeitsstunden, zettel.anfahrt)
+            .any { it.isNotBlank() }
+        if (!hatZeiten) return
+        val canvas = ctx.canvas!!
+        val boxH = 44f
+        canvas.drawRoundRect(RectF(MARGIN, ctx.y, MARGIN + CONTENT_W, ctx.y + boxH), 8f, 8f,
+            Paint().apply { color = ROW_ALT })
+        val label = paint(8.5f, GRAY)
+        val value = paint(10.5f, Color.BLACK, bold = true)
+        val cellW = CONTENT_W / 4
+        val felder = listOf(
+            "Datum" to zettel.datum,
+            "Arbeitszeit" to zettel.arbeitszeit,
+            "Arbeitsstunden" to zettel.arbeitsstunden,
+            "Anfahrt" to zettel.anfahrt
+        )
+        felder.forEachIndexed { i, (l, v) ->
+            val x = MARGIN + i * cellW + 12f
+            canvas.drawText(l, x, ctx.y + 17f, label)
+            canvas.drawText(v.ifBlank { "–" }, x, ctx.y + 32f, value)
+        }
+        ctx.y += boxH + 18f
+    }
+
     private fun drawLeistungen(ctx: Ctx, zettel: Stundenzettel) {
         val canvas = ctx.canvas!!
         canvas.drawText("Durchgeführte Leistungen", MARGIN, ctx.y + 4f, paint(13f, TEAL, bold = true))
@@ -214,18 +249,32 @@ object StundenzettelPdf {
         ctx.y += 16f
     }
 
-    private fun drawUnterschriften(ctx: Ctx) {
-        ctx.ensure(120f)
+    private fun drawUnterschriften(ctx: Ctx, zettel: Stundenzettel) {
+        ctx.ensure(130f)
         val c = ctx.canvas!!
         c.drawText("Bestätigung", MARGIN, ctx.y + 4f, paint(13f, TEAL, bold = true))
-        ctx.y += 40f
+        ctx.y += 20f
 
         val gap = 30f
         val colW = (CONTENT_W - gap) / 2
-        val lineY = ctx.y + 30f
+        val sigTop = ctx.y
+        val sigH = 50f
+        val lineY = sigTop + sigH
         val linePaint = Paint().apply { color = Color.BLACK; strokeWidth = 1f }
         val label = paint(9f, GRAY)
         val sub = paint(8f, GRAY)
+        val x2 = MARGIN + colW + gap
+
+        fun sig(bmp: Bitmap?, x: Float) {
+            if (bmp == null || bmp.width <= 0 || bmp.height <= 0) return
+            val scale = minOf(colW / bmp.width, sigH / bmp.height)
+            val w = bmp.width * scale
+            val h = bmp.height * scale
+            // linksbündig, unten auf der Linie aufsitzend
+            c.drawBitmap(bmp, null, RectF(x, lineY - h, x + w, lineY), Paint(Paint.FILTER_BITMAP_FLAG))
+        }
+        sig(zettel.signaturStation, MARGIN)
+        sig(zettel.signaturTechniker, x2)
 
         // Station
         c.drawLine(MARGIN, lineY, MARGIN + colW, lineY, linePaint)
@@ -233,10 +282,9 @@ object StundenzettelPdf {
         c.drawText("Datum, Name, Stempel", MARGIN, lineY + 26f, sub)
 
         // Dienstleister / Techniker
-        val x2 = MARGIN + colW + gap
         c.drawLine(x2, lineY, x2 + colW, lineY, linePaint)
         c.drawText("Unterschrift Dienstleister", x2, lineY + 14f, label)
-        c.drawText("Datum, Name", x2, lineY + 26f, sub)
+        c.drawText(zettel.techniker.ifBlank { "Datum, Name" }, x2, lineY + 26f, sub)
 
         ctx.y = lineY + 40f
     }

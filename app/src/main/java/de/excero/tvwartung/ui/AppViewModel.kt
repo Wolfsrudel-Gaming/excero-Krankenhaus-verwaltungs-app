@@ -124,10 +124,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Bilder aus der Galerie in den heutigen Zimmerordner übernehmen. */
-    fun importGalleryPhotos(roomId: String, uris: List<Uri>, onDone: () -> Unit) {
+    /** Bilder aus der Galerie in den Zimmerordner des angegebenen Tages übernehmen. */
+    fun importGalleryPhotos(
+        roomId: String,
+        uris: List<Uri>,
+        dateFolder: String = Dates.todayFolder(),
+        onDone: () -> Unit
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val imported = uris.count { photoStore.importFromGallery(roomId, it) != null }
+            val imported = uris.count { photoStore.importFromGallery(roomId, it, dateFolder) != null }
             if (imported > 0) {
                 repository.logAction(roomId, "$imported Foto(s) aus Galerie hinzugefügt")
             }
@@ -191,47 +196,91 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Eingaben für den Stundenzettel (Zeiten, Techniker). */
+    data class StundenEingabe(
+        val datum: String = "",
+        val arbeitszeit: String = "",
+        val arbeitsstunden: String = "",
+        val anfahrt: String = "",
+        val techniker: String = ""
+    )
+
+    /** Basisdaten des Stundenzettels einer Station (Vorschau + Export). */
+    data class StundenzettelBasis(
+        val station: String,
+        val zeitraum: String,
+        val leistungen: List<StundenzettelPdf.Leistung>,
+        val material: List<Pair<String, Int>>
+    )
+
+    private suspend fun stundenzettelBasis(station: String): StundenzettelBasis {
+        val start = settings.value.zeitraumStartIso()
+        val roomsById = repository.allRooms().associateBy { it.id }
+        val inspektionen = repository.allInspections()
+            .filter { it.datum >= start && roomsById[it.roomId]?.station == station }
+            .sortedWith(compareBy({ roomsById[it.roomId]?.zimmer ?: "" }, { it.datum }))
+        val leistungen = inspektionen.map {
+            StundenzettelPdf.Leistung(
+                zimmer = roomsById[it.roomId]?.zimmer ?: it.roomId,
+                datum = it.datum,
+                arbeiten = it.arbeitenListe()
+            )
+        }
+        // Material zusammenzählen (Katalogreihenfolge, dann Freenet, dann Sonstiges)
+        val counts = LinkedHashMap<String, Int>()
+        inspektionen.forEach { insp ->
+            insp.arbeitenListe().forEach { a -> counts[a] = (counts[a] ?: 0) + 1 }
+        }
+        val order = Arbeiten.KATALOG + Arbeiten.FREENET_VERLAENGERT
+        val material = order.filter { counts.containsKey(it) }.map { it to counts.getValue(it) } +
+            counts.keys.filter { it !in order }.sorted().map { it to counts.getValue(it) }
+        return StundenzettelBasis(
+            station = station,
+            zeitraum = "${settings.value.beschreibung()} (ab ${Dates.isoToGerman(start)})",
+            leistungen = leistungen,
+            material = material
+        )
+    }
+
+    /** Vorschau der Stundenzettel-Daten für den Eingabe-Screen. */
+    suspend fun stundenzettelVorschau(station: String): StundenzettelBasis =
+        withContext(Dispatchers.IO) { stundenzettelBasis(station) }
+
     /**
      * Stundenzettel/Leistungsnachweis für eine Station als PDF – deckt den
-     * aktuellen Prüfzeitraum ab (alle in der Zeit geprüften Zimmer der Station).
+     * aktuellen Prüfzeitraum ab, ergänzt um Zeiten und (optional) digitale
+     * Unterschriften.
      */
-    fun exportStundenzettel(uri: Uri, station: String) {
+    fun exportStundenzettel(
+        uri: Uri,
+        station: String,
+        eingabe: StundenEingabe,
+        signaturStation: android.graphics.Bitmap?,
+        signaturTechniker: android.graphics.Bitmap?
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                val start = settings.value.zeitraumStartIso()
-                val roomsById = repository.allRooms().associateBy { it.id }
-                val inspektionen = repository.allInspections()
-                    .filter { it.datum >= start && roomsById[it.roomId]?.station == station }
-                    .sortedWith(compareBy({ roomsById[it.roomId]?.zimmer ?: "" }, { it.datum }))
-                require(inspektionen.isNotEmpty()) {
+                val basis = stundenzettelBasis(station)
+                require(basis.leistungen.isNotEmpty()) {
                     "Für Station $station wurden im aktuellen Zeitraum keine Prüfungen erfasst"
                 }
-                val leistungen = inspektionen.map {
-                    StundenzettelPdf.Leistung(
-                        zimmer = roomsById[it.roomId]?.zimmer ?: it.roomId,
-                        datum = it.datum,
-                        arbeiten = it.arbeitenListe()
-                    )
-                }
-                // Material zusammenzählen (Katalogreihenfolge, dann Freenet, dann Sonstiges)
-                val counts = LinkedHashMap<String, Int>()
-                inspektionen.forEach { insp ->
-                    insp.arbeitenListe().forEach { a -> counts[a] = (counts[a] ?: 0) + 1 }
-                }
-                val order = Arbeiten.KATALOG + Arbeiten.FREENET_VERLAENGERT
-                val material = order.filter { counts.containsKey(it) }.map { it to counts.getValue(it) } +
-                    counts.keys.filter { it !in order }.sorted().map { it to counts.getValue(it) }
-
                 val zettel = StundenzettelPdf.Stundenzettel(
-                    station = station,
-                    zeitraum = "${settings.value.beschreibung()} (ab ${Dates.isoToGerman(start)})",
-                    leistungen = leistungen,
-                    material = material
+                    station = basis.station,
+                    zeitraum = basis.zeitraum,
+                    leistungen = basis.leistungen,
+                    material = basis.material,
+                    datum = eingabe.datum,
+                    arbeitszeit = eingabe.arbeitszeit,
+                    arbeitsstunden = eingabe.arbeitsstunden,
+                    anfahrt = eingabe.anfahrt,
+                    techniker = eingabe.techniker,
+                    signaturStation = signaturStation,
+                    signaturTechniker = signaturTechniker
                 )
                 app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
                     StundenzettelPdf.write(zettel, out)
                 } ?: error("Datei konnte nicht geöffnet werden")
-                leistungen.size
+                basis.leistungen.size
             }.onSuccess {
                 _message.value = "Stundenzettel erstellt ($it Zimmer)"
             }.onFailure {

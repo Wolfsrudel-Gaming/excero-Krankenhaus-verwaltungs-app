@@ -30,14 +30,32 @@ class Repository(private val db: AppDatabase) {
 
     val sperren: Flow<List<RoomSperre>> get() = db.roomSperreDao().observeAll()
 
-    /** "Kein Zutritt" für ein Zimmer setzen oder aufheben (mit Protokolleintrag). */
+    /**
+     * "Kein Zutritt" für ein Zimmer setzen oder aufheben. Beim Setzen wird ein
+     * Vermerk mit aktuellem Datum in den Lebenslauf geschrieben ("... konnte
+     * nicht betreten werden"); beim Aufheben wird der heutige Vermerk wieder
+     * entfernt.
+     */
     suspend fun setKeinZutritt(roomId: String, gesperrt: Boolean) {
+        val vermerk = "${Dates.todayGerman()}: Zimmer konnte nicht betreten werden"
         db.withTransaction {
+            val room = db.tvRoomDao().getById(roomId)
             if (gesperrt) {
                 db.roomSperreDao().upsert(RoomSperre(roomId, Dates.todayIso()))
+                if (room != null && !room.lebenslauf.lines().any { it.trim() == vermerk }) {
+                    val neu = if (room.lebenslauf.isBlank()) vermerk
+                    else room.lebenslauf.trimEnd() + "\n" + vermerk
+                    db.tvRoomDao().update(room.copy(lebenslauf = neu))
+                }
                 logAction(roomId, "Kein Zutritt vermerkt")
             } else {
                 db.roomSperreDao().delete(roomId)
+                if (room != null && room.lebenslauf.lines().any { it.trim() == vermerk }) {
+                    val neu = room.lebenslauf.lines()
+                        .filterNot { it.trim() == vermerk }
+                        .joinToString("\n")
+                    db.tvRoomDao().update(room.copy(lebenslauf = neu))
+                }
                 logAction(roomId, "Zutritt wieder möglich")
             }
         }

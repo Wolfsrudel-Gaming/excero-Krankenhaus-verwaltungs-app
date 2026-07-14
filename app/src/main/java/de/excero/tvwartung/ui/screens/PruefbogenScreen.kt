@@ -198,6 +198,9 @@ fun PruefbogenScreen(
                 }
             }
 
+            // Fotos direkt hier aufnehmen – ohne den Prüfbogen zu verlassen
+            PhotoSection(viewModel = viewModel, roomId = current.id)
+
             punkte.forEachIndexed { index, punkt ->
                 PruefpunktCard(punkt) {
                     when (index) {

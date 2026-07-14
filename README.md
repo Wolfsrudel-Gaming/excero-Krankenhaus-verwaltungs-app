@@ -35,6 +35,23 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.5
+
+- **Fotos direkt im Prüfbogen und Prüfbericht:** Der Fotobereich (Kamera
+  fern/nah, Galerie, Vorschau, Löschen) ist jetzt auch im Prüfbogen und in
+  der Prüfbericht-Ansicht eingebettet – Fotos entstehen ohne Screenwechsel,
+  weitere Bilder lassen sich jederzeit nachträglich hinzufügen (beim Bericht
+  im richtigen Tagesordner).
+- **Stundenzettel mit Zeiten und digitaler Unterschrift:** Vor dem PDF-Export
+  werden Datum, Arbeitszeit (von–bis, Stunden werden berechnet), Anfahrt und
+  Name erfasst; Station und Dienstleister unterschreiben direkt auf dem
+  Display. Beides erscheint im PDF (Zeiten-Block und eingebettete
+  Unterschriften über den Signaturlinien).
+- **„Kein Zutritt" im Lebenslauf:** Wird ein Zimmer als nicht betretbar
+  markiert, erhält es automatisch einen Lebenslauf-Eintrag mit aktuellem
+  Datum („Zimmer konnte nicht betreten werden"); beim Aufheben der Sperre am
+  selben Tag wird der Vermerk wieder entfernt.
+
 ### Neu in Version 1.4
 
 - **Durchgeführte Arbeiten / Material erfassen:** Im Prüfbogen lässt sich
