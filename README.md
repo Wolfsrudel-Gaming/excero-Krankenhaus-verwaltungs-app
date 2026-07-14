@@ -35,6 +35,13 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.3.1
+
+- **PDF im Bilderordner:** Beim ZIP-Export wird zu jedem geprüften Zimmer
+  automatisch das Prüfbericht-PDF in seinen Tagesordner
+  (`Fotos_Zimmer/<Station_Zimmer>/<JJJJMMTT>/`) gelegt – es wandert damit
+  zusammen mit den Fotos in die ZIP und in den HiDrive.
+
 ### Neu in Version 1.3
 
 - **Prüfberichte als PDF:** Jeder gespeicherte Prüfbogen lässt sich als

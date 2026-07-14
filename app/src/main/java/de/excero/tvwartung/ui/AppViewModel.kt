@@ -211,19 +211,55 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun exportZip(uri: Uri, onlyToday: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                // Zu jedem geprüften Zimmer das Prüfbericht-PDF in seinen Bilderordner legen,
+                // damit es mit in die ZIP (und später in den HiDrive) wandert.
+                val pdfs = schreibePdfsInZimmerordner(onlyToday)
+                val files = app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
                     ZipExporter.export(
                         root = photoStore.rootDir(),
                         out = out,
                         dateFolder = if (onlyToday) Dates.todayFolder() else null
                     )
                 } ?: error("Datei konnte nicht geöffnet werden")
-            }.onSuccess {
-                _message.value = if (it == 0) "Keine Fotos gefunden" else "ZIP erstellt ($it Fotos)"
+                files to pdfs
+            }.onSuccess { (files, pdfs) ->
+                _message.value = when {
+                    files == 0 -> "Keine Fotos oder Berichte gefunden"
+                    else -> "ZIP erstellt ($files Dateien, davon $pdfs Prüfbericht-PDF)"
+                }
             }.onFailure {
                 _message.value = "ZIP-Export fehlgeschlagen: ${it.message}"
             }
         }
+    }
+
+    /**
+     * Erzeugt für jedes geprüfte Zimmer (im gewählten Zeitraum) das Prüfbericht-PDF
+     * und legt es in dessen Tagesordner Fotos_Zimmer/<Zimmer>/<JJJJMMTT>/ ab.
+     * @return Anzahl geschriebener PDFs.
+     */
+    private suspend fun schreibePdfsInZimmerordner(onlyToday: Boolean): Int {
+        val today = Dates.todayFolder()
+        // Pro Zimmer + Tag ein PDF (fasst mehrere Prüfbögen desselben Tages zusammen)
+        val gruppen = repository.allInspections()
+            .groupBy { it.roomId to Dates.isoToFolder(it.datum) }
+        var count = 0
+        for ((key, inspektionen) in gruppen) {
+            val (roomId, dateFolder) = key
+            if (dateFolder.isBlank()) continue
+            if (onlyToday && dateFolder != today) continue
+            val room = repository.getRoom(roomId) ?: continue
+            val reports = inspektionen.map {
+                PruefberichtPdf.Report(room, it, photoStore.photosFor(roomId, dateFolder))
+            }
+            runCatching {
+                photoStore.pdfFileFor(roomId, dateFolder).outputStream().use { out ->
+                    PruefberichtPdf.write(reports, out)
+                }
+                count++
+            }
+        }
+        return count
     }
 
     /** KKH-Übersicht (.xlsx) importieren; vorhandene Zimmer werden aktualisiert. */

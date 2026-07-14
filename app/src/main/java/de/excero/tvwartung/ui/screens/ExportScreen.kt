@@ -115,7 +115,9 @@ fun ExportScreen(
                     }
                     Text(
                         "Packt die Fotoordner in der HiDrive-Struktur " +
-                            "Station_Zimmer/JJJJMMTT. Heute aufgenommen: $photoCount Fotos.",
+                            "Station_Zimmer/JJJJMMTT. Zu jedem geprüften Zimmer wird " +
+                            "automatisch das Prüfbericht-PDF in den Ordner gelegt. " +
+                            "Heute aufgenommen: $photoCount Fotos.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

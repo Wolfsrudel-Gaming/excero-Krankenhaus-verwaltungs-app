@@ -16,6 +16,10 @@ import java.time.format.DateTimeFormatter
 class PhotoStore(private val context: Context) {
 
     private val timeFormat = DateTimeFormatter.ofPattern("HHmmss")
+    private val bildEndungen = setOf("jpg", "jpeg", "png")
+
+    private fun istBild(f: File): Boolean =
+        f.isFile && f.length() > 0 && f.extension.lowercase() in bildEndungen
 
     fun rootDir(): File =
         File(context.getExternalFilesDir(null), "Fotos_Zimmer").apply { mkdirs() }
@@ -57,13 +61,21 @@ class PhotoStore(private val context: Context) {
     fun photosToday(roomId: String): List<File> =
         photosFor(roomId, Dates.todayFolder())
 
-    /** Fotos eines Zimmers an einem bestimmten Tag (JJJJMMTT), ohne Ordner anzulegen. */
+    /** Fotos (nur Bilddateien) eines Zimmers an einem bestimmten Tag (JJJJMMTT). */
     fun photosFor(roomId: String, dateFolder: String): List<File> {
         if (dateFolder.isBlank()) return emptyList()
         return File(rootDir(), "$roomId/$dateFolder")
-            .listFiles { f -> f.isFile && f.length() > 0 }
+            .listFiles { f -> istBild(f) }
             ?.sortedBy { it.name } ?: emptyList()
     }
+
+    /**
+     * Zielpfad für das Prüfbericht-PDF eines Zimmers im jeweiligen Tagesordner
+     * (legt den Ordner an). Das PDF liegt damit direkt bei den Fotos und wird
+     * beim ZIP-Export mit hochgeladen.
+     */
+    fun pdfFileFor(roomId: String, dateFolder: String): File =
+        File(dirFor(roomId, dateFolder), "Pruefbericht_${roomId}_$dateFolder.pdf")
 
     fun delete(file: File) {
         file.delete()
@@ -73,7 +85,7 @@ class PhotoStore(private val context: Context) {
     fun countToday(): Int {
         val today = Dates.todayFolder()
         return rootDir().listFiles()?.sumOf { roomDir ->
-            File(roomDir, today).listFiles { f: File -> f.isFile && f.length() > 0 }?.size ?: 0
+            File(roomDir, today).listFiles { f -> istBild(f) }?.size ?: 0
         } ?: 0
     }
 
