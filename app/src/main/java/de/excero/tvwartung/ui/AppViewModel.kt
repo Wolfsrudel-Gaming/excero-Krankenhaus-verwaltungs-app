@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -49,6 +50,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val recentActivity: StateFlow<List<ActivityLog>> = repository.recentActivity()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Zimmer, die für die aktuelle Anfahrt als "kein Zutritt" gemeldet sind.
+     * Ältere Vermerke (vor Beginn des Prüfzeitraums) laufen automatisch ab.
+     */
+    val gesperrteZimmer: StateFlow<Set<String>> =
+        combine(repository.sperren, settings) { sperren, s ->
+            val start = s.zeitraumStartIso()
+            sperren.filter { it.gesperrtAm >= start }.map { it.roomId }.toSet()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    fun setKeinZutritt(roomId: String, gesperrt: Boolean) {
+        viewModelScope.launch { repository.setKeinZutritt(roomId, gesperrt) }
+    }
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message

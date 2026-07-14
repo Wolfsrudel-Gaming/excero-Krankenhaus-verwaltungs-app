@@ -50,6 +50,18 @@ interface InspectionDao {
 }
 
 @Dao
+interface RoomSperreDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(sperre: RoomSperre)
+
+    @Query("DELETE FROM room_sperren WHERE roomId = :roomId")
+    suspend fun delete(roomId: String)
+
+    @Query("SELECT * FROM room_sperren")
+    fun observeAll(): Flow<List<RoomSperre>>
+}
+
+@Dao
 interface ActivityLogDao {
     @Insert
     suspend fun insert(entry: ActivityLog)

@@ -28,6 +28,21 @@ class Repository(private val db: AppDatabase) {
     fun activityFor(roomId: String): Flow<List<ActivityLog>> =
         db.activityLogDao().observeForRoom(roomId)
 
+    val sperren: Flow<List<RoomSperre>> get() = db.roomSperreDao().observeAll()
+
+    /** "Kein Zutritt" für ein Zimmer setzen oder aufheben (mit Protokolleintrag). */
+    suspend fun setKeinZutritt(roomId: String, gesperrt: Boolean) {
+        db.withTransaction {
+            if (gesperrt) {
+                db.roomSperreDao().upsert(RoomSperre(roomId, Dates.todayIso()))
+                logAction(roomId, "Kein Zutritt vermerkt")
+            } else {
+                db.roomSperreDao().delete(roomId)
+                logAction(roomId, "Zutritt wieder möglich")
+            }
+        }
+    }
+
     fun recentActivity(limit: Int = 200): Flow<List<ActivityLog>> =
         db.activityLogDao().observeRecent(limit)
 

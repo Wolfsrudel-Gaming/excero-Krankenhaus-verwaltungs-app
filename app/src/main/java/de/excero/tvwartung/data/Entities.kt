@@ -47,6 +47,17 @@ data class Inspection(
 )
 
 /**
+ * "Kein Zutritt"-Vermerk: Von der Stationsschwester gemeldete Zimmer, die bei
+ * dieser Anfahrt nicht betreten werden dürfen. Gilt nur innerhalb des
+ * eingestellten Prüfzeitraums und läuft danach automatisch ab.
+ */
+@Entity(tableName = "room_sperren")
+data class RoomSperre(
+    @PrimaryKey val roomId: String,
+    val gesperrtAm: String               // ISO-Datum der Meldung
+)
+
+/**
  * Internes Aktivitätsprotokoll: wann wurde welches Zimmer bearbeitet.
  * Wird bewusst NICHT exportiert – nur zur eigenen Einsicht in der App.
  */

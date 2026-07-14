@@ -8,14 +8,15 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [TvRoom::class, Inspection::class, ActivityLog::class],
-    version = 2,
+    entities = [TvRoom::class, Inspection::class, ActivityLog::class, RoomSperre::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun tvRoomDao(): TvRoomDao
     abstract fun inspectionDao(): InspectionDao
     abstract fun activityLogDao(): ActivityLogDao
+    abstract fun roomSperreDao(): RoomSperreDao
 
     companion object {
         /** v1 → v2: internes Aktivitätsprotokoll; bestehende Daten bleiben unverändert. */
@@ -31,6 +32,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v2 → v3: "Kein Zutritt"-Vermerke; bestehende Daten bleiben unverändert. */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `room_sperren` (" +
+                        "`roomId` TEXT NOT NULL, " +
+                        "`gesperrtAm` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`roomId`))"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -41,7 +54,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tvwartung.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { instance = it }
             }

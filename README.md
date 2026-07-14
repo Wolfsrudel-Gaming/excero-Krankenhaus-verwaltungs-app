@@ -35,6 +35,16 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.2
+
+- **„Kein Zutritt"-Vermerke:** Nach der Anmeldung bei der Stationsschwester
+  über das Tür-Symbol neben der Station die gesperrten Zimmer ankreuzen.
+  Diese Zimmer erscheinen rot in der Übersicht (Badge „KEIN ZUTRITT"),
+  der Prüfbogen ist dort gesperrt, und in den Zimmerdetails erscheint ein
+  Warnbanner. Die Vermerke gelten für den aktuellen Prüfzeitraum und
+  laufen bei der nächsten Anfahrt automatisch ab; sie lassen sich auch
+  einzeln wieder aufheben.
+
 ### Neu in Version 1.1
 
 - **Einstellbarer Prüfzeitraum („eine Anfahrt"):** Nur heute, diese Woche

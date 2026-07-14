@@ -12,21 +12,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -55,7 +62,9 @@ fun HomeScreen(
     val rooms by viewModel.rooms.collectAsState()
     val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val gesperrt by viewModel.gesperrteZimmer.collectAsState()
     var query by remember { mutableStateOf("") }
+    var sperrDialogStation by remember { mutableStateOf<String?>(null) }
 
     val checkedInPeriod = remember(inspectionsInPeriod) {
         inspectionsInPeriod.map { it.roomId }.toSet()
@@ -116,9 +125,12 @@ fun HomeScreen(
         ) {
             grouped.forEach { (station, stationRooms) ->
                 item(key = "header_$station") {
+                    val gesperrtCount = stationRooms.count { it.id in gesperrt }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 2.dp)
                     ) {
                         Text(
                             "Station $station",
@@ -128,16 +140,30 @@ fun HomeScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "${stationRooms.count { it.id in checkedInPeriod }}/${stationRooms.size} geprüft",
+                            buildString {
+                                append("${stationRooms.count { it.id in checkedInPeriod }}/${stationRooms.size} geprüft")
+                                if (gesperrtCount > 0) append(" · $gesperrtCount kein Zutritt")
+                            },
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (gesperrtCount > 0) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
                         )
+                        IconButton(onClick = { sperrDialogStation = station }) {
+                            Icon(
+                                Icons.Default.MeetingRoom,
+                                contentDescription = "Zutritt für Station $station festlegen",
+                                tint = if (gesperrtCount > 0) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
                 items(stationRooms.size, key = { stationRooms[it].id }) { index ->
                     RoomCard(
                         room = stationRooms[index],
                         checkedToday = stationRooms[index].id in checkedInPeriod,
+                        blocked = stationRooms[index].id in gesperrt,
                         onClick = { onRoomClick(stationRooms[index].id) }
                     )
                 }
@@ -145,18 +171,82 @@ fun HomeScreen(
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
+
+    sperrDialogStation?.let { station ->
+        val stationRooms = rooms.filter { it.station == station }
+        SperrDialog(
+            station = station,
+            zimmer = stationRooms.map { it.id to it.zimmer },
+            gesperrt = gesperrt,
+            onToggle = { roomId, blocked -> viewModel.setKeinZutritt(roomId, blocked) },
+            onDismiss = { sperrDialogStation = null }
+        )
+    }
+}
+
+/**
+ * Nach der Anmeldung bei der Stationsschwester: Zimmer ankreuzen, die bei
+ * dieser Anfahrt nicht betreten werden dürfen.
+ */
+@Composable
+private fun SperrDialog(
+    station: String,
+    zimmer: List<Pair<String, String>>,   // (roomId, Zimmerbezeichnung)
+    gesperrt: Set<String>,
+    onToggle: (String, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Station $station – Zutritt") },
+        text = {
+            Column {
+                Text(
+                    "Zimmer ankreuzen, die laut Station nicht betreten werden dürfen. " +
+                        "Die Markierung gilt für den aktuellen Prüfzeitraum.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    zimmer.forEach { (roomId, bezeichnung) ->
+                        val blocked = roomId in gesperrt
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Checkbox(
+                                checked = blocked,
+                                onCheckedChange = { onToggle(roomId, it) }
+                            )
+                            Text(
+                                "Zimmer $bezeichnung",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (blocked) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Fertig") }
+        }
+    )
 }
 
 @Composable
-private fun RoomCard(room: TvRoom, checkedToday: Boolean, onClick: () -> Unit) {
+private fun RoomCard(room: TvRoom, checkedToday: Boolean, blocked: Boolean, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (checkedToday)
-                MaterialTheme.colorScheme.secondaryContainer
-            else
-                MaterialTheme.colorScheme.surface
+            containerColor = when {
+                blocked -> MaterialTheme.colorScheme.errorContainer
+                checkedToday -> MaterialTheme.colorScheme.secondaryContainer
+                else -> MaterialTheme.colorScheme.surface
+            }
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
@@ -167,9 +257,10 @@ private fun RoomCard(room: TvRoom, checkedToday: Boolean, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.Tv,
+                imageVector = if (blocked) Icons.Default.Block else Icons.Default.Tv,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = if (blocked) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(28.dp)
             )
             Spacer(Modifier.width(12.dp))
@@ -178,13 +269,18 @@ private fun RoomCard(room: TvRoom, checkedToday: Boolean, onClick: () -> Unit) {
                     Text(
                         "Zimmer ${room.zimmer}",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (blocked) MaterialTheme.colorScheme.onErrorContainer
+                        else MaterialTheme.colorScheme.onSurface
                     )
-                    if (checkedToday) {
+                    if (blocked) {
+                        Spacer(Modifier.width(6.dp))
+                        StatusBadge("KEIN ZUTRITT", MaterialTheme.colorScheme.error)
+                    } else if (checkedToday) {
                         Spacer(Modifier.width(6.dp))
                         Icon(
                             Icons.Default.CheckCircle,
-                            contentDescription = "Heute geprüft",
+                            contentDescription = "Geprüft",
                             tint = OkGreen,
                             modifier = Modifier.size(18.dp)
                         )

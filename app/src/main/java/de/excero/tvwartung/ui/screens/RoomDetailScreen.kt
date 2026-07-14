@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -76,7 +77,9 @@ fun RoomDetailScreen(
 ) {
     val room by viewModel.room(roomId).collectAsState(initial = null)
     val activity by viewModel.activityFor(roomId).collectAsState(initial = emptyList())
+    val gesperrt by viewModel.gesperrteZimmer.collectAsState()
     val current = room ?: return
+    val blocked = roomId in gesperrt
 
     var photoRefresh by remember { mutableIntStateOf(0) }
     val photos = remember(roomId, photoRefresh) { viewModel.photoStore.photosToday(roomId) }
@@ -131,15 +134,71 @@ fun RoomDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (blocked) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Block,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "KEIN ZUTRITT",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                        Text(
+                            "Dieses Zimmer wurde von der Station für die aktuelle Anfahrt gesperrt.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        TextButton(onClick = { viewModel.setKeinZutritt(roomId, false) }) {
+                            Text("Zutritt wieder möglich – Sperre aufheben")
+                        }
+                    }
+                }
+            }
+
             Button(
                 onClick = onStartPruefbogen,
+                enabled = !blocked,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
                 Icon(Icons.Default.FactCheck, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Prüfbogen ausfüllen", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (blocked) "Kein Zutritt" else "Prüfbogen ausfüllen",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            if (!blocked) {
+                TextButton(
+                    onClick = { viewModel.setKeinZutritt(roomId, true) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Default.Block,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Als „kein Zutritt“ markieren",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
 
             StammdatenCard(
