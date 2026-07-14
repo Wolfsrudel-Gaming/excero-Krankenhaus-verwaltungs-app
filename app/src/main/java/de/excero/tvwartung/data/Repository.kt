@@ -46,6 +46,15 @@ class Repository(private val db: AppDatabase) {
     fun recentActivity(limit: Int = 200): Flow<List<ActivityLog>> =
         db.activityLogDao().observeRecent(limit)
 
+    fun inspection(id: Long): Flow<Inspection?> = db.inspectionDao().observeById(id)
+
+    suspend fun getInspection(id: Long): Inspection? = db.inspectionDao().getById(id)
+
+    suspend fun inspectionsForDate(isoDate: String): List<Inspection> =
+        db.inspectionDao().getForDate(isoDate)
+
+    suspend fun getRoom(id: String): TvRoom? = db.tvRoomDao().getById(id)
+
     suspend fun allRooms(): List<TvRoom> = db.tvRoomDao().getAll()
 
     suspend fun allInspections(): List<Inspection> = db.inspectionDao().getAll()

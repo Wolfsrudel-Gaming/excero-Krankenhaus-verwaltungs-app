@@ -73,10 +73,12 @@ fun RoomDetailScreen(
     viewModel: AppViewModel,
     roomId: String,
     onBack: () -> Unit,
-    onStartPruefbogen: () -> Unit
+    onStartPruefbogen: () -> Unit,
+    onOpenBericht: (Long) -> Unit
 ) {
     val room by viewModel.room(roomId).collectAsState(initial = null)
     val activity by viewModel.activityFor(roomId).collectAsState(initial = emptyList())
+    val berichte by viewModel.inspectionsFor(roomId).collectAsState(initial = emptyList())
     val gesperrt by viewModel.gesperrteZimmer.collectAsState()
     val current = room ?: return
     val blocked = roomId in gesperrt
@@ -224,6 +226,8 @@ fun RoomDetailScreen(
                     photoRefresh++
                 }
             )
+
+            BerichteCard(berichte, onOpenBericht)
 
             LebenslaufCard(current.lebenslauf)
 
@@ -511,6 +515,65 @@ private fun LebenslaufCard(lebenslauf: String) {
             } else {
                 entries.forEach { entry ->
                     Text(entry.trim(), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+/** Alle gespeicherten Prüfberichte dieses Zimmers, antippbar zum Ansehen/PDF-Export. */
+@Composable
+private fun BerichteCard(
+    berichte: List<de.excero.tvwartung.data.Inspection>,
+    onOpenBericht: (Long) -> Unit
+) {
+    Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.FactCheck,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "Prüfberichte (${berichte.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            HorizontalDivider()
+            if (berichte.isEmpty()) {
+                Text(
+                    "Noch keine Prüfberichte in der App erfasst.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                berichte.forEach { bericht ->
+                    val nio = bericht.punkte().count { it.second == false }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                Dates.isoToGerman(bericht.datum),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                if (nio == 0) "alles i.O." else "$nio Punkt(e) n.i.O.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (nio == 0) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.error
+                            )
+                        }
+                        TextButton(onClick = { onOpenBericht(bericht.id) }) {
+                            Text("Ansehen / PDF")
+                        }
+                    }
                 }
             }
         }

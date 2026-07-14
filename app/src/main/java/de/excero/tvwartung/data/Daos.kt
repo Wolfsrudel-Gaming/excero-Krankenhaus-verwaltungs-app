@@ -45,6 +45,15 @@ interface InspectionDao {
     @Query("SELECT * FROM inspections WHERE datum >= :startDatum ORDER BY roomId")
     fun observeSince(startDatum: String): Flow<List<Inspection>>
 
+    @Query("SELECT * FROM inspections WHERE id = :id")
+    fun observeById(id: Long): Flow<Inspection?>
+
+    @Query("SELECT * FROM inspections WHERE id = :id")
+    suspend fun getById(id: Long): Inspection?
+
+    @Query("SELECT * FROM inspections WHERE datum = :datum ORDER BY roomId")
+    suspend fun getForDate(datum: String): List<Inspection>
+
     @Query("SELECT * FROM inspections ORDER BY datum DESC, roomId")
     suspend fun getAll(): List<Inspection>
 }

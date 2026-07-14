@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -72,6 +73,10 @@ fun ExportScreen(
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { viewModel.importExcel(it) } }
+
+    val pdfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri -> uri?.let { viewModel.exportDayPdf(it) } }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -135,6 +140,42 @@ fun ExportScreen(
                         Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("ZIP erstellen")
+                    }
+                }
+            }
+
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.PictureAsPdf,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Prüfberichte als PDF",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        "Alle heute ausgefüllten Prüfbögen (${inspectionsToday.size}) als ein " +
+                            "PDF mit den zugehörigen Fotos. Einzelne Berichte lassen sich in den " +
+                            "Zimmerdetails unter „Prüfberichte“ ansehen und exportieren.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = { pdfLauncher.launch("Pruefberichte_${Dates.todayFolder()}.pdf") },
+                        enabled = inspectionsToday.isNotEmpty(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Tages-PDF erstellen")
                     }
                 }
             }

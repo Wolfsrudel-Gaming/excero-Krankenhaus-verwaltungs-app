@@ -55,8 +55,15 @@ class PhotoStore(private val context: Context) {
 
     /** Alle heute aufgenommenen Fotos eines Zimmers. */
     fun photosToday(roomId: String): List<File> =
-        dirFor(roomId).listFiles { f -> f.isFile && f.length() > 0 }
+        photosFor(roomId, Dates.todayFolder())
+
+    /** Fotos eines Zimmers an einem bestimmten Tag (JJJJMMTT), ohne Ordner anzulegen. */
+    fun photosFor(roomId: String, dateFolder: String): List<File> {
+        if (dateFolder.isBlank()) return emptyList()
+        return File(rootDir(), "$roomId/$dateFolder")
+            .listFiles { f -> f.isFile && f.length() > 0 }
             ?.sortedBy { it.name } ?: emptyList()
+    }
 
     fun delete(file: File) {
         file.delete()

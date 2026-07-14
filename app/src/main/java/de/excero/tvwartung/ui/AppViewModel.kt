@@ -12,6 +12,7 @@ import de.excero.tvwartung.data.TvRoom
 import de.excero.tvwartung.excel.XlsxReader
 import de.excero.tvwartung.excel.XlsxWriter
 import de.excero.tvwartung.files.ZipExporter
+import de.excero.tvwartung.pdf.PruefberichtPdf
 import de.excero.tvwartung.util.Dates
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -133,6 +134,58 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 else -> "$imported Bild(er) übernommen"
             }
             withContext(Dispatchers.Main) { onDone() }
+        }
+    }
+
+    fun inspection(id: Long): Flow<Inspection?> = repository.inspection(id)
+
+    /** Fotos, die zum Prüfdatum eines Berichts gehören. */
+    fun photosForInspection(inspection: Inspection) =
+        photoStore.photosFor(inspection.roomId, Dates.isoToFolder(inspection.datum))
+
+    private suspend fun buildReport(inspection: Inspection): PruefberichtPdf.Report? {
+        val room = repository.getRoom(inspection.roomId) ?: return null
+        return PruefberichtPdf.Report(
+            room = room,
+            inspection = inspection,
+            photos = photoStore.photosFor(inspection.roomId, Dates.isoToFolder(inspection.datum))
+        )
+    }
+
+    /** Einzelnen Prüfbericht als PDF exportieren. */
+    fun exportInspectionPdf(uri: Uri, inspectionId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val inspection = repository.getInspection(inspectionId)
+                    ?: error("Prüfbericht nicht gefunden")
+                val report = buildReport(inspection) ?: error("Zimmer nicht gefunden")
+                app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    PruefberichtPdf.write(listOf(report), out)
+                } ?: error("Datei konnte nicht geöffnet werden")
+            }.onSuccess {
+                _message.value = "PDF exportiert"
+            }.onFailure {
+                _message.value = "PDF-Export fehlgeschlagen: ${it.message}"
+            }
+        }
+    }
+
+    /** Alle Prüfberichte eines Tages als ein gemeinsames PDF exportieren. */
+    fun exportDayPdf(uri: Uri, isoDate: String = Dates.todayIso()) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val inspections = repository.inspectionsForDate(isoDate)
+                require(inspections.isNotEmpty()) { "Keine Prüfberichte an diesem Tag" }
+                val reports = inspections.mapNotNull { buildReport(it) }
+                app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    PruefberichtPdf.write(reports, out)
+                } ?: error("Datei konnte nicht geöffnet werden")
+                reports.size
+            }.onSuccess {
+                _message.value = "PDF mit $it Prüfbericht(en) exportiert"
+            }.onFailure {
+                _message.value = "PDF-Export fehlgeschlagen: ${it.message}"
+            }
         }
     }
 

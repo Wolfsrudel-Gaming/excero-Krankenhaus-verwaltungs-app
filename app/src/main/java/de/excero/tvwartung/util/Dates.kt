@@ -30,6 +30,10 @@ object Dates {
     /** Ordnername im Format JJJJMMTT, z. B. 20260714. */
     fun todayFolder(): String = LocalDate.now().format(folder)
 
+    /** ISO-Datum → Ordnername (JJJJMMTT); leere/ungültige Werte → "". */
+    fun isoToFolder(isoDate: String): String =
+        parseIso(isoDate)?.format(folder) ?: ""
+
     fun parseIso(value: String): LocalDate? =
         runCatching { LocalDate.parse(value.trim(), iso) }.getOrNull()
 

@@ -18,6 +18,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import de.excero.tvwartung.ui.AppViewModel
+import de.excero.tvwartung.ui.screens.BerichtScreen
 import de.excero.tvwartung.ui.screens.ExportScreen
 import de.excero.tvwartung.ui.screens.HomeScreen
 import de.excero.tvwartung.ui.screens.PruefbogenScreen
@@ -33,6 +34,7 @@ object Routes {
     const val SETTINGS = "settings"
     fun room(id: String) = "room/${URLEncoder.encode(id, "UTF-8")}"
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
+    fun bericht(id: Long) = "bericht/$id"
 }
 
 class MainActivity : ComponentActivity() {
@@ -77,7 +79,8 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 roomId = roomId,
                                 onBack = { navController.popBackStack() },
-                                onStartPruefbogen = { navController.navigate(Routes.pruefbogen(roomId)) }
+                                onStartPruefbogen = { navController.navigate(Routes.pruefbogen(roomId)) },
+                                onOpenBericht = { navController.navigate(Routes.bericht(it)) }
                             )
                         }
                         composable("pruefbogen/{roomId}") { entry ->
@@ -93,6 +96,15 @@ class MainActivity : ComponentActivity() {
                         composable(Routes.EXPORT) {
                             ExportScreen(
                                 viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("bericht/{inspectionId}") { entry ->
+                            val inspectionId =
+                                entry.arguments?.getString("inspectionId")?.toLongOrNull() ?: 0L
+                            BerichtScreen(
+                                viewModel = viewModel,
+                                inspectionId = inspectionId,
                                 onBack = { navController.popBackStack() }
                             )
                         }

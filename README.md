@@ -35,6 +35,18 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.3
+
+- **Prüfberichte als PDF:** Jeder gespeicherte Prüfbogen lässt sich als
+  ansprechend gestaltetes A4-PDF exportieren – mit Kopfbereich, Stammdaten,
+  Prüfpunkte-Tabelle (i.O./n.i.O.-Chips), Bemerkungen und den Fotos des
+  Prüftags (nativ erzeugt, ohne Zusatzbibliotheken).
+- **Prüfbericht-Archiv in der App:** In den Zimmerdetails listet die Karte
+  „Prüfberichte" alle bisherigen Bögen; jeder Bericht ist jederzeit
+  einsehbar (Prüfpunkte, Bemerkungen, Fotos) und einzeln exportierbar.
+- **Tages-PDF:** Auf der Export-Seite lassen sich alle heute ausgefüllten
+  Prüfbögen in ein gemeinsames PDF exportieren.
+
 ### Neu in Version 1.2
 
 - **„Kein Zutritt"-Vermerke:** Nach der Anmeldung bei der Stationsschwester

@@ -44,7 +44,19 @@ data class Inspection(
     val bemerkungFernbedienung: String = "",
     val bemerkungHalterung: String = "",
     val bemerkungen: String = ""         // Freitext unten auf dem Bogen
-)
+) {
+    /** Prüfpunkte in Bogen-Reihenfolge: Titel, Ergebnis, Bemerkung. */
+    fun punkte(): List<Triple<String, Boolean?, String>> = listOf(
+        Triple("Empfang vorhanden?", empfangVorhanden, bemerkungEmpfang),
+        Triple("Seriennummer TV stimmt?", seriennummerStimmt, bemerkungSeriennummer),
+        Triple("Freenet TV-ID stimmt?", freenetIdStimmt, bemerkungFreenetId),
+        Triple("DVD-Test", dvdTest, bemerkungDvd),
+        Triple("Fernbedienung", fernbedienung, bemerkungFernbedienung),
+        Triple("Halterung (fest?)", halterungFest, bemerkungHalterung),
+        Triple("Gültigkeit Freenet > 3 Monate?", gueltigkeitAusreichend, ""),
+        Triple("Freenet verlängert", freenetVerlaengert, "")
+    )
+}
 
 /**
  * "Kein Zutritt"-Vermerk: Von der Stationsschwester gemeldete Zimmer, die bei
