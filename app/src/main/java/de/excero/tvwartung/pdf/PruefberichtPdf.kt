@@ -209,6 +209,21 @@ object PruefberichtPdf {
         }
         ctx.y += 14f
 
+        // Durchgeführte Arbeiten / verbautes Material
+        val arbeiten = insp.arbeitenListe()
+        if (arbeiten.isNotEmpty()) {
+            ctx.ensure(30f + arbeiten.size * 13f)
+            val c = ctx.canvas!!
+            c.drawText("Durchgeführte Arbeiten / Material", MARGIN, ctx.y + 4f, paint(13f, TEAL, bold = true))
+            ctx.y += 16f
+            arbeiten.forEach { a ->
+                ctx.ensure(13f)
+                ctx.canvas!!.drawText("•  $a", MARGIN + 4f, ctx.y + 10f, body)
+                ctx.y += 13f
+            }
+            ctx.y += 10f
+        }
+
         // Bemerkungen
         if (insp.bemerkungen.isNotBlank()) {
             val lines = wrap(insp.bemerkungen, body, CONTENT_W - 8f)

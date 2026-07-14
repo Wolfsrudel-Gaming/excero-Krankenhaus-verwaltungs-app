@@ -43,7 +43,8 @@ data class Inspection(
     val bemerkungDvd: String = "",
     val bemerkungFernbedienung: String = "",
     val bemerkungHalterung: String = "",
-    val bemerkungen: String = ""         // Freitext unten auf dem Bogen
+    val bemerkungen: String = "",        // Freitext unten auf dem Bogen
+    val arbeiten: String = ""            // durchgeführte Arbeiten / verbautes Material, ein Eintrag pro Zeile
 ) {
     /** Prüfpunkte in Bogen-Reihenfolge: Titel, Ergebnis, Bemerkung. */
     fun punkte(): List<Triple<String, Boolean?, String>> = listOf(
@@ -56,6 +57,10 @@ data class Inspection(
         Triple("Gültigkeit Freenet > 3 Monate?", gueltigkeitAusreichend, ""),
         Triple("Freenet verlängert", freenetVerlaengert, "")
     )
+
+    /** Durchgeführte Arbeiten / verbautes Material als Liste. */
+    fun arbeitenListe(): List<String> =
+        arbeiten.lines().map { it.trim() }.filter { it.isNotEmpty() }
 }
 
 /**

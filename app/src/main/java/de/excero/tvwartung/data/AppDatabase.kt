@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TvRoom::class, Inspection::class, ActivityLog::class, RoomSperre::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,6 +44,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v3 → v4: durchgeführte Arbeiten / verbautes Material je Prüfbogen. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE inspections ADD COLUMN arbeiten TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -54,7 +61,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tvwartung.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }

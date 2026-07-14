@@ -139,6 +139,23 @@ fun BerichtScreen(
                 }
             }
 
+            val arbeiten = current.arbeitenListe()
+            if (arbeiten.isNotEmpty()) {
+                Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Durchgeführte Arbeiten / Material",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        HorizontalDivider()
+                        arbeiten.forEach { a ->
+                            Text("•  $a", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+
             if (current.bemerkungen.isNotBlank()) {
                 Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

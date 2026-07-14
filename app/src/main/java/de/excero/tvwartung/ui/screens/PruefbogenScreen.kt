@@ -2,6 +2,8 @@ package de.excero.tvwartung.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,12 +17,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +39,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.excero.tvwartung.data.Arbeiten
 import de.excero.tvwartung.data.Inspection
 import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.ui.theme.ErrorRed
@@ -59,7 +65,7 @@ private class PruefpunktState(
     var bemerkung by mutableStateOf("")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PruefbogenScreen(
     viewModel: AppViewModel,
@@ -103,9 +109,18 @@ fun PruefbogenScreen(
     var serienUebernehmen by remember(current.id) { mutableStateOf(false) }
     var freenetIdUebernehmen by remember(current.id) { mutableStateOf(false) }
     var eintragManuell by remember(current.id) { mutableStateOf<String?>(null) }
+    val ausgewaehlteArbeiten = remember(current.id) { mutableStateListOf<String>() }
+    var arbeitSonstige by remember(current.id) { mutableStateOf("") }
 
     val freenetVerlaengert = punkte[7].ergebnis == true
     val tvTypGeaendert = tvTyp.trim() != current.tvTyp.trim() && tvTyp.isNotBlank()
+
+    // Alle durchgeführten Arbeiten inkl. Freenet-Verlängerung und Freitext
+    val alleArbeiten: List<String> = buildList {
+        addAll(ausgewaehlteArbeiten)
+        if (freenetVerlaengert) add(Arbeiten.FREENET_VERLAENGERT)
+        arbeitSonstige.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { add(it) }
+    }
 
     // Duplikat-Hinweise für zu übernehmende Werte
     val serienDups = if (serienUebernehmen && punkte[1].bemerkung.isNotBlank())
@@ -129,6 +144,9 @@ fun PruefbogenScreen(
         }
         if (tvTypGeaendert) append(", TV-Typ angepasst")
         if (gueltigBisKorrektur.isNotBlank() && !freenetVerlaengert) append(", Gültigkeitsdatum korrigiert")
+        ausgewaehlteArbeiten.forEach { append(", $it") }
+        arbeitSonstige.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            .forEach { append(", $it") }
         if (bemerkungen.isNotBlank()) append("; $bemerkungen")
     }
     val eintrag = eintragManuell ?: vorschlag
@@ -263,6 +281,52 @@ fun PruefbogenScreen(
                 }
             }
 
+            // Durchgeführte Arbeiten / verbautes Material (für Stundenzettel & Materialnachweis)
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Durchgeführte Arbeiten / Material",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Ankreuzen, was gemacht bzw. verbaut wurde – erscheint im Stundenzettel der Station.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Arbeiten.KATALOG.forEach { arbeit ->
+                            val selected = arbeit in ausgewaehlteArbeiten
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    if (selected) ausgewaehlteArbeiten.remove(arbeit)
+                                    else ausgewaehlteArbeiten.add(arbeit)
+                                },
+                                label = { Text(arbeit) },
+                                leadingIcon = if (selected) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null
+                            )
+                        }
+                    }
+                    if (freenetVerlaengert) {
+                        Text(
+                            "„${Arbeiten.FREENET_VERLAENGERT}“ wird automatisch aus dem Prüfpunkt übernommen.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    OutlinedTextField(
+                        value = arbeitSonstige,
+                        onValueChange = { arbeitSonstige = it },
+                        label = { Text("Sonstiges (mit Komma trennen)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Bemerkungen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -333,7 +397,8 @@ fun PruefbogenScreen(
                         bemerkungDvd = punkte[3].bemerkung.trim(),
                         bemerkungFernbedienung = punkte[4].bemerkung.trim(),
                         bemerkungHalterung = punkte[5].bemerkung.trim(),
-                        bemerkungen = bemerkungen.trim()
+                        bemerkungen = bemerkungen.trim(),
+                        arbeiten = alleArbeiten.joinToString("\n")
                     )
 
                     viewModel.saveInspection(

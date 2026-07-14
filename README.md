@@ -35,6 +35,20 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.4
+
+- **Durchgeführte Arbeiten / Material erfassen:** Im Prüfbogen lässt sich
+  per Chips ankreuzen, was gemacht bzw. verbaut wurde (Fernbedienung,
+  Antenne, CI-Modul, TV-Tausch, Sendersuchlauf, Kabel, Halterung,
+  Neueinrichtung; Freenet-Verlängerung wird automatisch übernommen) plus
+  Freitext. Das fließt in Lebenslauf, Prüfbericht-PDF und Stundenzettel ein.
+- **Stundenzettel pro Station (PDF):** Über das Formular-Symbol neben der
+  Station in der Übersicht wird ein Leistungsnachweis für den aktuellen
+  Prüfzeitraum erzeugt – mit Auftraggeber (Kinderklinik Köln, Amsterdamer
+  Straße 59, 50735 Köln) und Station, je Zimmer den durchgeführten
+  Arbeiten, einer Materialzusammenfassung (Stückzahlen) und zwei
+  Unterschriftfeldern (Station und Dienstleister) zum Unterschreiben-Lassen.
+
 ### Neu in Version 1.3.1
 
 - **PDF im Bilderordner:** Beim ZIP-Export wird zu jedem geprüften Zimmer

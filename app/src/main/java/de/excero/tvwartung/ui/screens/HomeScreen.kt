@@ -1,5 +1,7 @@
 package de.excero.tvwartung.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
@@ -65,6 +68,15 @@ fun HomeScreen(
     val gesperrt by viewModel.gesperrteZimmer.collectAsState()
     var query by remember { mutableStateOf("") }
     var sperrDialogStation by remember { mutableStateOf<String?>(null) }
+
+    // Stundenzettel-PDF: Zielstation merken, dann Datei anlegen lassen
+    var stundenzettelStation by remember { mutableStateOf<String?>(null) }
+    val stundenzettelLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        val station = stundenzettelStation
+        if (uri != null && station != null) viewModel.exportStundenzettel(uri, station)
+    }
 
     val checkedInPeriod = remember(inspectionsInPeriod) {
         inspectionsInPeriod.map { it.roomId }.toSet()
@@ -155,6 +167,18 @@ fun HomeScreen(
                                 contentDescription = "Zutritt für Station $station festlegen",
                                 tint = if (gesperrtCount > 0) MaterialTheme.colorScheme.error
                                 else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = {
+                            stundenzettelStation = station
+                            stundenzettelLauncher.launch(
+                                "Stundenzettel_${station}_${Dates.todayFolder()}.pdf"
+                            )
+                        }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Assignment,
+                                contentDescription = "Stundenzettel für Station $station",
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }

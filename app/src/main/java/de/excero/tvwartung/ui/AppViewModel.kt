@@ -12,7 +12,9 @@ import de.excero.tvwartung.data.TvRoom
 import de.excero.tvwartung.excel.XlsxReader
 import de.excero.tvwartung.excel.XlsxWriter
 import de.excero.tvwartung.files.ZipExporter
+import de.excero.tvwartung.data.Arbeiten
 import de.excero.tvwartung.pdf.PruefberichtPdf
+import de.excero.tvwartung.pdf.StundenzettelPdf
 import de.excero.tvwartung.util.Dates
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -185,6 +187,55 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _message.value = "PDF mit $it Prüfbericht(en) exportiert"
             }.onFailure {
                 _message.value = "PDF-Export fehlgeschlagen: ${it.message}"
+            }
+        }
+    }
+
+    /**
+     * Stundenzettel/Leistungsnachweis für eine Station als PDF – deckt den
+     * aktuellen Prüfzeitraum ab (alle in der Zeit geprüften Zimmer der Station).
+     */
+    fun exportStundenzettel(uri: Uri, station: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val start = settings.value.zeitraumStartIso()
+                val roomsById = repository.allRooms().associateBy { it.id }
+                val inspektionen = repository.allInspections()
+                    .filter { it.datum >= start && roomsById[it.roomId]?.station == station }
+                    .sortedWith(compareBy({ roomsById[it.roomId]?.zimmer ?: "" }, { it.datum }))
+                require(inspektionen.isNotEmpty()) {
+                    "Für Station $station wurden im aktuellen Zeitraum keine Prüfungen erfasst"
+                }
+                val leistungen = inspektionen.map {
+                    StundenzettelPdf.Leistung(
+                        zimmer = roomsById[it.roomId]?.zimmer ?: it.roomId,
+                        datum = it.datum,
+                        arbeiten = it.arbeitenListe()
+                    )
+                }
+                // Material zusammenzählen (Katalogreihenfolge, dann Freenet, dann Sonstiges)
+                val counts = LinkedHashMap<String, Int>()
+                inspektionen.forEach { insp ->
+                    insp.arbeitenListe().forEach { a -> counts[a] = (counts[a] ?: 0) + 1 }
+                }
+                val order = Arbeiten.KATALOG + Arbeiten.FREENET_VERLAENGERT
+                val material = order.filter { counts.containsKey(it) }.map { it to counts.getValue(it) } +
+                    counts.keys.filter { it !in order }.sorted().map { it to counts.getValue(it) }
+
+                val zettel = StundenzettelPdf.Stundenzettel(
+                    station = station,
+                    zeitraum = "${settings.value.beschreibung()} (ab ${Dates.isoToGerman(start)})",
+                    leistungen = leistungen,
+                    material = material
+                )
+                app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    StundenzettelPdf.write(zettel, out)
+                } ?: error("Datei konnte nicht geöffnet werden")
+                leistungen.size
+            }.onSuccess {
+                _message.value = "Stundenzettel erstellt ($it Zimmer)"
+            }.onFailure {
+                _message.value = "Stundenzettel fehlgeschlagen: ${it.message}"
             }
         }
     }
