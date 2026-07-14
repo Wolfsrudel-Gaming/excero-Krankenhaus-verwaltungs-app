@@ -38,7 +38,7 @@ import de.excero.tvwartung.ui.theme.WarnAmber
 import de.excero.tvwartung.util.Dates
 
 object FreenetLinks {
-    const val VERLAENGERN = "https://www.freenet.tv/shop"
+    const val VERLAENGERN = "https://www.freenet.tv/guthaben-einloesen"
     const val AKTIVIEREN = "https://www.freenet.tv/aktivierung"
 
     fun open(context: Context, url: String) {
