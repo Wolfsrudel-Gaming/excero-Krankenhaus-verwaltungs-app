@@ -35,6 +35,16 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.7
+
+- **Verschlüsseltes Komplett-Backup & Gerätewechsel:** Auf der Export-Seite
+  („Backup & Gerätewechsel") erzeugt „Backup erstellen" eine passwortgeschützte
+  Datei (.kkhbak, AES-256-GCM) mit Datenbank, allen Fotos/PDFs, Unterschriften
+  und Einstellungen. Auf einem anderen Gerät (z. B. Tablet) dieselbe APK
+  installieren und „Backup einspielen" wählen – alle Daten werden übernommen,
+  die App startet danach automatisch neu. Achtung: Einspielen ersetzt die
+  vorhandenen Daten des Zielgeräts; ohne Passwort ist das Backup nicht lesbar.
+
 ### Neu in Version 1.6.1
 
 - **Stundenzettel-Verwaltung:** Auf der Export-Seite listet „Gespeicherte

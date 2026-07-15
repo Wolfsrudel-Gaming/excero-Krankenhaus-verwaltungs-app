@@ -478,4 +478,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun photoCountToday(): Int = withContext(Dispatchers.IO) {
         photoStore.countToday()
     }
+
+    // ----- Backup & Gerätewechsel -----
+
+    /** Vollständiges verschlüsseltes Backup (DB, Fotos, Unterschriften, Einstellungen). */
+    fun createBackup(uri: Uri, passwort: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    de.excero.tvwartung.files.BackupManager(app).erstellen(out, passwort.toCharArray())
+                } ?: error("Datei konnte nicht geöffnet werden")
+            }.onSuccess {
+                _message.value = "Backup erstellt ($it Dateien)"
+            }.onFailure {
+                _message.value = "Backup fehlgeschlagen: ${it.message}"
+            }
+        }
+    }
+
+    /**
+     * Backup einspielen – ersetzt alle Daten auf diesem Gerät und startet die
+     * App anschließend neu, damit die wiederhergestellte Datenbank sauber lädt.
+     */
+    fun restoreBackup(uri: Uri, passwort: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                app.contentResolver.openInputStream(uri)?.use { input ->
+                    de.excero.tvwartung.files.BackupManager(app).einspielen(input, passwort.toCharArray())
+                } ?: error("Datei konnte nicht gelesen werden")
+            }.onSuccess {
+                _message.value = "Backup eingespielt ($it Dateien) – App startet neu …"
+                kotlinx.coroutines.delay(1500)
+                neustart()
+            }.onFailure {
+                _message.value = "Einspielen fehlgeschlagen: ${it.message}"
+            }
+        }
+    }
+
+    private fun neustart() {
+        val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
+            addFlags(
+                android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+            )
+        }
+        if (intent != null) app.startActivity(intent)
+        kotlin.system.exitProcess(0)
+    }
 }

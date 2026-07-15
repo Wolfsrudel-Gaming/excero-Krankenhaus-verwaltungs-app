@@ -139,5 +139,13 @@ abstract class AppDatabase : RoomDatabase() {
                     .build()
                     .also { instance = it }
             }
+
+        /** Instanz schließen (z. B. bevor die Datenbankdatei per Backup ersetzt wird). */
+        fun reset() {
+            synchronized(this) {
+                runCatching { instance?.close() }
+                instance = null
+            }
+        }
     }
 }

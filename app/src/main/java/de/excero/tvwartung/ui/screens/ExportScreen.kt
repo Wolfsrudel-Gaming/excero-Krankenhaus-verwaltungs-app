@@ -17,11 +17,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,8 +33,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -45,6 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.util.Dates
@@ -79,6 +87,23 @@ fun ExportScreen(
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri -> uri?.let { viewModel.exportDayPdf(it) } }
+
+    // Backup: erst Passwort abfragen, dann Datei anlegen bzw. öffnen
+    var backupPasswort by remember { mutableStateOf<String?>(null) }
+    var zeigeBackupDialog by remember { mutableStateOf(false) }
+    var restoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
+    val backupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val pw = backupPasswort
+        if (uri != null && pw != null) viewModel.createBackup(uri, pw)
+        backupPasswort = null
+    }
+
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) restoreUri = uri }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -274,6 +299,148 @@ fun ExportScreen(
                     )
                 }
             }
+
+            // Backup & Gerätewechsel
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Backup,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Backup & Gerätewechsel",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        "Vollständiges, verschlüsseltes Backup (Datenbank, Fotos, " +
+                            "Unterschriften, Einstellungen) – z. B. zum Weiterarbeiten " +
+                            "auf dem Tablet: dort die gleiche App installieren und das " +
+                            "Backup einspielen.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = { zeigeBackupDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Backup, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Backup erstellen (verschlüsselt)")
+                    }
+                    OutlinedButton(
+                        onClick = { restoreLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.SettingsBackupRestore, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Backup einspielen (.kkhbak)")
+                    }
+                }
+            }
         }
     }
+
+    if (zeigeBackupDialog) {
+        PasswortDialog(
+            titel = "Backup verschlüsseln",
+            text = "Passwort für die Backup-Datei festlegen. Ohne dieses Passwort " +
+                "lässt sich das Backup nicht wieder einspielen!",
+            mitWiederholung = true,
+            bestaetigenText = "Backup erstellen",
+            onConfirm = { pw ->
+                zeigeBackupDialog = false
+                backupPasswort = pw
+                backupLauncher.launch(
+                    "KKH_Backup_${Dates.todayFolder()}_${zeitStempel()}.kkhbak"
+                )
+            },
+            onDismiss = { zeigeBackupDialog = false }
+        )
+    }
+
+    restoreUri?.let { uri ->
+        PasswortDialog(
+            titel = "Backup einspielen",
+            text = "ACHTUNG: Alle aktuellen Daten auf diesem Gerät (Zimmer, Prüfberichte, " +
+                "Fotos, Stundenzettel) werden durch das Backup ERSETZT. Die App startet " +
+                "danach automatisch neu.",
+            mitWiederholung = false,
+            bestaetigenText = "Einspielen & ersetzen",
+            onConfirm = { pw ->
+                restoreUri = null
+                viewModel.restoreBackup(uri, pw)
+            },
+            onDismiss = { restoreUri = null }
+        )
+    }
+}
+
+private fun zeitStempel(): String =
+    java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HHmm"))
+
+/** Passwortabfrage für Backup erstellen/einspielen. */
+@Composable
+private fun PasswortDialog(
+    titel: String,
+    text: String,
+    mitWiederholung: Boolean,
+    bestaetigenText: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var passwort by remember { mutableStateOf("") }
+    var wiederholung by remember { mutableStateOf("") }
+    val gueltig = passwort.length >= 6 && (!mitWiederholung || passwort == wiederholung)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(titel) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = passwort,
+                    onValueChange = { passwort = it },
+                    label = { Text("Passwort (mind. 6 Zeichen)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (mitWiederholung) {
+                    OutlinedTextField(
+                        value = wiederholung,
+                        onValueChange = { wiederholung = it },
+                        label = { Text("Passwort wiederholen") },
+                        singleLine = true,
+                        isError = wiederholung.isNotEmpty() && wiederholung != passwort,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(passwort) }, enabled = gueltig) {
+                Text(bestaetigenText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Abbrechen") }
+        }
+    )
 }
