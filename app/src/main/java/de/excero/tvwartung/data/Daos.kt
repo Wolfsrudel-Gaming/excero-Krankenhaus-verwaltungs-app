@@ -129,6 +129,15 @@ interface StundenzettelDao {
     @Query("SELECT * FROM stundenzettel WHERE station = :station AND zeitraumStart = :zeitraumStart LIMIT 1")
     suspend fun getFor(station: String, zeitraumStart: String): StundenzettelEntity?
 
+    @Query("SELECT * FROM stundenzettel WHERE id = :id")
+    suspend fun getById(id: Long): StundenzettelEntity?
+
+    @Query("SELECT * FROM stundenzettel ORDER BY zeitraumStart DESC, station")
+    fun observeAll(): Flow<List<StundenzettelEntity>>
+
+    @Query("SELECT * FROM stundenzettel")
+    suspend fun getAll(): List<StundenzettelEntity>
+
     @Query("SELECT COUNT(*) FROM stundenzettel")
     suspend fun count(): Int
 

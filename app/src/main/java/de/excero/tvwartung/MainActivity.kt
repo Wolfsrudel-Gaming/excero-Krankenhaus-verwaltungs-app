@@ -25,6 +25,7 @@ import de.excero.tvwartung.ui.screens.PruefbogenScreen
 import de.excero.tvwartung.ui.screens.RoomDetailScreen
 import de.excero.tvwartung.ui.screens.RoomEditScreen
 import de.excero.tvwartung.ui.screens.SettingsScreen
+import de.excero.tvwartung.ui.screens.StundenzettelListeScreen
 import de.excero.tvwartung.ui.screens.StundenzettelScreen
 import de.excero.tvwartung.ui.screens.VerwaltungScreen
 import de.excero.tvwartung.ui.theme.KKHTheme
@@ -40,7 +41,9 @@ object Routes {
     fun room(id: String) = "room/${URLEncoder.encode(id, "UTF-8")}"
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
     fun bericht(id: Long) = "bericht/$id"
+    const val STUNDENZETTEL_LISTE = "stundenzettel_liste"
     fun stundenzettel(station: String) = "stundenzettel/${URLEncoder.encode(station, "UTF-8")}"
+    fun stundenzettelEdit(id: Long) = "stundenzettel_edit/$id"
 }
 
 class MainActivity : ComponentActivity() {
@@ -105,7 +108,10 @@ class MainActivity : ComponentActivity() {
                         composable(Routes.EXPORT) {
                             ExportScreen(
                                 viewModel = viewModel,
-                                onBack = { navController.popBackStack() }
+                                onBack = { navController.popBackStack() },
+                                onStundenzettelListe = {
+                                    navController.navigate(Routes.STUNDENZETTEL_LISTE)
+                                }
                             )
                         }
                         composable("bericht/{inspectionId}") { entry ->
@@ -124,7 +130,25 @@ class MainActivity : ComponentActivity() {
                             StundenzettelScreen(
                                 viewModel = viewModel,
                                 station = station,
+                                zettelId = null,
                                 onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("stundenzettel_edit/{zettelId}") { entry ->
+                            val zettelId =
+                                entry.arguments?.getString("zettelId")?.toLongOrNull() ?: 0L
+                            StundenzettelScreen(
+                                viewModel = viewModel,
+                                station = null,
+                                zettelId = zettelId,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Routes.STUNDENZETTEL_LISTE) {
+                            StundenzettelListeScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onOpen = { navController.navigate(Routes.stundenzettelEdit(it)) }
                             )
                         }
                         composable(Routes.SETTINGS) {

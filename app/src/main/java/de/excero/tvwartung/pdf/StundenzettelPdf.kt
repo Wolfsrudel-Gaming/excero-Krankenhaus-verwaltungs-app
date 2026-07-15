@@ -33,7 +33,6 @@ object StundenzettelPdf {
         val auftragsnummer: String = "",          // z. B. "A-2026-0007"
         val logo: Bitmap? = null,                 // Firmenlogo für den Kopfbereich
         val datum: String = "",                   // Tag der Leistung (deutsch)
-        val arbeitszeit: String = "",             // z. B. "08:00 – 11:30"
         val arbeitsstunden: String = "",          // z. B. "3,5 Std."
         val anfahrt: String = "",                 // z. B. "0,5 Std."
         val techniker: String = "",               // Name Dienstleister
@@ -179,10 +178,6 @@ object StundenzettelPdf {
     }
 
     private fun drawZeiten(ctx: Ctx, zettel: Stundenzettel) {
-        // Nur zeichnen, wenn mindestens ein Zeitfeld gesetzt ist
-        val hatZeiten = listOf(zettel.datum, zettel.arbeitszeit, zettel.arbeitsstunden, zettel.anfahrt)
-            .any { it.isNotBlank() }
-        if (!hatZeiten) return
         val canvas = ctx.canvas!!
         val boxH = 44f
         canvas.drawRoundRect(RectF(MARGIN, ctx.y, MARGIN + CONTENT_W, ctx.y + boxH), 8f, 8f,
@@ -192,9 +187,9 @@ object StundenzettelPdf {
         val cellW = CONTENT_W / 4
         val felder = listOf(
             "Datum" to zettel.datum,
-            "Arbeitszeit" to zettel.arbeitszeit,
             "Arbeitsstunden" to zettel.arbeitsstunden,
-            "Anfahrt" to zettel.anfahrt
+            "Anfahrt" to zettel.anfahrt,
+            "Techniker" to zettel.techniker
         )
         felder.forEachIndexed { i, (l, v) ->
             val x = MARGIN + i * cellW + 12f

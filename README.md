@@ -35,6 +35,19 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.6.1
+
+- **Stundenzettel-Verwaltung:** Auf der Export-Seite listet „Gespeicherte
+  Stundenzettel" alle Zettel mit Status-Badges (Stunden eingetragen?
+  unterschrieben?) – antippen zum Bearbeiten und PDF-Export. Ältere Zettel
+  behalten ihr korrektes Leistungs-Zeitfenster.
+- **Stunden statt von/bis:** Auf dem Stundenzettel werden die Arbeitsstunden
+  direkt eingetragen (z. B. „3,5"), kein Start/Ende mehr.
+- **Unterschriften werden gespeichert:** Unterschrift auf der Station einholen
+  und mit „Speichern" sichern – die Stunden lassen sich später eintragen und
+  erst dann das PDF erzeugen. Gespeicherte Unterschriften werden angezeigt
+  und können durch neues Unterschreiben ersetzt werden.
+
 ### Neu in Version 1.6
 
 - **Firmenlogo (EXCERO GmbH)** im Kopf von Prüfbericht- und Stundenzettel-PDF.

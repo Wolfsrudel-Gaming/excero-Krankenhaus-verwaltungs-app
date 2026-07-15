@@ -150,8 +150,24 @@ class Repository(private val db: AppDatabase) {
 
     // ----- Stundenzettel -----
 
+    val stundenzettel: Flow<List<StundenzettelEntity>> get() = db.stundenzettelDao().observeAll()
+
     suspend fun getStundenzettel(station: String, zeitraumStart: String): StundenzettelEntity? =
         db.stundenzettelDao().getFor(station, zeitraumStart)
+
+    suspend fun getStundenzettelById(id: Long): StundenzettelEntity? =
+        db.stundenzettelDao().getById(id)
+
+    /**
+     * Zeitfenster eines Stundenzettels: von seinem Zeitraumbeginn bis zum
+     * Beginn des nächsten Zettels derselben Station (exklusiv), sonst offen.
+     */
+    suspend fun zettelFenster(zettel: StundenzettelEntity): Pair<String, String?> {
+        val ende = db.stundenzettelDao().getAll()
+            .filter { it.station == zettel.station && it.zeitraumStart > zettel.zeitraumStart }
+            .minOfOrNull { it.zeitraumStart }
+        return zettel.zeitraumStart to ende
+    }
 
     suspend fun saveStundenzettel(zettel: StundenzettelEntity): StundenzettelEntity {
         val id = db.stundenzettelDao().upsert(zettel)

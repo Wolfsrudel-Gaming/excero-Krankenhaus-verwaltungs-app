@@ -260,19 +260,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val material: List<Pair<String, Int>>
     )
 
-    /** Gespeicherten Stundenzettel für Station + aktuellen Zeitraum laden oder neu anlegen. */
+    val signatureStore get() = app.signatureStore
+
+    val alleStundenzettel: StateFlow<List<StundenzettelEntity>> = repository.stundenzettel
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Gespeicherten Stundenzettel für Station + aktuellen Zeitraum laden;
+     * ein neuer Zettel wird sofort gespeichert, damit Unterschriften eine
+     * feste Zettel-ID haben.
+     */
     suspend fun ladeStundenzettel(station: String): StundenzettelEntity =
         withContext(Dispatchers.IO) {
             val start = settings.value.zeitraumStartIso()
-            repository.getStundenzettel(station, start) ?: StundenzettelEntity(
-                station = station,
-                zeitraumStart = start,
-                auftragsnummer = repository.naechsteAuftragsnummer(),
-                datum = Dates.todayGerman()
+            repository.getStundenzettel(station, start) ?: repository.saveStundenzettel(
+                StundenzettelEntity(
+                    station = station,
+                    zeitraumStart = start,
+                    auftragsnummer = repository.naechsteAuftragsnummer(),
+                    datum = Dates.todayGerman()
+                )
             )
         }
 
-    /** Stundenzettel-Eingaben speichern (Zeiten lassen sich später wieder ändern). */
+    /** Gespeicherten Stundenzettel per ID laden (aus der Liste). */
+    suspend fun ladeStundenzettelById(id: Long): StundenzettelEntity? =
+        withContext(Dispatchers.IO) { repository.getStundenzettelById(id) }
+
+    /** Stundenzettel-Eingaben speichern (Stunden lassen sich später wieder ändern). */
     fun speichereStundenzettel(zettel: StundenzettelEntity, quiet: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.saveStundenzettel(zettel)
@@ -280,11 +295,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun stundenzettelBasis(station: String): StundenzettelBasis {
-        val start = settings.value.zeitraumStartIso()
+    /**
+     * Leistungen/Material im Zeitfenster des Zettels: von seinem Zeitraumbeginn
+     * bis zum Beginn des nächsten Zettels derselben Station – so bleiben auch
+     * ältere gespeicherte Stundenzettel korrekt exportierbar.
+     */
+    private suspend fun stundenzettelBasis(zettel: StundenzettelEntity): StundenzettelBasis {
+        val (start, ende) = repository.zettelFenster(zettel)
         val roomsById = repository.allRooms().associateBy { it.id }
         val inspektionen = repository.allInspections()
-            .filter { it.datum >= start && roomsById[it.roomId]?.station == station }
+            .filter {
+                it.datum >= start && (ende == null || it.datum < ende) &&
+                    roomsById[it.roomId]?.station == zettel.station
+            }
             .sortedWith(compareBy({ roomsById[it.roomId]?.zimmer ?: "" }, { it.datum }))
         val leistungen = inspektionen.map {
             StundenzettelPdf.Leistung(
@@ -301,40 +324,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val order = Arbeiten.KATALOG + Arbeiten.FREENET_VERLAENGERT
         val material = order.filter { counts.containsKey(it) }.map { it to counts.getValue(it) } +
             counts.keys.filter { it !in order }.sorted().map { it to counts.getValue(it) }
+        val zeitraumText = if (ende == null) "ab ${Dates.isoToGerman(start)}"
+        else "${Dates.isoToGerman(start)} – ${
+            Dates.parseIso(ende)?.minusDays(1)?.let { Dates.isoToGerman(it.toString()) } ?: Dates.isoToGerman(ende)
+        }"
         return StundenzettelBasis(
-            station = station,
-            zeitraum = "${settings.value.beschreibung()} (ab ${Dates.isoToGerman(start)})",
+            station = zettel.station,
+            zeitraum = zeitraumText,
             leistungen = leistungen,
             material = material
         )
     }
 
     /** Vorschau der Stundenzettel-Daten für den Eingabe-Screen. */
-    suspend fun stundenzettelVorschau(station: String): StundenzettelBasis =
-        withContext(Dispatchers.IO) { stundenzettelBasis(station) }
+    suspend fun stundenzettelVorschau(zettel: StundenzettelEntity): StundenzettelBasis =
+        withContext(Dispatchers.IO) { stundenzettelBasis(zettel) }
 
     /**
-     * Stundenzettel/Leistungsnachweis für eine Station als PDF – deckt den
-     * aktuellen Prüfzeitraum ab, ergänzt um Auftragsnummer, Zeiten und
-     * (optional) digitale Unterschriften. Die Eingaben werden dabei auch
-     * gespeichert, damit Zeiten später anpassbar bleiben.
+     * Stundenzettel/Leistungsnachweis als PDF – mit Auftragsnummer, Stunden,
+     * Anfahrt und den gespeicherten Unterschriften. Die Eingaben werden dabei
+     * auch gespeichert, damit die Stunden später anpassbar bleiben.
      */
     fun exportStundenzettel(
         uri: Uri,
         eingabe: StundenzettelEntity,
-        arbeitsstunden: String,
         signaturStation: android.graphics.Bitmap?,
         signaturTechniker: android.graphics.Bitmap?
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 repository.saveStundenzettel(eingabe)
-                val basis = stundenzettelBasis(eingabe.station)
+                val basis = stundenzettelBasis(eingabe)
                 require(basis.leistungen.isNotEmpty()) {
-                    "Für Station ${eingabe.station} wurden im aktuellen Zeitraum keine Prüfungen erfasst"
+                    "Für Station ${eingabe.station} wurden im Zeitraum keine Prüfungen erfasst"
                 }
-                val arbeitszeit = if (eingabe.von.isNotBlank() || eingabe.bis.isNotBlank())
-                    "${eingabe.von} – ${eingabe.bis}" else ""
                 val zettel = StundenzettelPdf.Stundenzettel(
                     station = basis.station,
                     zeitraum = basis.zeitraum,
@@ -342,8 +365,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     material = basis.material,
                     auftragsnummer = eingabe.auftragsnummer,
                     datum = eingabe.datum,
-                    arbeitszeit = arbeitszeit,
-                    arbeitsstunden = arbeitsstunden,
+                    arbeitsstunden = eingabe.stunden.trim().let { if (it.isBlank()) "" else "$it Std." },
                     anfahrt = eingabe.anfahrt.trim().let { if (it.isBlank()) "" else "$it Std." },
                     techniker = eingabe.techniker,
                     signaturStation = signaturStation,

@@ -12,7 +12,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TvRoom::class, Inspection::class, ActivityLog::class, RoomSperre::class,
         Material::class, CustomPruefpunkt::class, StundenzettelEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -97,6 +97,31 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v5 → v6: Stundenzettel mit direkter Stundenangabe statt von/bis. */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `stundenzettel_neu` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`station` TEXT NOT NULL, " +
+                        "`zeitraumStart` TEXT NOT NULL, " +
+                        "`auftragsnummer` TEXT NOT NULL, " +
+                        "`datum` TEXT NOT NULL, " +
+                        "`stunden` TEXT NOT NULL, " +
+                        "`anfahrt` TEXT NOT NULL, " +
+                        "`techniker` TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO stundenzettel_neu " +
+                        "(id, station, zeitraumStart, auftragsnummer, datum, stunden, anfahrt, techniker) " +
+                        "SELECT id, station, zeitraumStart, auftragsnummer, datum, '', anfahrt, techniker " +
+                        "FROM stundenzettel"
+                )
+                db.execSQL("DROP TABLE stundenzettel")
+                db.execSQL("ALTER TABLE stundenzettel_neu RENAME TO stundenzettel")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -107,7 +132,10 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tvwartung.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(
+                        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
+                        MIGRATION_4_5, MIGRATION_5_6
+                    )
                     .build()
                     .also { instance = it }
             }

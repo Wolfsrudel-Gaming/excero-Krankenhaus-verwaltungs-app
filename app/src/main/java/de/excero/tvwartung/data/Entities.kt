@@ -139,8 +139,9 @@ data class CustomPruefpunkt(
 )
 
 /**
- * Gespeicherter Stundenzettel je Station und Prüfzeitraum. Zeiten lassen sich
- * damit auch nachträglich setzen/ändern und erneut als PDF exportieren.
+ * Gespeicherter Stundenzettel je Station und Prüfzeitraum. Typischer Ablauf:
+ * Unterschrift auf der Station einholen (wird mitgespeichert), Stunden später
+ * eintragen und erst dann das PDF exportieren.
  */
 @Entity(tableName = "stundenzettel")
 data class StundenzettelEntity(
@@ -149,8 +150,7 @@ data class StundenzettelEntity(
     val zeitraumStart: String,           // ISO-Datum des Zeitraumbeginns
     val auftragsnummer: String = "",
     val datum: String = "",              // Tag der Leistung (deutsch, frei editierbar)
-    val von: String = "",                // Arbeitsbeginn HH:MM
-    val bis: String = "",                // Arbeitsende HH:MM
+    val stunden: String = "",            // Arbeitsstunden, z. B. "3,5"
     val anfahrt: String = "",            // Anfahrt in Stunden (Freitext)
     val techniker: String = ""
 )
