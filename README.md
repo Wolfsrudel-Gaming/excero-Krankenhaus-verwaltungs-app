@@ -35,6 +35,13 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.7.1
+
+- **Backup-Fehler bei großen Datenmengen behoben:** Das Backup wird jetzt
+  blockweise verschlüsselt (1-MB-Blöcke, Format v2), dadurch konstanter
+  Speicherverbrauch statt Out-of-Memory bei vielen Fotos. Kleine Backups im
+  alten Format (v1) lassen sich weiterhin einspielen.
+
 ### Neu in Version 1.7
 
 - **Verschlüsseltes Komplett-Backup & Gerätewechsel:** Auf der Export-Seite

@@ -9,12 +9,12 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.SecureRandom
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
-import javax.crypto.CipherOutputStream
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
@@ -25,13 +25,17 @@ import javax.crypto.spec.SecretKeySpec
  * dem Passwort). Enthält Datenbank, Fotos, Unterschriften und Einstellungen –
  * zum Übertragen auf ein anderes Gerät (z. B. Tablet).
  *
- * Dateiformat: "KKHBAK1" + Salt(16) + IV(12) + AES-GCM( "KKHCHECK" + ZIP ).
+ * Format v2 (blockweise, konstanter Speicherverbrauch auch bei großen Backups):
+ * "KKHBAK2" + Salt(16) + IV-Präfix(8) + GCM-Blöcke( ZIP ).
+ * Format v1 ("KKHBAK1", ganzer Strom in einem Stück) wird beim Einspielen
+ * weiterhin unterstützt.
  */
 class BackupManager(private val context: Context) {
 
     companion object {
-        private val MAGIC = "KKHBAK1".toByteArray(Charsets.US_ASCII)
-        private val CHECK = "KKHCHECK".toByteArray(Charsets.US_ASCII)
+        private val MAGIC_V2 = "KKHBAK2".toByteArray(Charsets.US_ASCII)
+        private val MAGIC_V1 = "KKHBAK1".toByteArray(Charsets.US_ASCII)
+        private val CHECK_V1 = "KKHCHECK".toByteArray(Charsets.US_ASCII)
         private const val ITERATIONS = 150_000
         private const val KEY_BITS = 256
         private const val DB_NAME = "tvwartung.db"
@@ -52,18 +56,19 @@ class BackupManager(private val context: Context) {
         AppDatabase.get(context).query("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
 
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
-            init(Cipher.ENCRYPT_MODE, ableiten(passwort, salt), GCMParameterSpec(128, iv))
-        }
+        val ivPrefix = ByteArray(GcmChunk.IV_PREFIX_SIZE).also { SecureRandom().nextBytes(it) }
+        val key = ableiten(passwort, salt)
 
         var dateien = 0
-        out.write(MAGIC)
-        out.write(salt)
-        out.write(iv)
-        CipherOutputStream(out, cipher).use { enc ->
-            enc.write(CHECK)
-            ZipOutputStream(enc.buffered()).use { zip ->
+        val gepuffert = out.buffered(64 * 1024)
+        gepuffert.write(MAGIC_V2)
+        gepuffert.write(salt)
+        gepuffert.write(ivPrefix)
+        GcmChunkOutputStream(gepuffert, key, ivPrefix).use { enc ->
+            ZipOutputStream(enc).use { zip ->
+                // Fotos sind bereits komprimiert – schnelle Kompressionsstufe reicht
+                zip.setLevel(Deflater.BEST_SPEED)
+
                 fun schreibe(name: String, quelle: File) {
                     zip.putNextEntry(ZipEntry(name))
                     quelle.inputStream().use { it.copyTo(zip) }
@@ -73,7 +78,7 @@ class BackupManager(private val context: Context) {
 
                 // Manifest
                 val manifest = JSONObject().apply {
-                    put("format", 1)
+                    put("format", 2)
                     put("erstellt", Dates.nowIsoDateTime())
                     put("geraet", "${Build.MANUFACTURER} ${Build.MODEL}")
                 }
@@ -108,6 +113,7 @@ class BackupManager(private val context: Context) {
                 }
             }
         }
+        gepuffert.flush()
         return dateien
     }
 
@@ -117,49 +123,41 @@ class BackupManager(private val context: Context) {
      * @throws IllegalArgumentException bei falschem Passwort oder ungültiger Datei.
      */
     fun einspielen(input: InputStream, passwort: CharArray): Int {
-        val stream = input.buffered()
-        val magic = ByteArray(MAGIC.size)
-        require(stream.read(magic) == MAGIC.size && magic.contentEquals(MAGIC)) {
-            "Keine gültige Backup-Datei"
-        }
-        val salt = ByteArray(16).also { require(stream.read(it) == 16) { "Datei beschädigt" } }
-        val iv = ByteArray(12).also { require(stream.read(it) == 12) { "Datei beschädigt" } }
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
-            init(Cipher.DECRYPT_MODE, ableiten(passwort, salt), GCMParameterSpec(128, iv))
-        }
+        val stream = input.buffered(64 * 1024)
+        val magic = ByteArray(MAGIC_V2.size)
+        require(stream.read(magic) == magic.size) { "Keine gültige Backup-Datei" }
 
-        // 1) In Staging-Verzeichnis entschlüsseln und entpacken
         val staging = File(context.cacheDir, "restore_tmp").apply {
             deleteRecursively()
             mkdirs()
         }
         var dateien = 0
         try {
-            CipherInputStream(stream, cipher).use { dec ->
-                val check = ByteArray(CHECK.size)
-                var gelesen = 0
-                while (gelesen < CHECK.size) {
-                    val n = dec.read(check, gelesen, CHECK.size - gelesen)
-                    if (n < 0) break
-                    gelesen += n
+            val entschluesselt: InputStream = when {
+                magic.contentEquals(MAGIC_V2) -> {
+                    val salt = leseGenau(stream, 16)
+                    val ivPrefix = leseGenau(stream, GcmChunk.IV_PREFIX_SIZE)
+                    GcmChunkInputStream(stream, ableiten(passwort, salt), ivPrefix)
                 }
-                require(gelesen == CHECK.size && check.contentEquals(CHECK)) { "Falsches Passwort" }
+                magic.contentEquals(MAGIC_V1) -> legacyStrom(stream, passwort)
+                else -> throw IllegalArgumentException("Keine gültige Backup-Datei")
+            }
 
-                ZipInputStream(dec).use { zip ->
-                    var entry = zip.nextEntry
-                    while (entry != null) {
-                        if (!entry.isDirectory) {
-                            val ziel = File(staging, entry.name)
-                            // Zip-Slip verhindern
-                            require(ziel.canonicalPath.startsWith(staging.canonicalPath)) {
-                                "Ungültiger Pfad im Backup"
-                            }
-                            ziel.parentFile?.mkdirs()
-                            ziel.outputStream().use { zip.copyTo(it) }
-                            dateien++
+            // 1) Entschlüsseln und ins Staging-Verzeichnis entpacken
+            ZipInputStream(entschluesselt).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory) {
+                        val ziel = File(staging, entry.name)
+                        // Zip-Slip verhindern
+                        require(ziel.canonicalPath.startsWith(staging.canonicalPath)) {
+                            "Ungültiger Pfad im Backup"
                         }
-                        entry = zip.nextEntry
+                        ziel.parentFile?.mkdirs()
+                        ziel.outputStream().use { zip.copyTo(it) }
+                        dateien++
                     }
+                    entry = zip.nextEntry
                 }
             }
 
@@ -210,5 +208,35 @@ class BackupManager(private val context: Context) {
         } finally {
             staging.deleteRecursively()
         }
+    }
+
+    private fun leseGenau(stream: InputStream, n: Int): ByteArray {
+        val b = ByteArray(n)
+        var gelesen = 0
+        while (gelesen < n) {
+            val r = stream.read(b, gelesen, n - gelesen)
+            require(r >= 0) { "Datei beschädigt" }
+            gelesen += r
+        }
+        return b
+    }
+
+    /** Altes Format v1: ganzer Strom als ein GCM-Block mit KKHCHECK-Präfix. */
+    private fun legacyStrom(stream: InputStream, passwort: CharArray): InputStream {
+        val salt = leseGenau(stream, 16)
+        val iv = leseGenau(stream, 12)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
+            init(Cipher.DECRYPT_MODE, ableiten(passwort, salt), GCMParameterSpec(128, iv))
+        }
+        val dec = CipherInputStream(stream, cipher)
+        val check = ByteArray(CHECK_V1.size)
+        var gelesen = 0
+        while (gelesen < check.size) {
+            val n = dec.read(check, gelesen, check.size - gelesen)
+            if (n < 0) break
+            gelesen += n
+        }
+        require(gelesen == check.size && check.contentEquals(CHECK_V1)) { "Falsches Passwort" }
+        return dec
     }
 }
