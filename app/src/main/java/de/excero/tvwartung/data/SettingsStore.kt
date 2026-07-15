@@ -14,7 +14,10 @@ enum class Pruefzeitraum(val label: String) {
 
 data class AppSettings(
     val zeitraum: Pruefzeitraum = Pruefzeitraum.TAG,
-    val seitDatum: String = Dates.todayIso()   // ISO; nur bei SEIT_DATUM relevant
+    val seitDatum: String = Dates.todayIso(),  // ISO; nur bei SEIT_DATUM relevant
+    val serverUrl: String = "",                // z. B. https://example.de/kkh
+    val apiKey: String = "",                   // Sync-Schlüssel des Servers
+    val autoSync: Boolean = false              // nach jedem Prüfbogen automatisch synchronisieren
 ) {
     /** Startdatum (ISO) des aktuellen Prüfzeitraums. */
     fun zeitraumStartIso(): String = when (zeitraum) {
@@ -42,7 +45,10 @@ class SettingsStore(context: Context) {
         }.getOrDefault(Pruefzeitraum.TAG)
         return AppSettings(
             zeitraum = zeitraum,
-            seitDatum = prefs.getString("seitDatum", Dates.todayIso()) ?: Dates.todayIso()
+            seitDatum = prefs.getString("seitDatum", Dates.todayIso()) ?: Dates.todayIso(),
+            serverUrl = prefs.getString("serverUrl", "") ?: "",
+            apiKey = prefs.getString("apiKey", "") ?: "",
+            autoSync = prefs.getString("autoSync", "false") == "true"
         )
     }
 
@@ -50,6 +56,9 @@ class SettingsStore(context: Context) {
         prefs.edit()
             .putString("zeitraum", settings.zeitraum.name)
             .putString("seitDatum", settings.seitDatum)
+            .putString("serverUrl", settings.serverUrl)
+            .putString("apiKey", settings.apiKey)
+            .putString("autoSync", if (settings.autoSync) "true" else "false")
             .apply()
         _settings.value = settings
     }

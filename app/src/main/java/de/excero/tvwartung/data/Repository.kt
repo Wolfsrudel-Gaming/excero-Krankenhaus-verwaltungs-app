@@ -47,7 +47,7 @@ class Repository(private val db: AppDatabase) {
                     // Bereits vorhandenen heutigen Vermerk ersetzen (z. B. Grund nachgetragen)
                     val zeilen = room.lebenslauf.lines().filterNot { istHeutigerVermerk(it) }
                     val neu = (zeilen.filter { it.isNotBlank() } + vermerk).joinToString("\n")
-                    db.tvRoomDao().update(room.copy(lebenslauf = neu))
+                    db.tvRoomDao().update(room.copy(lebenslauf = neu, updatedAt = Dates.nowIsoDateTime()))
                 }
                 logAction(roomId, "Kein Zutritt vermerkt" + if (grund.isBlank()) "" else " ($grund)")
             } else {
@@ -56,7 +56,7 @@ class Repository(private val db: AppDatabase) {
                     val neu = room.lebenslauf.lines()
                         .filterNot { istHeutigerVermerk(it) }
                         .joinToString("\n")
-                    db.tvRoomDao().update(room.copy(lebenslauf = neu))
+                    db.tvRoomDao().update(room.copy(lebenslauf = neu, updatedAt = Dates.nowIsoDateTime()))
                 }
                 logAction(roomId, "Zutritt wieder möglich")
             }
@@ -88,7 +88,7 @@ class Repository(private val db: AppDatabase) {
 
     suspend fun updateRoom(room: TvRoom, logAktion: String = "Stammdaten geändert") {
         db.withTransaction {
-            db.tvRoomDao().update(room)
+            db.tvRoomDao().update(room.copy(updatedAt = Dates.nowIsoDateTime()))
             logAction(room.id, logAktion)
         }
     }
@@ -103,7 +103,8 @@ class Repository(private val db: AppDatabase) {
         db.withTransaction {
             db.tvRoomDao().insert(
                 room.copy(
-                    lebenslauf = "${Dates.todayGerman()}: Zimmer in der App angelegt"
+                    lebenslauf = "${Dates.todayGerman()}: Zimmer in der App angelegt",
+                    updatedAt = Dates.nowIsoDateTime()
                 )
             )
             logAction(room.id, "Zimmer angelegt")
@@ -118,7 +119,7 @@ class Repository(private val db: AppDatabase) {
             else "${Dates.todayGerman()}: Zimmer reaktiviert"
             val neu = if (room.lebenslauf.isBlank()) vermerk
             else room.lebenslauf.trimEnd() + "\n" + vermerk
-            db.tvRoomDao().update(room.copy(inaktiv = inaktiv, lebenslauf = neu))
+            db.tvRoomDao().update(room.copy(inaktiv = inaktiv, lebenslauf = neu, updatedAt = Dates.nowIsoDateTime()))
             logAction(roomId, if (inaktiv) "Zimmer inaktiv gesetzt" else "Zimmer reaktiviert")
         }
     }
@@ -152,6 +153,8 @@ class Repository(private val db: AppDatabase) {
 
     val stundenzettel: Flow<List<StundenzettelEntity>> get() = db.stundenzettelDao().observeAll()
 
+    suspend fun getAllStundenzettel(): List<StundenzettelEntity> = db.stundenzettelDao().getAll()
+
     suspend fun getStundenzettel(station: String, zeitraumStart: String): StundenzettelEntity? =
         db.stundenzettelDao().getFor(station, zeitraumStart)
 
@@ -170,8 +173,9 @@ class Repository(private val db: AppDatabase) {
     }
 
     suspend fun saveStundenzettel(zettel: StundenzettelEntity): StundenzettelEntity {
-        val id = db.stundenzettelDao().upsert(zettel)
-        return if (zettel.id == 0L) zettel.copy(id = id) else zettel
+        val mitZeit = zettel.copy(updatedAt = Dates.nowIsoDateTime())
+        val id = db.stundenzettelDao().upsert(mitZeit)
+        return if (mitZeit.id == 0L) mitZeit.copy(id = id) else mitZeit
     }
 
     /** Fortlaufende Auftragsnummer, z. B. "A-2026-0007". */
@@ -194,7 +198,10 @@ class Repository(private val db: AppDatabase) {
         neuerTvTyp: String? = null
     ) {
         db.withTransaction {
-            db.inspectionDao().insert(inspection)
+            val mitUuid = if (inspection.uuid.isBlank())
+                inspection.copy(uuid = java.util.UUID.randomUUID().toString().replace("-", ""))
+            else inspection
+            db.inspectionDao().insert(mitUuid)
             val room = db.tvRoomDao().getById(inspection.roomId) ?: return@withTransaction
             val neueHistorie = when {
                 lebenslaufEintrag.isBlank() -> room.lebenslauf
@@ -208,7 +215,8 @@ class Repository(private val db: AppDatabase) {
                     gueltigBis = neuesGueltigBis?.takeIf { it.isNotBlank() } ?: room.gueltigBis,
                     seriennummer = neueSeriennummer?.takeIf { it.isNotBlank() } ?: room.seriennummer,
                     freenetId = neueFreenetId?.takeIf { it.isNotBlank() } ?: room.freenetId,
-                    tvTyp = neuerTvTyp?.takeIf { it.isNotBlank() } ?: room.tvTyp
+                    tvTyp = neuerTvTyp?.takeIf { it.isNotBlank() } ?: room.tvTyp,
+                    updatedAt = Dates.nowIsoDateTime()
                 )
             )
             // Lagerbestand: verbrauchtes Material automatisch abziehen

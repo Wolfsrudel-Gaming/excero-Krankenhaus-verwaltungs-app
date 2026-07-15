@@ -127,6 +127,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
+    // ----- Server-Synchronisation -----
+
+    @Volatile
+    private var syncLaeuft = false
+
+    /** Manuell oder automatisch mit dem Server abgleichen. */
+    fun syncNow(leise: Boolean = false) {
+        val s = settings.value
+        if (s.serverUrl.isBlank() || s.apiKey.isBlank()) {
+            if (!leise) _message.value = "Bitte Server-URL und API-Schlüssel in den Einstellungen hinterlegen"
+            return
+        }
+        if (syncLaeuft) return
+        syncLaeuft = true
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                de.excero.tvwartung.sync.SyncManager(repository, photoStore, s.serverUrl, s.apiKey).sync()
+            }.onSuccess {
+                _message.value = it.meldung()
+            }.onFailure {
+                if (!leise) _message.value = "Sync fehlgeschlagen: ${it.message}"
+            }
+            syncLaeuft = false
+        }
+    }
+
+    init {
+        // Beim App-Start automatisch abgleichen, falls aktiviert
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(2000)
+            if (settings.value.autoSync) syncNow(leise = true)
+        }
+    }
+
     fun consumeMessage() {
         _message.value = null
     }
@@ -177,6 +211,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 neueSeriennummer, neueFreenetId, neuerTvTyp
             )
             _message.value = "Prüfbogen für ${inspection.roomId} gespeichert"
+            if (settings.value.autoSync) syncNow(leise = true)
         }
     }
 

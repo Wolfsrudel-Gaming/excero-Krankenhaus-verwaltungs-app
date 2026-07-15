@@ -12,7 +12,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TvRoom::class, Inspection::class, ActivityLog::class, RoomSperre::class,
         Material::class, CustomPruefpunkt::class, StundenzettelEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -122,6 +122,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v6 → v7: Felder für die Server-Synchronisation (updatedAt, UUIDs). */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tv_rooms ADD COLUMN updatedAt TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE inspections ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE stundenzettel ADD COLUMN updatedAt TEXT NOT NULL DEFAULT ''")
+                // Bestehende Prüfbögen bekommen nachträglich eine eindeutige ID
+                db.execSQL("UPDATE inspections SET uuid = lower(hex(randomblob(16))) WHERE uuid = ''")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -134,7 +145,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
-                        MIGRATION_4_5, MIGRATION_5_6
+                        MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7
                     )
                     .build()
                     .also { instance = it }

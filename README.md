@@ -35,6 +35,20 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.8
+
+- **Server-Synchronisation & Weboberfläche:** Neues Verzeichnis `server/`
+  mit deployment-fertigem Docker-Stack (PostgreSQL + Node.js) für den
+  Rootserver (`server/deploy.sh`, Details in `server/README.md`). Die App
+  synchronisiert Zimmer (bidirektional, last-write-wins), Prüfbögen,
+  Stundenzettel und alle Fotos/PDFs. Die Weboberfläche unter `/kkh` bietet
+  Login, Dashboard mit Auswertungen, Zimmer-/Stationsverwaltung (anlegen,
+  bearbeiten, inaktiv setzen), Prüfberichte mit Fotos und PDFs,
+  Prüfungs-Filter und Stundenzettel-Übersicht – im Design der App.
+- **App:** Einstellungen → „Server-Synchronisation" (Server-URL,
+  API-Schlüssel, Auto-Sync beim Start und nach jedem Prüfbogen,
+  „Jetzt synchronisieren"). DB-Migration v7 (Sync-Felder).
+
 ### Neu in Version 1.7.1
 
 - **Backup-Fehler bei großen Datenmengen behoben:** Das Backup wird jetzt

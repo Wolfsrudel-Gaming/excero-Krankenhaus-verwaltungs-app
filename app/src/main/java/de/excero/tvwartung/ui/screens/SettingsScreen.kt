@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -136,6 +137,63 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
                     )
+                }
+            }
+
+            // Server-Synchronisation
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Server-Synchronisation",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Gleicht Zimmer, Prüfbögen, Stundenzettel und Fotos automatisch " +
+                            "mit dem KKH-Server ab (Weboberfläche für die Verwaltung).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = settings.serverUrl,
+                        onValueChange = { viewModel.updateSettings(settings.copy(serverUrl = it.trim())) },
+                        label = { Text("Server-URL (z. B. https://server.de/kkh)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = settings.apiKey,
+                        onValueChange = { viewModel.updateSettings(settings.copy(apiKey = it.trim())) },
+                        label = { Text("API-Schlüssel") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Switch(
+                            checked = settings.autoSync,
+                            onCheckedChange = { viewModel.updateSettings(settings.copy(autoSync = it)) }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Automatisch synchronisieren (beim Start und nach jedem Prüfbogen)",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    androidx.compose.material3.Button(
+                        onClick = { viewModel.syncNow() },
+                        enabled = settings.serverUrl.isNotBlank() && settings.apiKey.isNotBlank(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                    ) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Default.Sync,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Jetzt synchronisieren")
+                    }
                 }
             }
 

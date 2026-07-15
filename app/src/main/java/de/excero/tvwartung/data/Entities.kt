@@ -22,7 +22,9 @@ data class TvRoom(
     val freenetId: String,
     val gueltigBis: String,              // ISO-Datum oder ""
     @ColumnInfo(defaultValue = "0")
-    val inaktiv: Boolean = false         // Zimmer aufgelöst/TV abgebaut – bleibt mit Historie erhalten
+    val inaktiv: Boolean = false,        // Zimmer aufgelöst/TV abgebaut – bleibt mit Historie erhalten
+    @ColumnInfo(defaultValue = "")
+    val updatedAt: String = ""           // letzte Änderung (ISO-Datum+Zeit) für die Server-Synchronisation
 )
 
 /**
@@ -51,7 +53,9 @@ data class Inspection(
     val bemerkungen: String = "",        // Freitext unten auf dem Bogen
     val arbeiten: String = "",           // durchgeführte Arbeiten / verbautes Material, ein Eintrag pro Zeile
     @ColumnInfo(defaultValue = "")
-    val extraPunkte: String = ""         // eigene Prüfpunkte als JSON: [{"t":Titel,"e":true/false/null,"b":Bemerkung}]
+    val extraPunkte: String = "",        // eigene Prüfpunkte als JSON: [{"t":Titel,"e":true/false/null,"b":Bemerkung}]
+    @ColumnInfo(defaultValue = "")
+    val uuid: String = ""                // geräteübergreifend eindeutige ID für die Server-Synchronisation
 ) {
     /** Prüfpunkte in Bogen-Reihenfolge: Titel, Ergebnis, Bemerkung. */
     fun punkte(): List<Triple<String, Boolean?, String>> = listOf(
@@ -152,7 +156,9 @@ data class StundenzettelEntity(
     val datum: String = "",              // Tag der Leistung (deutsch, frei editierbar)
     val stunden: String = "",            // Arbeitsstunden, z. B. "3,5"
     val anfahrt: String = "",            // Anfahrt in Stunden (Freitext)
-    val techniker: String = ""
+    val techniker: String = "",
+    @ColumnInfo(defaultValue = "")
+    val updatedAt: String = ""           // letzte Änderung für die Server-Synchronisation
 )
 
 /**
