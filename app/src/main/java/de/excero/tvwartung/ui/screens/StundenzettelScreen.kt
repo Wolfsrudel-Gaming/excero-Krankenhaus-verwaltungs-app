@@ -21,7 +21,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -44,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.excero.tvwartung.data.StundenzettelEntity
 import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.util.Dates
 
@@ -58,11 +62,38 @@ fun StundenzettelScreen(
         value = viewModel.stundenzettelVorschau(station)
     }
 
+    // Gespeicherten Stundenzettel laden (Zeiten lassen sich später wieder ändern)
+    val gespeichert by produceState<StundenzettelEntity?>(initialValue = null, station) {
+        value = viewModel.ladeStundenzettel(station)
+    }
+    var auftragsnummer by remember { mutableStateOf("") }
     var datum by remember { mutableStateOf(Dates.todayGerman()) }
     var von by remember { mutableStateOf("") }
     var bis by remember { mutableStateOf("") }
     var anfahrt by remember { mutableStateOf("") }
     var techniker by remember { mutableStateOf("") }
+    var geladen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(gespeichert) {
+        gespeichert?.let {
+            auftragsnummer = it.auftragsnummer
+            datum = it.datum.ifBlank { Dates.todayGerman() }
+            von = it.von
+            bis = it.bis
+            anfahrt = it.anfahrt
+            techniker = it.techniker
+            geladen = true
+        }
+    }
+
+    fun aktuelleEingabe(): StundenzettelEntity? = gespeichert?.copy(
+        auftragsnummer = auftragsnummer.trim(),
+        datum = datum.trim(),
+        von = von.trim(),
+        bis = bis.trim(),
+        anfahrt = anfahrt.trim(),
+        techniker = techniker.trim()
+    )
 
     val sigStation = remember { SignatureState() }
     val sigTechniker = remember { SignatureState() }
@@ -72,19 +103,12 @@ fun StundenzettelScreen(
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
-        if (uri != null) {
-            val arbeitszeit = if (von.isNotBlank() || bis.isNotBlank()) "$von – $bis" else ""
-            val anfahrtText = anfahrt.trim().let { if (it.isBlank()) "" else "$it Std." }
+        val eingabe = aktuelleEingabe()
+        if (uri != null && eingabe != null) {
             viewModel.exportStundenzettel(
                 uri = uri,
-                station = station,
-                eingabe = AppViewModel.StundenEingabe(
-                    datum = datum.trim(),
-                    arbeitszeit = arbeitszeit,
-                    arbeitsstunden = arbeitsstunden,
-                    anfahrt = anfahrtText,
-                    techniker = techniker.trim()
-                ),
+                eingabe = eingabe,
+                arbeitsstunden = arbeitsstunden,
                 signaturStation = sigStation.toBitmap(),
                 signaturTechniker = sigTechniker.toBitmap()
             )
@@ -117,10 +141,20 @@ fun StundenzettelScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Zeiten
+            // Auftrag & Zeiten
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Zeiten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Auftrag & Zeiten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Die Eingaben werden gespeichert und lassen sich später wieder ändern.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = auftragsnummer, onValueChange = { auftragsnummer = it },
+                        label = { Text("Auftragsnummer") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     OutlinedTextField(
                         value = datum, onValueChange = { datum = it },
                         label = { Text("Datum (TT.MM.JJJJ)") }, singleLine = true,
@@ -210,7 +244,7 @@ fun StundenzettelScreen(
                 onClick = {
                     pdfLauncher.launch("Stundenzettel_${station}_${Dates.todayFolder()}.pdf")
                 },
-                enabled = !basis?.leistungen.isNullOrEmpty(),
+                enabled = !basis?.leistungen.isNullOrEmpty() && geladen,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
@@ -218,6 +252,22 @@ fun StundenzettelScreen(
                 Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Stundenzettel als PDF")
+            }
+            OutlinedButton(
+                onClick = {
+                    aktuelleEingabe()?.let {
+                        viewModel.speichereStundenzettel(it)
+                        onBack()
+                    }
+                },
+                enabled = geladen,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Nur speichern (PDF später)")
             }
             Spacer(Modifier.height(16.dp))
         }

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -82,6 +83,8 @@ fun RoomDetailScreen(
     val gesperrt by viewModel.gesperrteZimmer.collectAsState()
     val current = room ?: return
     val blocked = roomId in gesperrt
+    var zeigeSperrDialog by remember { mutableStateOf(false) }
+    var zeigeArchivDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -108,6 +111,31 @@ fun RoomDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (current.inaktiv) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "ZIMMER INAKTIV",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "Dieses Zimmer ist archiviert (TV abgebaut/aufgelöst). Die Historie bleibt erhalten.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(onClick = { viewModel.setInaktiv(roomId, false) }) {
+                            Text("Zimmer reaktivieren")
+                        }
+                    }
+                }
+            }
+
             if (blocked) {
                 Card(
                     colors = CardDefaults.cardColors(
@@ -156,9 +184,9 @@ fun RoomDetailScreen(
                 )
             }
 
-            if (!blocked) {
+            if (!blocked && !current.inaktiv) {
                 TextButton(
-                    onClick = { viewModel.setKeinZutritt(roomId, true) },
+                    onClick = { zeigeSperrDialog = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
@@ -191,8 +219,78 @@ fun RoomDetailScreen(
 
             ActivityCard(activity)
 
+            if (!current.inaktiv) {
+                TextButton(
+                    onClick = { zeigeArchivDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Zimmer inaktiv setzen (TV abgebaut/aufgelöst)",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    if (zeigeSperrDialog) {
+        var grund by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { zeigeSperrDialog = false },
+            title = { Text("Kein Zutritt vermerken") },
+            text = {
+                Column {
+                    Text(
+                        "Das Zimmer wird für die aktuelle Anfahrt rot markiert und der " +
+                            "Lebenslauf erhält einen Vermerk mit heutigem Datum.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = grund,
+                        onValueChange = { grund = it },
+                        label = { Text("Grund (optional, z. B. Isolation)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setKeinZutritt(roomId, true, grund)
+                    zeigeSperrDialog = false
+                }) { Text("Vermerken") }
+            },
+            dismissButton = {
+                TextButton(onClick = { zeigeSperrDialog = false }) { Text("Abbrechen") }
+            }
+        )
+    }
+
+    if (zeigeArchivDialog) {
+        AlertDialog(
+            onDismissRequest = { zeigeArchivDialog = false },
+            title = { Text("Zimmer inaktiv setzen?") },
+            text = {
+                Text(
+                    "Das Zimmer ${current.id} wird aus der normalen Übersicht ausgeblendet. " +
+                        "Historie, Prüfberichte und Fotos bleiben erhalten; das Zimmer kann " +
+                        "jederzeit reaktiviert werden."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setInaktiv(roomId, true)
+                    zeigeArchivDialog = false
+                }) { Text("Inaktiv setzen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { zeigeArchivDialog = false }) { Text("Abbrechen") }
+            }
+        )
     }
 }
 

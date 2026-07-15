@@ -142,11 +142,17 @@ object XlsxWriter {
         )
         inspections.forEachIndexed { i, insp ->
             val r = i + 2
-            val remarks = listOf(
+            val extra = insp.extraPunkteListe()
+                .filter { it.second != null || it.third.isNotBlank() }
+                .map { (t, e, b) ->
+                    val ergebnis = when (e) { true -> "i.O."; false -> "n.i.O."; null -> "–" }
+                    "$t: $ergebnis" + if (b.isNotBlank()) " ($b)" else ""
+                }
+            val remarks = (listOf(
                 insp.bemerkungEmpfang, insp.bemerkungSeriennummer, insp.bemerkungFreenetId,
                 insp.bemerkungDvd, insp.bemerkungFernbedienung, insp.bemerkungHalterung,
                 insp.bemerkungen
-            ).filter { it.isNotBlank() }.joinToString("; ")
+            ) + insp.arbeitenListe() + extra).filter { it.isNotBlank() }.joinToString("; ")
             append("<row r=\"$r\">")
             append(dateCell(0, r, insp.datum))
             append(textCell(1, r, insp.roomId))

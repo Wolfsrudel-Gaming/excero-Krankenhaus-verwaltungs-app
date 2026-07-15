@@ -47,19 +47,41 @@ object PruefberichtPdf {
         else Typeface.SANS_SERIF
     }
 
-    fun write(reports: List<Report>, out: OutputStream) {
+    fun write(reports: List<Report>, out: OutputStream, logo: Bitmap? = null) {
         val doc = PdfDocument()
         try {
             val ctx = PageContext(doc)
             reports.forEach { report ->
                 ctx.newPage()
-                drawReport(ctx, report)
+                drawReport(ctx, report, logo)
             }
             ctx.finishPage()
             doc.writeTo(out)
         } finally {
             doc.close()
         }
+    }
+
+    /** Logo rechts im Kopfbalken auf weißer Fläche. */
+    private fun drawLogo(canvas: Canvas, logo: Bitmap?, headerH: Float) {
+        if (logo == null || logo.width <= 0 || logo.height <= 0) return
+        val boxH = headerH - 20f
+        val maxW = 130f
+        val scale = minOf(maxW / logo.width, (boxH - 12f) / logo.height)
+        val w = logo.width * scale
+        val h = logo.height * scale
+        val boxW = w + 16f
+        val right = PAGE_W - 14f
+        val top = (headerH - boxH) / 2
+        canvas.drawRoundRect(
+            RectF(right - boxW, top, right, top + boxH), 6f, 6f,
+            Paint().apply { isAntiAlias = true; color = Color.WHITE }
+        )
+        canvas.drawBitmap(
+            logo, null,
+            RectF(right - boxW + 8f, top + (boxH - h) / 2, right - boxW + 8f + w, top + (boxH + h) / 2),
+            Paint(Paint.FILTER_BITMAP_FLAG)
+        )
     }
 
     /** Verwaltet Seiten, Seitenumbrüche und Fußzeilen. */
@@ -140,7 +162,7 @@ object PruefberichtPdf {
         canvas.drawText(text, x + (w - tw) / 2, yTop + h - 4.5f, chip)
     }
 
-    private fun drawReport(ctx: PageContext, report: Report) {
+    private fun drawReport(ctx: PageContext, report: Report, logo: Bitmap?) {
         val canvas = ctx.canvas!!
         val room = report.room
         val insp = report.inspection
@@ -153,6 +175,7 @@ object PruefberichtPdf {
             "Kinderkrankenhaus Köln · Prüfbericht ${room.id} · ${Dates.isoToGerman(insp.datum)}",
             MARGIN, 58f, paint(10f, Color.WHITE)
         )
+        drawLogo(canvas, logo, 78f)
         ctx.y = 100f
 
         // Info-Block (zwei Spalten)
@@ -187,7 +210,7 @@ object PruefberichtPdf {
         val remarkX = chipX + 58f
         val remarkW = MARGIN + CONTENT_W - remarkX
 
-        insp.punkte().forEachIndexed { index, (titel, ergebnis, bemerkung) ->
+        (insp.punkte() + insp.extraPunkteListe()).forEachIndexed { index, (titel, ergebnis, bemerkung) ->
             val extra = when {
                 titel.startsWith("Gültigkeit") && room.gueltigBis.isNotBlank() ->
                     "gültig bis: ${Dates.isoToGerman(room.gueltigBis)}"

@@ -32,27 +32,29 @@ class Repository(private val db: AppDatabase) {
 
     /**
      * "Kein Zutritt" für ein Zimmer setzen oder aufheben. Beim Setzen wird ein
-     * Vermerk mit aktuellem Datum in den Lebenslauf geschrieben ("... konnte
-     * nicht betreten werden"); beim Aufheben wird der heutige Vermerk wieder
-     * entfernt.
+     * Vermerk mit aktuellem Datum (und optionalem Grund) in den Lebenslauf
+     * geschrieben; beim Aufheben wird der heutige Vermerk wieder entfernt.
      */
-    suspend fun setKeinZutritt(roomId: String, gesperrt: Boolean) {
-        val vermerk = "${Dates.todayGerman()}: Zimmer konnte nicht betreten werden"
+    suspend fun setKeinZutritt(roomId: String, gesperrt: Boolean, grund: String = "") {
+        val basis = "${Dates.todayGerman()}: Zimmer konnte nicht betreten werden"
+        val vermerk = if (grund.isBlank()) basis else "$basis ($grund)"
+        fun istHeutigerVermerk(zeile: String) = zeile.trim().startsWith(basis)
         db.withTransaction {
             val room = db.tvRoomDao().getById(roomId)
             if (gesperrt) {
-                db.roomSperreDao().upsert(RoomSperre(roomId, Dates.todayIso()))
-                if (room != null && !room.lebenslauf.lines().any { it.trim() == vermerk }) {
-                    val neu = if (room.lebenslauf.isBlank()) vermerk
-                    else room.lebenslauf.trimEnd() + "\n" + vermerk
+                db.roomSperreDao().upsert(RoomSperre(roomId, Dates.todayIso(), grund.trim()))
+                if (room != null) {
+                    // Bereits vorhandenen heutigen Vermerk ersetzen (z. B. Grund nachgetragen)
+                    val zeilen = room.lebenslauf.lines().filterNot { istHeutigerVermerk(it) }
+                    val neu = (zeilen.filter { it.isNotBlank() } + vermerk).joinToString("\n")
                     db.tvRoomDao().update(room.copy(lebenslauf = neu))
                 }
-                logAction(roomId, "Kein Zutritt vermerkt")
+                logAction(roomId, "Kein Zutritt vermerkt" + if (grund.isBlank()) "" else " ($grund)")
             } else {
                 db.roomSperreDao().delete(roomId)
-                if (room != null && room.lebenslauf.lines().any { it.trim() == vermerk }) {
+                if (room != null && room.lebenslauf.lines().any { istHeutigerVermerk(it) }) {
                     val neu = room.lebenslauf.lines()
-                        .filterNot { it.trim() == vermerk }
+                        .filterNot { istHeutigerVermerk(it) }
                         .joinToString("\n")
                     db.tvRoomDao().update(room.copy(lebenslauf = neu))
                 }
@@ -93,6 +95,75 @@ class Repository(private val db: AppDatabase) {
 
     suspend fun importRooms(rooms: List<TvRoom>) = db.tvRoomDao().upsertAll(rooms)
 
+    /** Neues Zimmer (und damit ggf. eine neue Station) anlegen. ID = Station_Zimmer. */
+    suspend fun createRoom(room: TvRoom) {
+        require(db.tvRoomDao().getById(room.id) == null) {
+            "Zimmer ${room.id} existiert bereits"
+        }
+        db.withTransaction {
+            db.tvRoomDao().insert(
+                room.copy(
+                    lebenslauf = "${Dates.todayGerman()}: Zimmer in der App angelegt"
+                )
+            )
+            logAction(room.id, "Zimmer angelegt")
+        }
+    }
+
+    /** Zimmer inaktiv setzen (archivieren) oder reaktivieren – Historie bleibt erhalten. */
+    suspend fun setInaktiv(roomId: String, inaktiv: Boolean) {
+        db.withTransaction {
+            val room = db.tvRoomDao().getById(roomId) ?: return@withTransaction
+            val vermerk = if (inaktiv) "${Dates.todayGerman()}: Zimmer inaktiv gesetzt (TV abgebaut/aufgelöst)"
+            else "${Dates.todayGerman()}: Zimmer reaktiviert"
+            val neu = if (room.lebenslauf.isBlank()) vermerk
+            else room.lebenslauf.trimEnd() + "\n" + vermerk
+            db.tvRoomDao().update(room.copy(inaktiv = inaktiv, lebenslauf = neu))
+            logAction(roomId, if (inaktiv) "Zimmer inaktiv gesetzt" else "Zimmer reaktiviert")
+        }
+    }
+
+    // ----- Materialkatalog & Bestand -----
+
+    val materialien: Flow<List<Material>> get() = db.materialDao().observeAll()
+    val aktiveMaterialien: Flow<List<Material>> get() = db.materialDao().observeAktive()
+
+    suspend fun addMaterial(name: String, bestandAktiv: Boolean) {
+        val maxSort = db.materialDao().getAll().maxOfOrNull { it.sortIndex } ?: 0
+        db.materialDao().insert(
+            Material(name = name.trim(), bestandAktiv = bestandAktiv, sortIndex = maxSort + 1)
+        )
+    }
+
+    suspend fun updateMaterial(material: Material) = db.materialDao().update(material)
+
+    // ----- Eigene Prüfpunkte -----
+
+    val customPruefpunkte: Flow<List<CustomPruefpunkt>> get() = db.customPruefpunktDao().observeAll()
+    val aktiveCustomPruefpunkte: Flow<List<CustomPruefpunkt>> get() = db.customPruefpunktDao().observeAktive()
+
+    suspend fun addPruefpunkt(titel: String) {
+        db.customPruefpunktDao().insert(CustomPruefpunkt(titel = titel.trim()))
+    }
+
+    suspend fun updatePruefpunkt(punkt: CustomPruefpunkt) = db.customPruefpunktDao().update(punkt)
+
+    // ----- Stundenzettel -----
+
+    suspend fun getStundenzettel(station: String, zeitraumStart: String): StundenzettelEntity? =
+        db.stundenzettelDao().getFor(station, zeitraumStart)
+
+    suspend fun saveStundenzettel(zettel: StundenzettelEntity): StundenzettelEntity {
+        val id = db.stundenzettelDao().upsert(zettel)
+        return if (zettel.id == 0L) zettel.copy(id = id) else zettel
+    }
+
+    /** Fortlaufende Auftragsnummer, z. B. "A-2026-0007". */
+    suspend fun naechsteAuftragsnummer(): String {
+        val nr = db.stundenzettelDao().count() + 1
+        return "A-%s-%04d".format(java.time.LocalDate.now().year, nr)
+    }
+
     /**
      * Speichert einen ausgefüllten Prüfbogen atomar und schreibt alle Ergebnisse in
      * die Stammdaten zurück: Lebenslauf-Eintrag, letzte Prüfung, korrigierte Werte
@@ -124,12 +195,25 @@ class Repository(private val db: AppDatabase) {
                     tvTyp = neuerTvTyp?.takeIf { it.isNotBlank() } ?: room.tvTyp
                 )
             )
+            // Lagerbestand: verbrauchtes Material automatisch abziehen
+            inspection.arbeitenListe().forEach { db.materialDao().verbrauche(it) }
             logAction(inspection.roomId, "Prüfbogen gespeichert")
+        }
+    }
+
+    /** Materialkatalog beim ersten Start (bzw. nach dem Update) vorbelegen. */
+    suspend fun seedMaterialienIfEmpty() {
+        if (db.materialDao().count() > 0) return
+        Arbeiten.SEED.forEachIndexed { index, (name, mitBestand) ->
+            db.materialDao().insert(
+                Material(name = name, bestandAktiv = mitBestand, sortIndex = index)
+            )
         }
     }
 
     /** Lädt die mitgelieferten Stammdaten (Stand der KKH-Übersicht), falls die DB leer ist. */
     suspend fun seedIfEmpty(context: Context) {
+        seedMaterialienIfEmpty()
         if (db.tvRoomDao().count() > 0) return
         val json = context.assets.open("seed.json").bufferedReader().use { it.readText() }
         val arr = JSONArray(json)

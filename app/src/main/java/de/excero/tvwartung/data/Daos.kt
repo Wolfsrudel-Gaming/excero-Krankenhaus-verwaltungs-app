@@ -27,6 +27,9 @@ interface TvRoomDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(rooms: List<TvRoom>)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(room: TvRoom)
+
     @Update
     suspend fun update(room: TvRoom)
 }
@@ -80,4 +83,55 @@ interface ActivityLogDao {
 
     @Query("SELECT * FROM activity_log ORDER BY zeitpunkt DESC LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<ActivityLog>>
+}
+
+@Dao
+interface MaterialDao {
+    @Query("SELECT * FROM materialien ORDER BY sortIndex, name")
+    fun observeAll(): Flow<List<Material>>
+
+    @Query("SELECT * FROM materialien WHERE aktiv = 1 ORDER BY sortIndex, name")
+    fun observeAktive(): Flow<List<Material>>
+
+    @Query("SELECT * FROM materialien")
+    suspend fun getAll(): List<Material>
+
+    @Query("SELECT COUNT(*) FROM materialien")
+    suspend fun count(): Int
+
+    @Insert
+    suspend fun insert(material: Material): Long
+
+    @Update
+    suspend fun update(material: Material)
+
+    @Query("UPDATE materialien SET bestand = bestand - 1 WHERE name = :name AND bestandAktiv = 1")
+    suspend fun verbrauche(name: String)
+}
+
+@Dao
+interface CustomPruefpunktDao {
+    @Query("SELECT * FROM custom_pruefpunkte ORDER BY sortIndex, titel")
+    fun observeAll(): Flow<List<CustomPruefpunkt>>
+
+    @Query("SELECT * FROM custom_pruefpunkte WHERE aktiv = 1 ORDER BY sortIndex, titel")
+    fun observeAktive(): Flow<List<CustomPruefpunkt>>
+
+    @Insert
+    suspend fun insert(punkt: CustomPruefpunkt): Long
+
+    @Update
+    suspend fun update(punkt: CustomPruefpunkt)
+}
+
+@Dao
+interface StundenzettelDao {
+    @Query("SELECT * FROM stundenzettel WHERE station = :station AND zeitraumStart = :zeitraumStart LIMIT 1")
+    suspend fun getFor(station: String, zeitraumStart: String): StundenzettelEntity?
+
+    @Query("SELECT COUNT(*) FROM stundenzettel")
+    suspend fun count(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(zettel: StundenzettelEntity): Long
 }

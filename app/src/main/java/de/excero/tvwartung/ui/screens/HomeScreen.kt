@@ -3,6 +3,7 @@ package de.excero.tvwartung.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,9 +19,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -31,6 +34,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,7 +65,9 @@ fun HomeScreen(
     onRoomClick: (String) -> Unit,
     onExportClick: () -> Unit,
     onSettingsClick: () -> Unit,
-    onStundenzettel: (String) -> Unit
+    onStundenzettel: (String) -> Unit,
+    onVerwaltung: () -> Unit,
+    onNeuesZimmer: () -> Unit
 ) {
     val rooms by viewModel.rooms.collectAsState()
     val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
@@ -73,9 +79,11 @@ fun HomeScreen(
     val checkedInPeriod = remember(inspectionsInPeriod) {
         inspectionsInPeriod.map { it.roomId }.toSet()
     }
-    val filtered = remember(rooms, query) {
-        if (query.isBlank()) rooms
-        else rooms.filter {
+    val aktiveRooms = remember(rooms) { rooms.filter { !it.inaktiv } }
+    val inaktiveRooms = remember(rooms) { rooms.filter { it.inaktiv } }
+    val filtered = remember(aktiveRooms, query) {
+        if (query.isBlank()) aktiveRooms
+        else aktiveRooms.filter {
             it.id.contains(query, true) ||
                 it.station.contains(query, true) ||
                 it.zimmer.contains(query, true) ||
@@ -86,19 +94,24 @@ fun HomeScreen(
     val grouped = remember(filtered) {
         filtered.groupBy { it.station }.toSortedMap(stationComparator)
     }
+    var zeigeInaktive by remember { mutableStateOf(false) }
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = {
                 Column {
                     Text("TV-Wartung KKH", fontWeight = FontWeight.Bold)
                     Text(
-                        "${Dates.todayGerman()} · ${checkedInPeriod.size} von ${rooms.size} geprüft (${settings.beschreibung()})",
+                        "${Dates.todayGerman()} · ${checkedInPeriod.size} von ${aktiveRooms.size} geprüft (${settings.beschreibung()})",
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
             },
             actions = {
+                IconButton(onClick = onVerwaltung) {
+                    Icon(Icons.Default.Inventory2, contentDescription = "Material & Prüfpunkte")
+                }
                 IconButton(onClick = onExportClick) {
                     Icon(Icons.Default.Upload, contentDescription = "Export")
                 }
@@ -179,17 +192,67 @@ fun HomeScreen(
                     )
                 }
             }
-            item { Spacer(Modifier.height(24.dp)) }
+            if (inaktiveRooms.isNotEmpty()) {
+                item(key = "inaktiv_toggle") {
+                    TextButton(
+                        onClick = { zeigeInaktive = !zeigeInaktive },
+                        modifier = Modifier.padding(top = 12.dp)
+                    ) {
+                        Text(
+                            if (zeigeInaktive) "Inaktive Zimmer ausblenden"
+                            else "Inaktive Zimmer anzeigen (${inaktiveRooms.size})"
+                        )
+                    }
+                }
+                if (zeigeInaktive) {
+                    items(inaktiveRooms.size, key = { "inaktiv_${inaktiveRooms[it].id}" }) { index ->
+                        val room = inaktiveRooms[index]
+                        Card(
+                            onClick = { onRoomClick(room.id) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "${room.station} · Zimmer ${room.zimmer}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                StatusBadge("INAKTIV", MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(88.dp)) }
         }
     }
 
+    FloatingActionButton(
+        onClick = onNeuesZimmer,
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(20.dp)
+    ) {
+        Icon(Icons.Default.Add, contentDescription = "Neues Zimmer anlegen")
+    }
+    }
+
     sperrDialogStation?.let { station ->
-        val stationRooms = rooms.filter { it.station == station }
+        val stationRooms = rooms.filter { it.station == station && !it.inaktiv }
         SperrDialog(
             station = station,
             zimmer = stationRooms.map { it.id to it.zimmer },
             gesperrt = gesperrt,
-            onToggle = { roomId, blocked -> viewModel.setKeinZutritt(roomId, blocked) },
+            onToggle = { roomId, blocked, grund -> viewModel.setKeinZutritt(roomId, blocked, grund) },
             onDismiss = { sperrDialogStation = null }
         )
     }
@@ -204,9 +267,10 @@ private fun SperrDialog(
     station: String,
     zimmer: List<Pair<String, String>>,   // (roomId, Zimmerbezeichnung)
     gesperrt: Set<String>,
-    onToggle: (String, Boolean) -> Unit,
+    onToggle: (String, Boolean, String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var grund by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Station $station – Zutritt") },
@@ -214,9 +278,18 @@ private fun SperrDialog(
             Column {
                 Text(
                     "Zimmer ankreuzen, die laut Station nicht betreten werden dürfen. " +
-                        "Die Markierung gilt für den aktuellen Prüfzeitraum.",
+                        "Die Markierung gilt für den aktuellen Prüfzeitraum und wird mit " +
+                        "Datum im Lebenslauf vermerkt.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = grund,
+                    onValueChange = { grund = it },
+                    label = { Text("Grund (optional, z. B. Isolation)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
                 Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -228,7 +301,7 @@ private fun SperrDialog(
                         ) {
                             Checkbox(
                                 checked = blocked,
-                                onCheckedChange = { onToggle(roomId, it) }
+                                onCheckedChange = { onToggle(roomId, it, grund) }
                             )
                             Text(
                                 "Zimmer $bezeichnung",

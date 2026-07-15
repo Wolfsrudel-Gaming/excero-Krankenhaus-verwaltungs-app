@@ -23,8 +23,10 @@ import de.excero.tvwartung.ui.screens.ExportScreen
 import de.excero.tvwartung.ui.screens.HomeScreen
 import de.excero.tvwartung.ui.screens.PruefbogenScreen
 import de.excero.tvwartung.ui.screens.RoomDetailScreen
+import de.excero.tvwartung.ui.screens.RoomEditScreen
 import de.excero.tvwartung.ui.screens.SettingsScreen
 import de.excero.tvwartung.ui.screens.StundenzettelScreen
+import de.excero.tvwartung.ui.screens.VerwaltungScreen
 import de.excero.tvwartung.ui.theme.KKHTheme
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -33,6 +35,8 @@ object Routes {
     const val HOME = "home"
     const val EXPORT = "export"
     const val SETTINGS = "settings"
+    const val VERWALTUNG = "verwaltung"
+    const val ZIMMER_NEU = "zimmer_neu"
     fun room(id: String) = "room/${URLEncoder.encode(id, "UTF-8")}"
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
     fun bericht(id: Long) = "bericht/$id"
@@ -71,7 +75,9 @@ class MainActivity : ComponentActivity() {
                                 onRoomClick = { navController.navigate(Routes.room(it)) },
                                 onExportClick = { navController.navigate(Routes.EXPORT) },
                                 onSettingsClick = { navController.navigate(Routes.SETTINGS) },
-                                onStundenzettel = { navController.navigate(Routes.stundenzettel(it)) }
+                                onStundenzettel = { navController.navigate(Routes.stundenzettel(it)) },
+                                onVerwaltung = { navController.navigate(Routes.VERWALTUNG) },
+                                onNeuesZimmer = { navController.navigate(Routes.ZIMMER_NEU) }
                             )
                         }
                         composable("room/{roomId}") { entry ->
@@ -125,6 +131,22 @@ class MainActivity : ComponentActivity() {
                             SettingsScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Routes.VERWALTUNG) {
+                            VerwaltungScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Routes.ZIMMER_NEU) {
+                            RoomEditScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onCreated = { roomId ->
+                                    navController.popBackStack()
+                                    navController.navigate(Routes.room(roomId))
+                                }
                             )
                         }
                     }

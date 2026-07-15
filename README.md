@@ -35,6 +35,26 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.6
+
+- **Firmenlogo (EXCERO GmbH)** im Kopf von Prüfbericht- und Stundenzettel-PDF.
+- **Zimmer & Stationen anlegen:** Plus-Button in der Übersicht; ein neuer
+  Stationsname legt die Station automatisch mit an. Zimmer lassen sich als
+  **inaktiv** archivieren (Historie bleibt, ausblendbar/reaktivierbar).
+- **Materialkatalog & Lagerbestand:** Neuer Verwaltungsbereich (Koffer-Symbol);
+  Arbeiten/Material frei anleg-, umbenenn- und ausblendbar, je Eintrag optional
+  Bestandsführung – der Bestand wird beim Speichern eines Prüfbogens
+  automatisch reduziert und im Prüfbogen-Chip angezeigt.
+- **Eigene Prüfpunkte:** Zusätzliche Prüfpunkte erscheinen im Prüfbogen unter
+  den Standardpunkten und wandern in Bericht, PDF und Excel-Bemerkungen.
+- **Stundenzettel gespeichert & Auftragsnummer:** Zeiten/Techniker werden je
+  Station und Zeitraum gespeichert und sind später änderbar ("Nur speichern");
+  jede Anfahrt erhält eine fortlaufende Auftragsnummer (z. B. A-2026-0001),
+  die auf dem PDF erscheint.
+- **"Kein Zutritt" mit Grund:** Optionales Grund-Feld (z. B. Isolation),
+  erscheint im Lebenslauf-Vermerk.
+- Durchgeführte Arbeiten stehen jetzt auch im Excel-Blatt "Prüfprotokolle".
+
 ### Neu in Version 1.5
 
 - **Fotos direkt im Prüfbogen und Prüfbericht:** Der Fotobereich (Kamera

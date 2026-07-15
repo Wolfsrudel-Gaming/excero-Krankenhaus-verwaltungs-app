@@ -13,6 +13,9 @@ import de.excero.tvwartung.excel.XlsxReader
 import de.excero.tvwartung.excel.XlsxWriter
 import de.excero.tvwartung.files.ZipExporter
 import de.excero.tvwartung.data.Arbeiten
+import de.excero.tvwartung.data.CustomPruefpunkt
+import de.excero.tvwartung.data.Material
+import de.excero.tvwartung.data.StundenzettelEntity
 import de.excero.tvwartung.pdf.PruefberichtPdf
 import de.excero.tvwartung.pdf.StundenzettelPdf
 import de.excero.tvwartung.util.Dates
@@ -54,6 +57,59 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val recentActivity: StateFlow<List<ActivityLog>> = repository.recentActivity()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val materialien: StateFlow<List<Material>> = repository.materialien
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val aktiveMaterialien: StateFlow<List<Material>> = repository.aktiveMaterialien
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val customPruefpunkte: StateFlow<List<CustomPruefpunkt>> = repository.customPruefpunkte
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val aktiveCustomPruefpunkte: StateFlow<List<CustomPruefpunkt>> = repository.aktiveCustomPruefpunkte
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Firmenlogo für die PDF-Köpfe (aus den Assets, einmalig geladen). */
+    val logo: android.graphics.Bitmap? by lazy {
+        runCatching {
+            app.assets.open("logo.png").use { android.graphics.BitmapFactory.decodeStream(it) }
+        }.getOrNull()
+    }
+
+    fun addMaterial(name: String, bestandAktiv: Boolean) {
+        if (name.isBlank()) return
+        viewModelScope.launch { repository.addMaterial(name, bestandAktiv) }
+    }
+
+    fun updateMaterial(material: Material) {
+        viewModelScope.launch { repository.updateMaterial(material) }
+    }
+
+    fun addPruefpunkt(titel: String) {
+        if (titel.isBlank()) return
+        viewModelScope.launch { repository.addPruefpunkt(titel) }
+    }
+
+    fun updatePruefpunkt(punkt: CustomPruefpunkt) {
+        viewModelScope.launch { repository.updatePruefpunkt(punkt) }
+    }
+
+    /** Neues Zimmer (ggf. mit neuer Station) anlegen; onDone erhält die Zimmer-ID. */
+    fun createRoom(room: de.excero.tvwartung.data.TvRoom, onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            runCatching { repository.createRoom(room) }
+                .onSuccess {
+                    _message.value = "Zimmer ${room.id} angelegt"
+                    onDone(room.id)
+                }
+                .onFailure { _message.value = "Anlegen fehlgeschlagen: ${it.message}" }
+        }
+    }
+
+    fun setInaktiv(roomId: String, inaktiv: Boolean) {
+        viewModelScope.launch { repository.setInaktiv(roomId, inaktiv) }
+    }
+
     /**
      * Zimmer, die für die aktuelle Anfahrt als "kein Zutritt" gemeldet sind.
      * Ältere Vermerke (vor Beginn des Prüfzeitraums) laufen automatisch ab.
@@ -64,8 +120,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             sperren.filter { it.gesperrtAm >= start }.map { it.roomId }.toSet()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
-    fun setKeinZutritt(roomId: String, gesperrt: Boolean) {
-        viewModelScope.launch { repository.setKeinZutritt(roomId, gesperrt) }
+    fun setKeinZutritt(roomId: String, gesperrt: Boolean, grund: String = "") {
+        viewModelScope.launch { repository.setKeinZutritt(roomId, gesperrt, grund) }
     }
 
     private val _message = MutableStateFlow<String?>(null)
@@ -167,7 +223,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     ?: error("Prüfbericht nicht gefunden")
                 val report = buildReport(inspection) ?: error("Zimmer nicht gefunden")
                 app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
-                    PruefberichtPdf.write(listOf(report), out)
+                    PruefberichtPdf.write(listOf(report), out, logo)
                 } ?: error("Datei konnte nicht geöffnet werden")
             }.onSuccess {
                 _message.value = "PDF exportiert"
@@ -185,7 +241,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 require(inspections.isNotEmpty()) { "Keine Prüfberichte an diesem Tag" }
                 val reports = inspections.mapNotNull { buildReport(it) }
                 app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
-                    PruefberichtPdf.write(reports, out)
+                    PruefberichtPdf.write(reports, out, logo)
                 } ?: error("Datei konnte nicht geöffnet werden")
                 reports.size
             }.onSuccess {
@@ -196,15 +252,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Eingaben für den Stundenzettel (Zeiten, Techniker). */
-    data class StundenEingabe(
-        val datum: String = "",
-        val arbeitszeit: String = "",
-        val arbeitsstunden: String = "",
-        val anfahrt: String = "",
-        val techniker: String = ""
-    )
-
     /** Basisdaten des Stundenzettels einer Station (Vorschau + Export). */
     data class StundenzettelBasis(
         val station: String,
@@ -212,6 +259,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val leistungen: List<StundenzettelPdf.Leistung>,
         val material: List<Pair<String, Int>>
     )
+
+    /** Gespeicherten Stundenzettel für Station + aktuellen Zeitraum laden oder neu anlegen. */
+    suspend fun ladeStundenzettel(station: String): StundenzettelEntity =
+        withContext(Dispatchers.IO) {
+            val start = settings.value.zeitraumStartIso()
+            repository.getStundenzettel(station, start) ?: StundenzettelEntity(
+                station = station,
+                zeitraumStart = start,
+                auftragsnummer = repository.naechsteAuftragsnummer(),
+                datum = Dates.todayGerman()
+            )
+        }
+
+    /** Stundenzettel-Eingaben speichern (Zeiten lassen sich später wieder ändern). */
+    fun speichereStundenzettel(zettel: StundenzettelEntity, quiet: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.saveStundenzettel(zettel)
+            if (!quiet) _message.value = "Stundenzettel gespeichert"
+        }
+    }
 
     private suspend fun stundenzettelBasis(station: String): StundenzettelBasis {
         val start = settings.value.zeitraumStartIso()
@@ -248,34 +315,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Stundenzettel/Leistungsnachweis für eine Station als PDF – deckt den
-     * aktuellen Prüfzeitraum ab, ergänzt um Zeiten und (optional) digitale
-     * Unterschriften.
+     * aktuellen Prüfzeitraum ab, ergänzt um Auftragsnummer, Zeiten und
+     * (optional) digitale Unterschriften. Die Eingaben werden dabei auch
+     * gespeichert, damit Zeiten später anpassbar bleiben.
      */
     fun exportStundenzettel(
         uri: Uri,
-        station: String,
-        eingabe: StundenEingabe,
+        eingabe: StundenzettelEntity,
+        arbeitsstunden: String,
         signaturStation: android.graphics.Bitmap?,
         signaturTechniker: android.graphics.Bitmap?
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                val basis = stundenzettelBasis(station)
+                repository.saveStundenzettel(eingabe)
+                val basis = stundenzettelBasis(eingabe.station)
                 require(basis.leistungen.isNotEmpty()) {
-                    "Für Station $station wurden im aktuellen Zeitraum keine Prüfungen erfasst"
+                    "Für Station ${eingabe.station} wurden im aktuellen Zeitraum keine Prüfungen erfasst"
                 }
+                val arbeitszeit = if (eingabe.von.isNotBlank() || eingabe.bis.isNotBlank())
+                    "${eingabe.von} – ${eingabe.bis}" else ""
                 val zettel = StundenzettelPdf.Stundenzettel(
                     station = basis.station,
                     zeitraum = basis.zeitraum,
                     leistungen = basis.leistungen,
                     material = basis.material,
+                    auftragsnummer = eingabe.auftragsnummer,
                     datum = eingabe.datum,
-                    arbeitszeit = eingabe.arbeitszeit,
-                    arbeitsstunden = eingabe.arbeitsstunden,
-                    anfahrt = eingabe.anfahrt,
+                    arbeitszeit = arbeitszeit,
+                    arbeitsstunden = arbeitsstunden,
+                    anfahrt = eingabe.anfahrt.trim().let { if (it.isBlank()) "" else "$it Std." },
                     techniker = eingabe.techniker,
                     signaturStation = signaturStation,
-                    signaturTechniker = signaturTechniker
+                    signaturTechniker = signaturTechniker,
+                    logo = logo
                 )
                 app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
                     StundenzettelPdf.write(zettel, out)
@@ -354,7 +427,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             runCatching {
                 photoStore.pdfFileFor(roomId, dateFolder).outputStream().use { out ->
-                    PruefberichtPdf.write(reports, out)
+                    PruefberichtPdf.write(reports, out, logo)
                 }
                 count++
             }

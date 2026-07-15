@@ -74,6 +74,8 @@ fun PruefbogenScreen(
 ) {
     val context = LocalContext.current
     val room by viewModel.room(roomId).collectAsState(initial = null)
+    val materialKatalog by viewModel.aktiveMaterialien.collectAsState()
+    val customPunkte by viewModel.aktiveCustomPruefpunkte.collectAsState()
     val current = room ?: return
 
     val punkte = remember(current.id) {
@@ -111,6 +113,11 @@ fun PruefbogenScreen(
     var eintragManuell by remember(current.id) { mutableStateOf<String?>(null) }
     val ausgewaehlteArbeiten = remember(current.id) { mutableStateListOf<String>() }
     var arbeitSonstige by remember(current.id) { mutableStateOf("") }
+
+    // Eigene Prüfpunkte aus der Verwaltung (nach den Standardpunkten)
+    val extraStates = remember(current.id, customPunkte) {
+        customPunkte.map { PruefpunktState(it.titel, kurzbefundNiO = "") }
+    }
 
     val freenetVerlaengert = punkte[7].ergebnis == true
     val tvTypGeaendert = tvTyp.trim() != current.tvTyp.trim() && tvTyp.isNotBlank()
@@ -284,6 +291,11 @@ fun PruefbogenScreen(
                 }
             }
 
+            // Eigene Prüfpunkte (aus Material & Prüfpunkte-Verwaltung)
+            extraStates.forEach { punkt ->
+                PruefpunktCard(punkt) {}
+            }
+
             // Durchgeführte Arbeiten / verbautes Material (für Stundenzettel & Materialnachweis)
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -298,15 +310,20 @@ fun PruefbogenScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Arbeiten.KATALOG.forEach { arbeit ->
-                            val selected = arbeit in ausgewaehlteArbeiten
+                        materialKatalog.forEach { material ->
+                            val selected = material.name in ausgewaehlteArbeiten
                             FilterChip(
                                 selected = selected,
                                 onClick = {
-                                    if (selected) ausgewaehlteArbeiten.remove(arbeit)
-                                    else ausgewaehlteArbeiten.add(arbeit)
+                                    if (selected) ausgewaehlteArbeiten.remove(material.name)
+                                    else ausgewaehlteArbeiten.add(material.name)
                                 },
-                                label = { Text(arbeit) },
+                                label = {
+                                    Text(
+                                        material.name + if (material.bestandAktiv)
+                                            "  (${material.bestand})" else ""
+                                    )
+                                },
                                 leadingIcon = if (selected) {
                                     { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
                                 } else null
@@ -401,7 +418,10 @@ fun PruefbogenScreen(
                         bemerkungFernbedienung = punkte[4].bemerkung.trim(),
                         bemerkungHalterung = punkte[5].bemerkung.trim(),
                         bemerkungen = bemerkungen.trim(),
-                        arbeiten = alleArbeiten.joinToString("\n")
+                        arbeiten = alleArbeiten.joinToString("\n"),
+                        extraPunkte = Inspection.extraPunkteJson(
+                            extraStates.map { Triple(it.titel, it.ergebnis, it.bemerkung.trim()) }
+                        )
                     )
 
                     viewModel.saveInspection(

@@ -30,6 +30,8 @@ object StundenzettelPdf {
         val zeitraum: String,       // z. B. "diese Woche (ab 13.07.2026)"
         val leistungen: List<Leistung>,
         val material: List<Pair<String, Int>>,   // (Bezeichnung, Anzahl)
+        val auftragsnummer: String = "",          // z. B. "A-2026-0007"
+        val logo: Bitmap? = null,                 // Firmenlogo für den Kopfbereich
         val datum: String = "",                   // Tag der Leistung (deutsch)
         val arbeitszeit: String = "",             // z. B. "08:00 – 11:30"
         val arbeitsstunden: String = "",          // z. B. "3,5 Std."
@@ -132,6 +134,7 @@ object StundenzettelPdf {
         canvas.drawRect(0f, 0f, PAGE_W.toFloat(), 70f, Paint().apply { color = TEAL })
         canvas.drawText("Stundenzettel / Leistungsnachweis", MARGIN, 34f, paint(19f, Color.WHITE, bold = true))
         canvas.drawText("TV-Wartung Freenet-Empfangsgeräte", MARGIN, 54f, paint(10f, Color.WHITE))
+        drawLogo(canvas, zettel.logo, 70f)
         ctx.y = 90f
 
         // Auftraggeber-/Station-Block
@@ -144,10 +147,35 @@ object StundenzettelPdf {
         canvas.drawText("Auftraggeber", MARGIN + 12f, ctx.y + 18f, label)
         canvas.drawText(AUFTRAGGEBER_1, MARGIN + 12f, ctx.y + 33f, value)
         canvas.drawText(AUFTRAGGEBER_2, MARGIN + 12f, ctx.y + 48f, paint(9.5f, Color.BLACK))
-        canvas.drawText("Station", col2 + 12f, ctx.y + 18f, label)
+        canvas.drawText(
+            "Station" + if (zettel.auftragsnummer.isNotBlank()) " · Auftrag ${zettel.auftragsnummer}" else "",
+            col2 + 12f, ctx.y + 18f, label
+        )
         canvas.drawText(zettel.station, col2 + 12f, ctx.y + 33f, value)
         canvas.drawText("Zeitraum: ${zettel.zeitraum}", col2 + 12f, ctx.y + 48f, paint(9.5f, Color.BLACK))
         ctx.y += boxH + 20f
+    }
+
+    /** Logo rechts im Kopfbalken auf weißer Fläche. */
+    private fun drawLogo(canvas: Canvas, logo: Bitmap?, headerH: Float) {
+        if (logo == null || logo.width <= 0 || logo.height <= 0) return
+        val boxH = headerH - 20f
+        val maxW = 130f
+        val scale = minOf(maxW / logo.width, (boxH - 12f) / logo.height)
+        val w = logo.width * scale
+        val h = logo.height * scale
+        val boxW = w + 16f
+        val right = PAGE_W - 14f
+        val top = (headerH - boxH) / 2
+        canvas.drawRoundRect(
+            RectF(right - boxW, top, right, top + boxH), 6f, 6f,
+            Paint().apply { isAntiAlias = true; color = Color.WHITE }
+        )
+        canvas.drawBitmap(
+            logo, null,
+            RectF(right - boxW + 8f, top + (boxH - h) / 2, right - boxW + 8f + w, top + (boxH + h) / 2),
+            Paint(Paint.FILTER_BITMAP_FLAG)
+        )
     }
 
     private fun drawZeiten(ctx: Ctx, zettel: Stundenzettel) {

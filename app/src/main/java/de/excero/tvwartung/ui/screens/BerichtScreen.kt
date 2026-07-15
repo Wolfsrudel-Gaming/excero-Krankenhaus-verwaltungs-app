@@ -112,7 +112,7 @@ fun BerichtScreen(
                         fontWeight = FontWeight.Bold
                     )
                     HorizontalDivider()
-                    current.punkte().forEach { (titel, ergebnis, bemerkung) ->
+                    (current.punkte() + current.extraPunkteListe()).forEach { (titel, ergebnis, bemerkung) ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(titel, style = MaterialTheme.typography.bodyMedium)

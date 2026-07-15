@@ -8,8 +8,11 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [TvRoom::class, Inspection::class, ActivityLog::class, RoomSperre::class],
-    version = 4,
+    entities = [
+        TvRoom::class, Inspection::class, ActivityLog::class, RoomSperre::class,
+        Material::class, CustomPruefpunkt::class, StundenzettelEntity::class
+    ],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -17,6 +20,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun inspectionDao(): InspectionDao
     abstract fun activityLogDao(): ActivityLogDao
     abstract fun roomSperreDao(): RoomSperreDao
+    abstract fun materialDao(): MaterialDao
+    abstract fun customPruefpunktDao(): CustomPruefpunktDao
+    abstract fun stundenzettelDao(): StundenzettelDao
 
     companion object {
         /** v1 → v2: internes Aktivitätsprotokoll; bestehende Daten bleiben unverändert. */
@@ -51,6 +57,46 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v4 → v5: inaktive Zimmer, eigene Prüfpunkte, Sperrgrund,
+         * Materialkatalog mit Bestand und gespeicherte Stundenzettel.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tv_rooms ADD COLUMN inaktiv INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE inspections ADD COLUMN extraPunkte TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE room_sperren ADD COLUMN grund TEXT NOT NULL DEFAULT ''")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `materialien` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`bestand` INTEGER NOT NULL, " +
+                        "`bestandAktiv` INTEGER NOT NULL, " +
+                        "`aktiv` INTEGER NOT NULL, " +
+                        "`sortIndex` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `custom_pruefpunkte` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`titel` TEXT NOT NULL, " +
+                        "`aktiv` INTEGER NOT NULL, " +
+                        "`sortIndex` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `stundenzettel` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`station` TEXT NOT NULL, " +
+                        "`zeitraumStart` TEXT NOT NULL, " +
+                        "`auftragsnummer` TEXT NOT NULL, " +
+                        "`datum` TEXT NOT NULL, " +
+                        "`von` TEXT NOT NULL, " +
+                        "`bis` TEXT NOT NULL, " +
+                        "`anfahrt` TEXT NOT NULL, " +
+                        "`techniker` TEXT NOT NULL)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -61,7 +107,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "tvwartung.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }
