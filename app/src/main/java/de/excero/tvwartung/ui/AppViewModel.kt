@@ -143,7 +143,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         syncLaeuft = true
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                de.excero.tvwartung.sync.SyncManager(repository, photoStore, signatureStore, app.settingsStore, s.serverUrl, s.apiKey).sync()
+                de.excero.tvwartung.sync.SyncManager(
+                    repository, photoStore, signatureStore, app.settingsStore,
+                    s.serverUrl, s.apiKey, stundenzettelPdfDir()
+                ).sync()
             }.onSuccess {
                 _message.value = it.meldung()
             }.onFailure {
@@ -271,6 +274,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 lebenslaufEintrag, neuesGueltigBis,
                 neueSeriennummer, neueFreenetId, neuerTvTyp
             )
+            withContext(Dispatchers.IO) {
+                aktualisiereBerichtPdfIntern(inspection.roomId, Dates.isoToFolder(inspection.datum))
+            }
             _message.value = "Prüfbogen für ${inspection.roomId} gespeichert"
             if (settings.value.autoSync) syncNow(leise = true)
         }
@@ -287,6 +293,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val imported = uris.count { photoStore.importFromGallery(roomId, it, dateFolder) != null }
             if (imported > 0) {
                 repository.logAction(roomId, "$imported Foto(s) aus Galerie hinzugefügt")
+                aktualisiereBerichtPdfIntern(roomId, dateFolder)
             }
             _message.value = when {
                 imported == 0 && uris.isNotEmpty() -> "Bilder konnten nicht übernommen werden"
@@ -310,7 +317,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loescheBericht(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
+            val insp = repository.getInspection(id)
             repository.setInspectionGeloescht(id, true)
+            insp?.let { aktualisiereBerichtPdfIntern(it.roomId, Dates.isoToFolder(it.datum)) }
             _message.value = "Bericht in den Papierkorb verschoben"
             if (settings.value.autoSync) syncNow(leise = true)
         }
@@ -319,6 +328,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun stelleBerichtWieder(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.setInspectionGeloescht(id, false)
+            repository.getInspection(id)?.let {
+                aktualisiereBerichtPdfIntern(it.roomId, Dates.isoToFolder(it.datum))
+            }
             _message.value = "Bericht wiederhergestellt"
             if (settings.value.autoSync) syncNow(leise = true)
         }
@@ -327,6 +339,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Fotos, die zum Prüfdatum eines Berichts gehören. */
     fun photosForInspection(inspection: Inspection) =
         photoStore.photosFor(inspection.roomId, Dates.isoToFolder(inspection.datum))
+
+    /** Ordner für exportierte Stundenzettel-PDFs (wird mit zum Server hochgeladen). */
+    private fun stundenzettelPdfDir(): java.io.File =
+        java.io.File(app.filesDir, "stundenzettel_pdfs").apply { mkdirs() }
+
+    /**
+     * Prüfbericht-PDF des Zimmers/Tages neu erzeugen und in dessen Fotoordner
+     * legen – so kommt es beim nächsten Sync automatisch auf den Server
+     * (und später mit in die ZIP für den HiDrive).
+     */
+    private suspend fun aktualisiereBerichtPdfIntern(roomId: String, dateFolder: String) {
+        runCatching {
+            val room = repository.getRoom(roomId) ?: return
+            val inspektionen = repository.allInspections().filter {
+                it.roomId == roomId && !it.geloescht && Dates.isoToFolder(it.datum) == dateFolder
+            }
+            val pdf = photoStore.pdfFileFor(roomId, dateFolder)
+            if (inspektionen.isEmpty()) {
+                pdf.delete()
+                return
+            }
+            val reports = inspektionen.map {
+                PruefberichtPdf.Report(room, it, photoStore.photosFor(roomId, dateFolder))
+            }
+            pdf.outputStream().use { out -> PruefberichtPdf.write(reports, out, logo) }
+        }
+    }
+
+    /** Wie [aktualisiereBerichtPdfIntern], aus der UI aufrufbar (z. B. nach neuen Fotos). */
+    fun aktualisiereBerichtPdf(roomId: String, dateFolder: String) {
+        viewModelScope.launch(Dispatchers.IO) { aktualisiereBerichtPdfIntern(roomId, dateFolder) }
+    }
 
     private suspend fun buildReport(inspection: Inspection): PruefberichtPdf.Report? {
         val room = repository.getRoom(inspection.roomId) ?: return null
@@ -550,9 +594,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
                     StundenzettelPdf.write(zettel, out)
                 } ?: error("Datei konnte nicht geöffnet werden")
+                // Kopie für den Server ablegen (Sync lädt sie unter _stundenzettel/ hoch)
+                val station = eingabe.station.replace(Regex("[^A-Za-z0-9äöüÄÖÜß_-]"), "_")
+                java.io.File(
+                    stundenzettelPdfDir(),
+                    "Stundenzettel_${station}_${eingabe.zeitraumStart}.pdf"
+                ).outputStream().use { out -> StundenzettelPdf.write(zettel, out) }
                 basis.leistungen.size
             }.onSuccess {
                 _message.value = "Stundenzettel erstellt ($it Zimmer)"
+                if (settings.value.autoSync) syncNow(leise = true)
             }.onFailure {
                 _message.value = "Stundenzettel fehlgeschlagen: ${it.message}"
             }
@@ -659,6 +710,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.testdatenBereinigen()
             photoStore.rootDir().deleteRecursively()
+            stundenzettelPdfDir().deleteRecursively()
             _message.value = "Testdaten gelöscht – Stammdaten und Material bleiben erhalten"
         }
     }

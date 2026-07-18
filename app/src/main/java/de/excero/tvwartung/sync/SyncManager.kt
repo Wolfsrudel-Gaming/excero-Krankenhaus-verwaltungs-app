@@ -15,7 +15,8 @@ import java.net.URLEncoder
  *  - Zimmer/Stationen: bidirektional (last-write-wins über updatedAt) –
  *    Änderungen aus der Weboberfläche landen in der App und umgekehrt
  *  - Prüfbögen & Stundenzettel: Push zum Server (dort einsehbar/auswertbar)
- *  - Fotos & Prüfbericht-PDFs: Upload fehlender Dateien
+ *  - Fotos, Prüfbericht-PDFs, Unterschriften und fertige Stundenzettel-PDFs:
+ *    Upload fehlender Dateien
  */
 class SyncManager(
     private val repository: Repository,
@@ -23,7 +24,8 @@ class SyncManager(
     private val signatureStore: de.excero.tvwartung.files.SignatureStore?,
     private val settingsStore: de.excero.tvwartung.data.SettingsStore?,
     private val serverUrl: String,
-    private val apiKey: String
+    private val apiKey: String,
+    private val stundenzettelPdfDir: File? = null
 ) {
 
     data class Ergebnis(
@@ -247,6 +249,14 @@ class SyncManager(
         // Unterschriften ebenfalls hochladen (unter _signaturen/, kollidiert nicht mit Zimmern)
         signatureStore?.alleDateien()?.forEach { f ->
             val rel = "_signaturen/${f.name}"
+            if ("$rel|${f.length()}" !in vorhandene) {
+                ladeDateiHoch(rel, f)
+                hochgeladen++
+            }
+        }
+        // Fertige Stundenzettel-PDFs (unter _stundenzettel/), neueste Fassung gewinnt
+        stundenzettelPdfDir?.listFiles()?.filter { it.isFile && it.length() > 0 }?.forEach { f ->
+            val rel = "_stundenzettel/${f.name}"
             if ("$rel|${f.length()}" !in vorhandene) {
                 ladeDateiHoch(rel, f)
                 hochgeladen++

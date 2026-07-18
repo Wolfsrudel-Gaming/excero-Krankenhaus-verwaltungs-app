@@ -66,7 +66,12 @@ fun PhotoSection(
         ActivityResultContracts.TakePicture()
     ) { success ->
         pendingPhoto?.let { (file, label) ->
-            if (success) viewModel.logAction(roomId, "Foto aufgenommen ($label)") else file.delete()
+            if (success) {
+                viewModel.logAction(roomId, "Foto aufgenommen ($label)")
+                viewModel.aktualisiereBerichtPdf(roomId, dateFolder)
+            } else {
+                file.delete()
+            }
         }
         pendingPhoto = null
         refresh++
@@ -134,6 +139,7 @@ fun PhotoSection(
                                 onClick = {
                                     viewModel.photoStore.delete(file)
                                     viewModel.logAction(roomId, "Foto gelöscht")
+                                    viewModel.aktualisiereBerichtPdf(roomId, dateFolder)
                                     refresh++
                                 },
                                 modifier = Modifier
