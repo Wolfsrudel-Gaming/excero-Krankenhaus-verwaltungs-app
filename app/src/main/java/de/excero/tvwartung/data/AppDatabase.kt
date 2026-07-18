@@ -10,9 +10,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [
         TvRoom::class, Inspection::class, ActivityLog::class, RoomSperre::class,
-        Material::class, CustomPruefpunkt::class, StundenzettelEntity::class
+        Material::class, CustomPruefpunkt::class, StundenzettelEntity::class,
+        StundenzettelEintrag::class, Einsatz::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,6 +24,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun materialDao(): MaterialDao
     abstract fun customPruefpunktDao(): CustomPruefpunktDao
     abstract fun stundenzettelDao(): StundenzettelDao
+    abstract fun stundenzettelEintragDao(): StundenzettelEintragDao
+    abstract fun einsatzDao(): EinsatzDao
 
     companion object {
         /** v1 → v2: internes Aktivitätsprotokoll; bestehende Daten bleiben unverändert. */
@@ -133,6 +136,27 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v7 → v8: Mehrbenutzer (Mitarbeiter je Prüfung), Team-Stundenzettel, Einsätze, Papierkorb. */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE inspections ADD COLUMN mitarbeiter TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE inspections ADD COLUMN geloescht INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `stundenzettel_eintraege` (" +
+                        "`station` TEXT NOT NULL, `zeitraumStart` TEXT NOT NULL, " +
+                        "`mitarbeiter` TEXT NOT NULL, `stunden` TEXT NOT NULL, " +
+                        "`anfahrt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`station`, `zeitraumStart`, `mitarbeiter`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `einsaetze` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`station` TEXT NOT NULL, `mitarbeiter` TEXT NOT NULL, " +
+                        "`start` TEXT NOT NULL, `ende` TEXT NOT NULL)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -145,7 +169,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
-                        MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7
+                        MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
                     )
                     .build()
                     .also { instance = it }

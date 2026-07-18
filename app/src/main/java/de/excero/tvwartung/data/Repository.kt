@@ -79,6 +79,12 @@ class Repository(private val db: AppDatabase) {
 
     suspend fun allInspections(): List<Inspection> = db.inspectionDao().getAll()
 
+    // Für die Voll-Synchronisation mit dem Server
+    suspend fun getAllSperren(): List<RoomSperre> = db.roomSperreDao().getAll()
+    suspend fun getAllMaterial(): List<Material> = db.materialDao().getAll()
+    suspend fun getAllPruefpunkte(): List<CustomPruefpunkt> = db.customPruefpunktDao().getAll()
+    suspend fun getAllActivity(): List<ActivityLog> = db.activityLogDao().getAll()
+
     /** Interne Protokollierung: wann wurde welches Zimmer bearbeitet (wird nie exportiert). */
     suspend fun logAction(roomId: String, aktion: String) {
         db.activityLogDao().insert(
@@ -148,6 +154,75 @@ class Repository(private val db: AppDatabase) {
     }
 
     suspend fun updatePruefpunkt(punkt: CustomPruefpunkt) = db.customPruefpunktDao().update(punkt)
+
+    // ----- Team-Stundenzettel-Einträge & Einsätze -----
+
+    fun eintraegeFor(station: String, zeitraumStart: String): Flow<List<StundenzettelEintrag>> =
+        db.stundenzettelEintragDao().observeFor(station, zeitraumStart)
+
+    suspend fun getEintraege(station: String, zeitraumStart: String): List<StundenzettelEintrag> =
+        db.stundenzettelEintragDao().getFor(station, zeitraumStart)
+
+    suspend fun getAllEintraege(): List<StundenzettelEintrag> =
+        db.stundenzettelEintragDao().getAll()
+
+    suspend fun upsertEintrag(eintrag: StundenzettelEintrag) =
+        db.stundenzettelEintragDao().upsert(eintrag.copy(updatedAt = Dates.nowIsoDateTime()))
+
+    /** Server-Stand übernehmen, ohne updatedAt zu verändern. */
+    suspend fun applyEintrag(eintrag: StundenzettelEintrag) =
+        db.stundenzettelEintragDao().upsert(eintrag)
+
+    suspend fun deleteEintrag(station: String, zeitraumStart: String, mitarbeiter: String) =
+        db.stundenzettelEintragDao().delete(station, zeitraumStart, mitarbeiter)
+
+    fun laufenderEinsatz(mitarbeiter: String): Flow<Einsatz?> =
+        db.einsatzDao().observeLaufender(mitarbeiter)
+
+    /** Einsatz starten; ein evtl. noch offener Einsatz wird vorher beendet. */
+    suspend fun starteEinsatz(station: String, mitarbeiter: String) {
+        db.einsatzDao().laufender(mitarbeiter)?.let {
+            db.einsatzDao().update(it.copy(ende = Dates.nowIsoDateTime()))
+        }
+        db.einsatzDao().insert(
+            Einsatz(station = station, mitarbeiter = mitarbeiter, start = Dates.nowIsoDateTime())
+        )
+        logAction("STATION_$station", "Einsatz gestartet ($mitarbeiter)")
+    }
+
+    /** Einsatz beenden; liefert die gearbeiteten Stunden (auf Viertelstunden gerundet). */
+    suspend fun beendeEinsatz(mitarbeiter: String): Pair<Einsatz, String>? {
+        val laufend = db.einsatzDao().laufender(mitarbeiter) ?: return null
+        val beendet = laufend.copy(ende = Dates.nowIsoDateTime())
+        db.einsatzDao().update(beendet)
+        logAction("STATION_${laufend.station}", "Einsatz beendet ($mitarbeiter)")
+        return beendet to Dates.stundenZwischen(beendet.start, beendet.ende)
+    }
+
+    suspend fun getAllEinsaetze(): List<Einsatz> = db.einsatzDao().getAll()
+
+    // ----- Papierkorb -----
+
+    fun geloeschteInspections(): Flow<List<Inspection>> =
+        db.inspectionDao().observeGeloeschte()
+
+    fun alleSichtbarenInspections(): Flow<List<Inspection>> =
+        db.inspectionDao().observeAlleSichtbaren()
+
+    suspend fun setInspectionGeloescht(id: Long, geloescht: Boolean) {
+        db.inspectionDao().setGeloescht(id, geloescht)
+    }
+
+    /** Fremde Prüfbögen vom Server übernehmen (Dedupe über UUID). */
+    suspend fun importInspections(liste: List<Inspection>): Int {
+        var neu = 0
+        liste.forEach { insp ->
+            if (insp.uuid.isNotBlank() && db.inspectionDao().getByUuid(insp.uuid) == null) {
+                if (db.inspectionDao().insertIgnore(insp.copy(id = 0)) != -1L) neu++
+            }
+        }
+        return neu
+    }
 
     // ----- Stundenzettel -----
 
@@ -232,6 +307,21 @@ class Repository(private val db: AppDatabase) {
             db.materialDao().insert(
                 Material(name = name, bestandAktiv = mitBestand, sortIndex = index)
             )
+        }
+    }
+
+    /**
+     * Testdaten bereinigen: löscht alle Prüfbögen, Stundenzettel, Einsätze,
+     * Sperren und das Aktivitätsprotokoll – Zimmer/Material bleiben erhalten.
+     */
+    suspend fun testdatenBereinigen() {
+        db.withTransaction {
+            db.inspectionDao().deleteAll()
+            db.stundenzettelDao().deleteAll()
+            db.stundenzettelEintragDao().deleteAll()
+            db.einsatzDao().deleteAll()
+            db.activityLogDao().deleteAll()
+            db.roomSperreDao().deleteAll()
         }
     }
 

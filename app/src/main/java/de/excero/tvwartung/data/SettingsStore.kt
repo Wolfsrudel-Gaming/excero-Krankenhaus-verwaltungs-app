@@ -17,7 +17,9 @@ data class AppSettings(
     val seitDatum: String = Dates.todayIso(),  // ISO; nur bei SEIT_DATUM relevant
     val serverUrl: String = "",                // z. B. https://example.de/kkh
     val apiKey: String = "",                   // Sync-Schlüssel des Servers
-    val autoSync: Boolean = false              // nach jedem Prüfbogen automatisch synchronisieren
+    val autoSync: Boolean = false,             // nach jedem Prüfbogen automatisch synchronisieren
+    val mitarbeiter: String = "",              // dieses Gerät = dieser Mitarbeiter
+    val lastSync: String = ""                  // Zeitstempel des letzten Abgleichs (Delta-Sync)
 ) {
     /** Startdatum (ISO) des aktuellen Prüfzeitraums. */
     fun zeitraumStartIso(): String = when (zeitraum) {
@@ -48,8 +50,18 @@ class SettingsStore(context: Context) {
             seitDatum = prefs.getString("seitDatum", Dates.todayIso()) ?: Dates.todayIso(),
             serverUrl = prefs.getString("serverUrl", "") ?: "",
             apiKey = prefs.getString("apiKey", "") ?: "",
-            autoSync = prefs.getString("autoSync", "false") == "true"
+            autoSync = prefs.getString("autoSync", "false") == "true",
+            mitarbeiter = prefs.getString("mitarbeiter", "") ?: "",
+            lastSync = prefs.getString("lastSync", "") ?: ""
         )
+    }
+
+    /** Vom Server bekannte (aktive) Mitarbeiter für die Geräteeinrichtung. */
+    fun bekannteMitarbeiter(): List<String> =
+        prefs.getString("bekannteMitarbeiter", "")!!.split("\n").filter { it.isNotBlank() }
+
+    fun setBekannteMitarbeiter(namen: List<String>) {
+        prefs.edit().putString("bekannteMitarbeiter", namen.joinToString("\n")).apply()
     }
 
     fun update(settings: AppSettings) {
@@ -59,6 +71,8 @@ class SettingsStore(context: Context) {
             .putString("serverUrl", settings.serverUrl)
             .putString("apiKey", settings.apiKey)
             .putString("autoSync", if (settings.autoSync) "true" else "false")
+            .putString("mitarbeiter", settings.mitarbeiter)
+            .putString("lastSync", settings.lastSync)
             .apply()
         _settings.value = settings
     }

@@ -127,14 +127,15 @@ object XlsxWriter {
         append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">")
         append("<cols><col min=\"1\" max=\"1\" width=\"12\" customWidth=\"1\"/>")
         append("<col min=\"2\" max=\"2\" width=\"10\" customWidth=\"1\"/>")
-        append("<col min=\"3\" max=\"10\" width=\"14\" customWidth=\"1\"/>")
-        append("<col min=\"11\" max=\"11\" width=\"50\" customWidth=\"1\"/></cols>")
+        append("<col min=\"3\" max=\"3\" width=\"16\" customWidth=\"1\"/>")
+        append("<col min=\"4\" max=\"11\" width=\"14\" customWidth=\"1\"/>")
+        append("<col min=\"12\" max=\"12\" width=\"50\" customWidth=\"1\"/></cols>")
         append("<sheetData>")
         append(
             headerRow(
                 1,
                 listOf(
-                    "Datum", "Zimmer", "Empfang vorhanden?", "Seriennummer TV stimmt?",
+                    "Datum", "Zimmer", "Mitarbeiter", "Empfang vorhanden?", "Seriennummer TV stimmt?",
                     "Freenet TV-ID stimmt?", "DVD-Test", "Fernbedienung", "Halterung (fest?)",
                     "Gültigkeit Freenet > 3 Monate?", "Freenet verlängert", "Bemerkungen"
                 )
@@ -156,15 +157,16 @@ object XlsxWriter {
             append("<row r=\"$r\">")
             append(dateCell(0, r, insp.datum))
             append(textCell(1, r, insp.roomId))
-            append(boolCell(2, r, insp.empfangVorhanden))
-            append(boolCell(3, r, insp.seriennummerStimmt))
-            append(boolCell(4, r, insp.freenetIdStimmt))
-            append(boolCell(5, r, insp.dvdTest))
-            append(boolCell(6, r, insp.fernbedienung))
-            append(boolCell(7, r, insp.halterungFest))
-            append(boolCell(8, r, insp.gueltigkeitAusreichend))
-            append(boolCell(9, r, insp.freenetVerlaengert))
-            append(textCell(10, r, remarks))
+            append(textCell(2, r, insp.mitarbeiter))
+            append(boolCell(3, r, insp.empfangVorhanden))
+            append(boolCell(4, r, insp.seriennummerStimmt))
+            append(boolCell(5, r, insp.freenetIdStimmt))
+            append(boolCell(6, r, insp.dvdTest))
+            append(boolCell(7, r, insp.fernbedienung))
+            append(boolCell(8, r, insp.halterungFest))
+            append(boolCell(9, r, insp.gueltigkeitAusreichend))
+            append(boolCell(10, r, insp.freenetVerlaengert))
+            append(textCell(11, r, remarks))
             append("</row>")
         }
         append("</sheetData></worksheet>")

@@ -14,22 +14,27 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -67,7 +72,10 @@ fun HomeScreen(
     onSettingsClick: () -> Unit,
     onStundenzettel: (String) -> Unit,
     onVerwaltung: () -> Unit,
-    onNeuesZimmer: () -> Unit
+    onNeuesZimmer: () -> Unit,
+    onFreenet: () -> Unit,
+    onStatistik: () -> Unit,
+    onSuche: () -> Unit
 ) {
     val rooms by viewModel.rooms.collectAsState()
     val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
@@ -79,6 +87,12 @@ fun HomeScreen(
     val checkedInPeriod = remember(inspectionsInPeriod) {
         inspectionsInPeriod.map { it.roomId }.toSet()
     }
+    // Wer hat welches Zimmer im Zeitraum geprüft (Team-Sicht)
+    val prueferProZimmer = remember(inspectionsInPeriod) {
+        inspectionsInPeriod.filter { it.mitarbeiter.isNotBlank() }
+            .associate { it.roomId to it.mitarbeiter }
+    }
+    val update by viewModel.updateVerfuegbar.collectAsState()
     val aktiveRooms = remember(rooms) { rooms.filter { !it.inaktiv } }
     val inaktiveRooms = remember(rooms) { rooms.filter { it.inaktiv } }
     val filtered = remember(aktiveRooms, query) {
@@ -124,6 +138,31 @@ fun HomeScreen(
             )
         )
 
+        update?.let { (_, versionName) ->
+            Card(
+                onClick = { viewModel.installiereUpdate() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "🔄 Update auf Version $versionName verfügbar – tippen zum Installieren",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
@@ -134,6 +173,36 @@ fun HomeScreen(
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine = true
         )
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AssistChip(
+                onClick = onFreenet,
+                label = { Text("Freenet-Ablauf") },
+                leadingIcon = {
+                    Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+            )
+            AssistChip(
+                onClick = onSuche,
+                label = { Text("Berichte & Papierkorb") },
+                leadingIcon = {
+                    Icon(Icons.Default.FindInPage, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+            )
+            AssistChip(
+                onClick = onStatistik,
+                label = { Text("Statistik") },
+                leadingIcon = {
+                    Icon(Icons.Default.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+            )
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -188,6 +257,7 @@ fun HomeScreen(
                         room = stationRooms[index],
                         checkedToday = stationRooms[index].id in checkedInPeriod,
                         blocked = stationRooms[index].id in gesperrt,
+                        pruefer = prueferProZimmer[stationRooms[index].id] ?: "",
                         onClick = { onRoomClick(stationRooms[index].id) }
                     )
                 }
@@ -321,7 +391,13 @@ private fun SperrDialog(
 }
 
 @Composable
-private fun RoomCard(room: TvRoom, checkedToday: Boolean, blocked: Boolean, onClick: () -> Unit) {
+private fun RoomCard(
+    room: TvRoom,
+    checkedToday: Boolean,
+    blocked: Boolean,
+    pruefer: String = "",
+    onClick: () -> Unit
+) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -368,6 +444,10 @@ private fun RoomCard(room: TvRoom, checkedToday: Boolean, blocked: Boolean, onCl
                             tint = OkGreen,
                             modifier = Modifier.size(18.dp)
                         )
+                        if (pruefer.isNotBlank()) {
+                            Spacer(Modifier.width(4.dp))
+                            StatusBadge(pruefer, OkGreen)
+                        }
                     }
                 }
                 Text(

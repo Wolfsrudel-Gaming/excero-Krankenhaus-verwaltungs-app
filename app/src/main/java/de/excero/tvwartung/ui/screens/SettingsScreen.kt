@@ -140,6 +140,30 @@ fun SettingsScreen(
                 }
             }
 
+            // Mitarbeiter (Gerät = Mitarbeiter)
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Mitarbeiter (dieses Gerät)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Name des Mitarbeiters, der mit diesem Handy arbeitet – erscheint " +
+                            "auf Prüfberichten und Stundenzetteln. Die Liste wird in der " +
+                            "Weboberfläche gepflegt und beim Sync aktualisiert.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TvTypAuswahl(
+                        value = settings.mitarbeiter,
+                        onValueChange = { viewModel.updateSettings(settings.copy(mitarbeiter = it)) },
+                        bekannteTypen = viewModel.bekannteMitarbeiter(),
+                        label = "Mitarbeiter-Name"
+                    )
+                }
+            }
+
             // Server-Synchronisation
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -243,6 +267,41 @@ fun SettingsScreen(
                     }
                 }
             }
+            // Echtstart: Testdaten bereinigen
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Echtstart vorbereiten",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Löscht alle Test-Prüfbögen, Fotos, Stundenzettel und Sperren. " +
+                            "Zimmer, Stationen und Materialkatalog bleiben erhalten.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    var bestaetigt by remember { mutableStateOf(false) }
+                    if (!bestaetigt) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { bestaetigt = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Testdaten bereinigen …") }
+                    } else {
+                        androidx.compose.material3.Button(
+                            onClick = {
+                                viewModel.testdatenBereinigen()
+                                bestaetigt = false
+                            },
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("WIRKLICH löschen – kann nicht rückgängig gemacht werden") }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(16.dp))
         }
     }

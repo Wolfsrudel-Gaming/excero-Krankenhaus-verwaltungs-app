@@ -50,3 +50,49 @@ CREATE TABLE IF NOT EXISTS users (
 );
 -- Login unabhängig von Groß-/Kleinschreibung des Benutzernamens
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (lower(username));
+
+-- Voll-Synchronisation: Spiegel der App-Daten (Anzeige im Web optional)
+CREATE TABLE IF NOT EXISTS sperren (
+    room_id     TEXT PRIMARY KEY,
+    gesperrt_am TEXT NOT NULL,
+    grund       TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS material (
+    name          TEXT PRIMARY KEY,
+    bestand       NUMERIC(14,2) NOT NULL DEFAULT 0,
+    bestand_aktiv BOOLEAN NOT NULL DEFAULT FALSE,
+    aktiv         BOOLEAN NOT NULL DEFAULT TRUE,
+    sort_index    INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS app_pruefpunkte (
+    titel      TEXT PRIMARY KEY,
+    aktiv      BOOLEAN NOT NULL DEFAULT TRUE,
+    sort_index INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS app_aktivitaet (
+    id        SERIAL PRIMARY KEY,
+    room_id   TEXT NOT NULL,
+    zeitpunkt TEXT NOT NULL,
+    aktion    TEXT NOT NULL
+);
+
+-- v1.9: Mehrbenutzer & Team-Stundenzettel
+ALTER TABLE inspections ADD COLUMN IF NOT EXISTS mitarbeiter TEXT NOT NULL DEFAULT '';
+ALTER TABLE inspections ADD COLUMN IF NOT EXISTS geloescht BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_inspections_created ON inspections(created_at);
+
+CREATE TABLE IF NOT EXISTS mitarbeiter (
+    name  TEXT PRIMARY KEY,
+    aktiv BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS zettel_eintraege (
+    station        TEXT NOT NULL,
+    zeitraum_start TEXT NOT NULL,
+    mitarbeiter    TEXT NOT NULL,
+    stunden        TEXT NOT NULL DEFAULT '',
+    anfahrt        TEXT NOT NULL DEFAULT '',
+    updated_at     TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (station, zeitraum_start, mitarbeiter)
+);
+

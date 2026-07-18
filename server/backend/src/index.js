@@ -206,11 +206,13 @@ router.post('/api/sync/inspections', requireApiKey, express.json({ limit: '50mb'
     if (!i.uuid || !i.roomId) continue;
     const daten = { punkte: i.punkte || [], arbeiten: i.arbeiten || [], bemerkungen: i.bemerkungen || '' };
     const r = await pool.query(
-      `INSERT INTO inspections (uuid, room_id, datum, daten)
-       VALUES ($1,$2,$3,$4) ON CONFLICT (uuid) DO NOTHING RETURNING uuid`,
-      [i.uuid, i.roomId, i.datum || '', JSON.stringify(daten)]
+      `INSERT INTO inspections (uuid, room_id, datum, daten, mitarbeiter, geloescht)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (uuid) DO UPDATE SET geloescht = EXCLUDED.geloescht
+       RETURNING (xmax = 0) AS inserted`,
+      [i.uuid, i.roomId, i.datum || '', JSON.stringify(daten), i.mitarbeiter || '', !!i.geloescht]
     );
-    if (r.rowCount > 0) neu++;
+    if (r.rows[0] && r.rows[0].inserted) neu++;
   }
   res.json({ neu });
 });
@@ -475,6 +477,198 @@ router.get('/api/web/file', requireWebAuth, (req, res) => {
   if (!ziel || !fs.existsSync(ziel)) return res.status(404).json({ error: 'Datei nicht gefunden' });
   res.sendFile(ziel);
 });
+
+
+// ---------- Voll-Synchronisation (Spiegel der App-Daten, Replace-All) ----------
+
+async function replaceAll(tabelle, spalten, zeilen) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM ${tabelle}`);
+    for (const z of zeilen) {
+      const platzhalter = spalten.map((_, i) => `$${i + 1}`).join(',');
+      await client.query(
+        `INSERT INTO ${tabelle} (${spalten.join(',')}) VALUES (${platzhalter})`,
+        spalten.map((sp) => z[sp]));
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+router.post('/api/sync/sperren', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
+  await replaceAll('sperren', ['room_id', 'gesperrt_am', 'grund'],
+    (req.body.sperren || []).map((s) => ({
+      room_id: s.roomId, gesperrt_am: s.gesperrtAm || '', grund: s.grund || '' })));
+  res.json({ ok: true });
+});
+
+router.post('/api/sync/material', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
+  await replaceAll('material', ['name', 'bestand', 'bestand_aktiv', 'aktiv', 'sort_index'],
+    (req.body.material || []).map((m) => ({
+      name: m.name, bestand: m.bestand || 0, bestand_aktiv: !!m.bestandAktiv,
+      aktiv: m.aktiv !== false, sort_index: m.sortIndex || 0 })));
+  res.json({ ok: true });
+});
+
+router.post('/api/sync/pruefpunkte', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
+  await replaceAll('app_pruefpunkte', ['titel', 'aktiv', 'sort_index'],
+    (req.body.punkte || []).map((p) => ({
+      titel: p.titel, aktiv: p.aktiv !== false, sort_index: p.sortIndex || 0 })));
+  res.json({ ok: true });
+});
+
+router.post('/api/sync/aktivitaet', requireApiKey, express.json({ limit: '50mb' }), async (req, res) => {
+  await replaceAll('app_aktivitaet', ['room_id', 'zeitpunkt', 'aktion'],
+    (req.body.eintraege || []).map((a) => ({
+      room_id: a.roomId, zeitpunkt: a.zeitpunkt || '', aktion: a.aktion || '' })));
+  res.json({ ok: true });
+});
+
+// Lesend für die Weboberfläche (Einbindung optional)
+router.get('/api/web/material', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM material ORDER BY sort_index, name');
+  res.json({ material: rows });
+});
+router.get('/api/web/sperren', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM sperren ORDER BY room_id');
+  res.json({ sperren: rows });
+});
+router.get('/api/web/aktivitaet', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM app_aktivitaet ORDER BY zeitpunkt DESC LIMIT 500');
+  res.json({ aktivitaet: rows });
+});
+
+
+// ---------- v1.9: Mitarbeiter, Kollegen-Pull, Team-Stundenzettel ----------
+
+router.get('/api/sync/mitarbeiter', requireApiKey, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM mitarbeiter ORDER BY name');
+  res.json({ mitarbeiter: rows });
+});
+
+// Delta-Pull: alle Prüfbögen (aller Geräte), optional nur neue seit ?since=
+router.get('/api/sync/inspections', requireApiKey, async (req, res) => {
+  const since = String(req.query.since || '');
+  const { rows } = since
+    ? await pool.query(
+        `SELECT uuid, room_id, datum, daten, mitarbeiter, geloescht FROM inspections
+         WHERE created_at > $1::timestamptz ORDER BY created_at`, [since])
+    : await pool.query(
+        'SELECT uuid, room_id, datum, daten, mitarbeiter, geloescht FROM inspections ORDER BY created_at');
+  res.json({
+    inspections: rows.map((r) => ({
+      uuid: r.uuid, roomId: r.room_id, datum: r.datum,
+      punkte: (r.daten || {}).punkte || [], arbeiten: (r.daten || {}).arbeiten || [],
+      bemerkungen: (r.daten || {}).bemerkungen || '',
+      mitarbeiter: r.mitarbeiter, geloescht: r.geloescht,
+    })),
+  });
+});
+
+router.get('/api/sync/zettel-eintraege', requireApiKey, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM zettel_eintraege');
+  res.json({ eintraege: rows.map((e) => ({
+    station: e.station, zeitraumStart: e.zeitraum_start, mitarbeiter: e.mitarbeiter,
+    stunden: e.stunden, anfahrt: e.anfahrt, updatedAt: e.updated_at })) });
+});
+
+router.post('/api/sync/zettel-eintraege', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
+  let uebernommen = 0;
+  for (const e of req.body.eintraege || []) {
+    if (!e.station || !e.zeitraumStart || !e.mitarbeiter) continue;
+    const r = await pool.query(
+      `INSERT INTO zettel_eintraege (station, zeitraum_start, mitarbeiter, stunden, anfahrt, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (station, zeitraum_start, mitarbeiter) DO UPDATE SET
+         stunden=EXCLUDED.stunden, anfahrt=EXCLUDED.anfahrt, updated_at=EXCLUDED.updated_at
+       WHERE zettel_eintraege.updated_at < EXCLUDED.updated_at
+       RETURNING station`,
+      [e.station, e.zeitraumStart, e.mitarbeiter, e.stunden || '', e.anfahrt || '', e.updatedAt || '']);
+    if (r.rowCount > 0) uebernommen++;
+  }
+  res.json({ uebernommen });
+});
+
+// Mitarbeiter-Verwaltung (Web)
+router.get('/api/web/mitarbeiter', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM mitarbeiter ORDER BY name');
+  res.json({ mitarbeiter: rows });
+});
+router.post('/api/web/mitarbeiter', requireWebAuth, express.json(), async (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name angeben' });
+  await pool.query(
+    'INSERT INTO mitarbeiter (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET aktiv = TRUE', [name]);
+  res.json({ ok: true });
+});
+router.patch('/api/web/mitarbeiter/:name', requireWebAuth, express.json(), async (req, res) => {
+  await pool.query('UPDATE mitarbeiter SET aktiv=$1 WHERE name=$2',
+    [req.body.aktiv !== false, req.params.name]);
+  res.json({ ok: true });
+});
+
+router.get('/api/web/zettel-eintraege', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM zettel_eintraege ORDER BY zeitraum_start DESC, station');
+  res.json({ eintraege: rows });
+});
+
+// ---------- App-Updater ----------
+// public/app/ enthält die aktuelle APK + version.json (per Deploy/Commit gepflegt)
+router.get('/api/app/version', (req, res) => {
+  const f = path.join(__dirname, '..', 'public', 'app', 'version.json');
+  if (!fs.existsSync(f)) return res.status(404).json({ error: 'Keine Version hinterlegt' });
+  res.sendFile(f);
+});
+
+// ---------- Thumbnails (Server-Power: Web-Galerie lädt Vorschauen) ----------
+let sharp = null;
+try { sharp = require('sharp'); } catch { console.log('sharp nicht verfügbar – Thumbs deaktiviert'); }
+const THUMB_DIR = path.join(FILES_DIR, '..', 'thumbs');
+fs.mkdirSync(THUMB_DIR, { recursive: true });
+
+router.get('/api/web/thumb', requireWebAuth, async (req, res) => {
+  const rel = String(req.query.path || '');
+  const quelle = safeFilePath(rel);
+  if (!quelle || !fs.existsSync(quelle)) return res.status(404).json({ error: 'Datei nicht gefunden' });
+  if (!sharp || !/\.(jpe?g|png)$/i.test(rel)) return res.sendFile(quelle);
+  const ziel = path.join(THUMB_DIR, crypto.createHash('sha1').update(rel).digest('hex') + '.jpg');
+  if (!fs.existsSync(ziel)) {
+    try {
+      await sharp(quelle).rotate().resize(360, 360, { fit: 'cover' }).jpeg({ quality: 70 }).toFile(ziel);
+    } catch { return res.sendFile(quelle); }
+  }
+  res.sendFile(ziel);
+});
+
+// ---------- Automatisches nächtliches Backup (pg_dump, 30 Tage Rotation) ----------
+const BACKUP_DIR = path.join(FILES_DIR, '..', 'backups');
+fs.mkdirSync(BACKUP_DIR, { recursive: true });
+function nightlyBackup() {
+  const { execFile } = require('child_process');
+  const datum = new Date().toISOString().slice(0, 10);
+  const ziel = path.join(BACKUP_DIR, `kkh-db-${datum}.sql.gz`);
+  const env = { ...process.env, PGPASSWORD: process.env.PGPASSWORD };
+  const dump = execFile('sh', ['-c',
+    `pg_dump -h ${process.env.PGHOST || 'db'} -U ${process.env.PGUSER || 'kkh'} ${process.env.PGDATABASE || 'kkh'} | gzip > ${JSON.stringify(ziel)}`],
+    { env }, (err) => {
+      if (err) console.error('Backup fehlgeschlagen:', err.message);
+      else console.log('Backup erstellt:', ziel);
+      // Rotation: älter als 30 Tage löschen
+      const limit = Date.now() - 30 * 86400e3;
+      for (const f of fs.readdirSync(BACKUP_DIR)) {
+        const voll = path.join(BACKUP_DIR, f);
+        if (fs.statSync(voll).mtimeMs < limit) fs.unlinkSync(voll);
+      }
+    });
+}
+setInterval(nightlyBackup, 24 * 60 * 60 * 1000);
+setTimeout(nightlyBackup, 60 * 1000);
 
 // ---------- Statische Weboberfläche ----------
 

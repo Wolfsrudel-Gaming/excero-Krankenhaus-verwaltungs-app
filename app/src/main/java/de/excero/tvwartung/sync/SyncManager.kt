@@ -20,6 +20,8 @@ import java.net.URLEncoder
 class SyncManager(
     private val repository: Repository,
     private val photoStore: PhotoStore,
+    private val signatureStore: de.excero.tvwartung.files.SignatureStore?,
+    private val settingsStore: de.excero.tvwartung.data.SettingsStore?,
     private val serverUrl: String,
     private val apiKey: String
 ) {
@@ -29,11 +31,14 @@ class SyncManager(
         val zimmerEmpfangen: Int,
         val pruefungen: Int,
         val zettel: Int,
-        val dateien: Int
+        val dateien: Int,
+        val kollegenBerichte: Int = 0,
+        val hinweis: String = ""
     ) {
         fun meldung(): String =
             "Sync ok: $zimmerGesendet Zimmer ↑, $zimmerEmpfangen Zimmer ↓, " +
-                "$pruefungen Prüfbögen, $zettel Stundenzettel, $dateien Dateien"
+                "$pruefungen Prüfbögen ↑, $kollegenBerichte Berichte ↓, " +
+                "$zettel Stundenzettel, $dateien Dateien" + hinweis
     }
 
     private val basis = serverUrl.trimEnd('/')
@@ -143,6 +148,8 @@ class SyncManager(
                 put("punkte", punkte)
                 put("arbeiten", JSONArray(insp.arbeitenListe()))
                 put("bemerkungen", insp.bemerkungen)
+                put("mitarbeiter", insp.mitarbeiter)
+                put("geloescht", insp.geloescht)
             })
         }
         val inspAntwort = httpJson(
@@ -163,6 +170,64 @@ class SyncManager(
         }
         httpJson("/api/sync/stundenzettel", "POST", JSONObject().put("zettel", zettelJson))
 
+        // --- 4b) Team-Stundenzettel-Einträge: Push (LWW) und Pull ---
+        var kollegenBerichte = 0
+        runCatching {
+            val eintraegeJson = JSONArray()
+            repository.getAllEintraege().forEach { e ->
+                eintraegeJson.put(JSONObject().apply {
+                    put("station", e.station); put("zeitraumStart", e.zeitraumStart)
+                    put("mitarbeiter", e.mitarbeiter); put("stunden", e.stunden)
+                    put("anfahrt", e.anfahrt); put("updatedAt", e.updatedAt)
+                })
+            }
+            httpJson("/api/sync/zettel-eintraege", "POST", JSONObject().put("eintraege", eintraegeJson))
+            val serverEintraege = httpJson("/api/sync/zettel-eintraege", "GET")
+                .optJSONArray("eintraege") ?: JSONArray()
+            val lokalEintraege = repository.getAllEintraege()
+                .associateBy { "${it.station}|${it.zeitraumStart}|${it.mitarbeiter}" }
+            for (i in 0 until serverEintraege.length()) {
+                val o = serverEintraege.getJSONObject(i)
+                val key = "${o.optString("station")}|${o.optString("zeitraumStart")}|${o.optString("mitarbeiter")}"
+                val eigener = lokalEintraege[key]
+                if (eigener == null || o.optString("updatedAt") > eigener.updatedAt) {
+                    repository.applyEintrag(
+                        de.excero.tvwartung.data.StundenzettelEintrag(
+                            station = o.optString("station"),
+                            zeitraumStart = o.optString("zeitraumStart"),
+                            mitarbeiter = o.optString("mitarbeiter"),
+                            stunden = o.optString("stunden"),
+                            anfahrt = o.optString("anfahrt"),
+                            updatedAt = o.optString("updatedAt")
+                        )
+                    )
+                }
+            }
+
+            // --- 4c) Berichte der Kollegen holen (Delta über lastSync) ---
+            val since = settingsStore?.settings?.value?.lastSync ?: ""
+            val pfad = if (since.isBlank()) "/api/sync/inspections"
+            else "/api/sync/inspections?since=" + URLEncoder.encode(since, "UTF-8")
+            val serverInsp = httpJson(pfad, "GET").optJSONArray("inspections") ?: JSONArray()
+            val fremde = mutableListOf<de.excero.tvwartung.data.Inspection>()
+            for (i in 0 until serverInsp.length()) {
+                val o = serverInsp.getJSONObject(i)
+                fremde.add(inspectionAusJson(o))
+            }
+            kollegenBerichte = repository.importInspections(fremde)
+
+            // --- 4d) Mitarbeiterliste vom Server (für die Geräteeinrichtung) ---
+            val maJson = httpJson("/api/sync/mitarbeiter", "GET")
+                .optJSONArray("mitarbeiter") ?: JSONArray()
+            val namen = buildList {
+                for (i in 0 until maJson.length()) {
+                    val o = maJson.getJSONObject(i)
+                    if (o.optBoolean("aktiv", true)) add(o.optString("name"))
+                }
+            }
+            settingsStore?.setBekannteMitarbeiter(namen)
+        }
+
         // --- 5) Fehlende Dateien hochladen (Fotos + Prüfbericht-PDFs) ---
         val vorhandene = mutableSetOf<String>()
         val dateiListe = httpJson("/api/sync/files", "GET").optJSONArray("files") ?: JSONArray()
@@ -179,8 +244,107 @@ class SyncManager(
                 hochgeladen++
             }
         }
+        // Unterschriften ebenfalls hochladen (unter _signaturen/, kollidiert nicht mit Zimmern)
+        signatureStore?.alleDateien()?.forEach { f ->
+            val rel = "_signaturen/${f.name}"
+            if ("$rel|${f.length()}" !in vorhandene) {
+                ladeDateiHoch(rel, f)
+                hochgeladen++
+            }
+        }
 
-        return Ergebnis(gesendet, empfangen, neuePruefungen, zettelListe.size, hochgeladen)
+        // --- 6) Vollständigkeit: Sperren, Material, Prüfpunkte, Aktivität ---
+        // Prinzip: Es wird immer alles übertragen; was die Web-Seite damit
+        // anzeigt, entscheidet sie selbst. Tolerant gegenüber älteren Servern.
+        var hinweis = ""
+        runCatching {
+            val sperrenJson = JSONArray()
+            repository.getAllSperren().forEach { sp ->
+                sperrenJson.put(JSONObject().apply {
+                    put("roomId", sp.roomId); put("gesperrtAm", sp.gesperrtAm); put("grund", sp.grund)
+                })
+            }
+            httpJson("/api/sync/sperren", "POST", JSONObject().put("sperren", sperrenJson))
+
+            val materialJson = JSONArray()
+            repository.getAllMaterial().forEach { m ->
+                materialJson.put(JSONObject().apply {
+                    put("name", m.name); put("bestand", m.bestand)
+                    put("bestandAktiv", m.bestandAktiv); put("aktiv", m.aktiv)
+                    put("sortIndex", m.sortIndex)
+                })
+            }
+            httpJson("/api/sync/material", "POST", JSONObject().put("material", materialJson))
+
+            val punkteJson = JSONArray()
+            repository.getAllPruefpunkte().forEach { pp ->
+                punkteJson.put(JSONObject().apply {
+                    put("titel", pp.titel); put("aktiv", pp.aktiv); put("sortIndex", pp.sortIndex)
+                })
+            }
+            httpJson("/api/sync/pruefpunkte", "POST", JSONObject().put("punkte", punkteJson))
+
+            val aktJson = JSONArray()
+            repository.getAllActivity().forEach { a ->
+                aktJson.put(JSONObject().apply {
+                    put("roomId", a.roomId); put("zeitpunkt", a.zeitpunkt); put("aktion", a.aktion)
+                })
+            }
+            httpJson("/api/sync/aktivitaet", "POST", JSONObject().put("eintraege", aktJson))
+        }.onFailure {
+            hinweis = " – Hinweis: Server-Update nötig für Sperren/Material/Aktivität"
+        }
+
+        settingsStore?.let { st -> st.update(st.settings.value.copy(lastSync = de.excero.tvwartung.util.Dates.nowIsoDateTime())) }
+        return Ergebnis(gesendet, empfangen, neuePruefungen, zettelListe.size, hochgeladen, kollegenBerichte, hinweis)
+    }
+
+    /** Server-JSON → Inspection: Standardpunkte über die Titel zuordnen, Rest = eigene Punkte. */
+    private fun inspectionAusJson(o: JSONObject): de.excero.tvwartung.data.Inspection {
+        val punkte = o.optJSONArray("punkte") ?: JSONArray()
+        val map = mutableMapOf<String, Pair<Boolean?, String>>()
+        val extras = mutableListOf<Triple<String, Boolean?, String>>()
+        val standard = listOf(
+            "Empfang vorhanden?", "Seriennummer TV stimmt?", "Freenet TV-ID stimmt?",
+            "DVD-Test", "Fernbedienung", "Halterung (fest?)",
+            "Gültigkeit Freenet > 3 Monate?", "Freenet verlängert"
+        )
+        for (i in 0 until punkte.length()) {
+            val p = punkte.getJSONObject(i)
+            val titel = p.optString("titel")
+            val ergebnis: Boolean? = if (p.isNull("ergebnis")) null else p.optBoolean("ergebnis")
+            val bemerkung = p.optString("bemerkung")
+            if (titel in standard && titel !in map) map[titel] = ergebnis to bemerkung
+            else extras.add(Triple(titel, ergebnis, bemerkung))
+        }
+        fun e(t: String) = map[t]?.first
+        fun b(t: String) = map[t]?.second ?: ""
+        val arbeitenArr = o.optJSONArray("arbeiten") ?: JSONArray()
+        val arbeiten = buildList { for (i in 0 until arbeitenArr.length()) add(arbeitenArr.optString(i)) }
+        return de.excero.tvwartung.data.Inspection(
+            roomId = o.optString("roomId"),
+            datum = o.optString("datum"),
+            empfangVorhanden = e(standard[0]),
+            seriennummerStimmt = e(standard[1]),
+            freenetIdStimmt = e(standard[2]),
+            dvdTest = e(standard[3]),
+            fernbedienung = e(standard[4]),
+            halterungFest = e(standard[5]),
+            gueltigkeitAusreichend = e(standard[6]),
+            freenetVerlaengert = e(standard[7]),
+            bemerkungEmpfang = b(standard[0]),
+            bemerkungSeriennummer = b(standard[1]),
+            bemerkungFreenetId = b(standard[2]),
+            bemerkungDvd = b(standard[3]),
+            bemerkungFernbedienung = b(standard[4]),
+            bemerkungHalterung = b(standard[5]),
+            bemerkungen = o.optString("bemerkungen"),
+            arbeiten = arbeiten.joinToString("\n"),
+            extraPunkte = de.excero.tvwartung.data.Inspection.extraPunkteJson(extras),
+            uuid = o.optString("uuid"),
+            mitarbeiter = o.optString("mitarbeiter"),
+            geloescht = o.optBoolean("geloescht", false)
+        )
     }
 
     private fun ladeDateiHoch(relPfad: String, datei: File) {

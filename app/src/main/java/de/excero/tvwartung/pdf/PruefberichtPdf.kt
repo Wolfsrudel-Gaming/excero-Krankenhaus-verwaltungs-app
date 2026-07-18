@@ -172,7 +172,8 @@ object PruefberichtPdf {
         canvas.drawRect(0f, 0f, PAGE_W.toFloat(), 78f, headerBg)
         canvas.drawText("Prüfung TV-Empfangsgeräte", MARGIN, 38f, paint(19f, Color.WHITE, bold = true))
         canvas.drawText(
-            "Kinderkrankenhaus Köln · Prüfbericht ${room.id} · ${Dates.isoToGerman(insp.datum)}",
+            "Kinderkrankenhaus Köln · Prüfbericht ${room.id} · ${Dates.isoToGerman(insp.datum)}" +
+                if (insp.mitarbeiter.isNotBlank()) " · Geprüft von ${insp.mitarbeiter}" else "",
             MARGIN, 58f, paint(10f, Color.WHITE)
         )
         drawLogo(canvas, logo, 78f)
