@@ -1,24 +1,24 @@
 /**
- * KKH TV-Wartung – Shell, Router, Auth
+ * Excero Webapp – Shell, Router, Auth
+ * Läuft unter /excero/ – API unter /excero/api/
  */
 
+const BASE = '/excero';
+
 const ROUTES = {
-  'dashboard':            viewDashboard,
-  'zimmer':               viewZimmer,
-  'pruefungen':           viewPruefungen,
-  'stundenzettel':        viewStundenzettel,
-  'mitarbeiter':          viewMitarbeiter,
-  'dateien':              viewDateien,
-  'lager-artikel':        viewLagerArtikel,
-  'lager-buchungen':      viewLagerBuchungen,
-  'lager-verbrauch':      viewLagerVerbrauch,
-  'lager-nachbestellung': viewLagerNachbestellung,
-  'lieferanten':          viewLieferanten,
-  'abrechnung':           viewAbrechnung,
-  'benutzer':             viewBenutzer,
+  'rechnungen':   viewRechnungen,
+  'kunden':       viewKunden,
+  'ausgaben':     viewAusgaben,
+  'guv':          viewGuv,
+  'baustellen':   viewBaustellen,
+  'zeiterfassung':viewZeiterfassung,
+  'hidrive':      viewHiDrive,
+  'einstellungen':viewEinstellungen,
+  'firma':        viewFirma,
 };
 
 let currentUser = null;
+window.aktiveFirmaId = null;
 
 function setzeAktiveNav(route) {
   document.querySelectorAll('.nav-item').forEach((el) => {
@@ -28,7 +28,7 @@ function setzeAktiveNav(route) {
 
 async function route(r) {
   const fn = ROUTES[r];
-  if (!fn) { route('dashboard'); return; }
+  if (!fn) { route('rechnungen'); return; }
   setzeAktiveNav(r);
   window.location.hash = r;
   try { await fn(); } catch (e) { console.error(e); toast(e.message || 'Fehler', 'err'); }
@@ -40,11 +40,32 @@ function initSidebar() {
   });
 }
 
+// Originale api()-Funktion überschreiben: Basispfad /excero einfügen
+const _origApi = api;
+window.api = function(url, opts) {
+  // Relative Pfade bekommen /excero vorangestellt
+  if (url.startsWith('/excero/') || url.startsWith('http')) return _origApi(url, opts);
+  if (url.startsWith('/kkh/')) return _origApi(url, opts);
+  // /api/... → /excero/api/...
+  return _origApi(url.replace(/^\//, `${BASE}/`), opts);
+};
+
 async function checkAuth() {
   try {
-    const d = await fetch('/kkh/api/web/me').then((r) => r.ok ? r.json() : null);
+    const d = await fetch(`${BASE}/api/me`).then((r) => r.ok ? r.json() : null);
     return d?.username || null;
   } catch { return null; }
+}
+
+async function ladeFirma() {
+  try {
+    const d = await api(`${BASE}/api/web/firmen`);
+    const f = (d.firmen || [])[0];
+    if (f) {
+      window.aktiveFirmaId = f.id;
+      document.getElementById('topbar-firma').textContent = f.name;
+    }
+  } catch {}
 }
 
 async function doLogin() {
@@ -54,7 +75,7 @@ async function doLogin() {
   errEl.hidden = true;
   if (!username || !password) { errEl.textContent = 'Benutzername und Passwort eingeben.'; errEl.hidden = false; return; }
   try {
-    const r = await fetch('/kkh/api/login', {
+    const r = await fetch(`${BASE}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -62,7 +83,7 @@ async function doLogin() {
     if (r.ok) {
       const d = await r.json();
       currentUser = d.username || username;
-      showApp();
+      await showApp();
     } else {
       const d = await r.json().catch(() => ({}));
       errEl.textContent = d.error || 'Anmeldung fehlgeschlagen.';
@@ -71,19 +92,14 @@ async function doLogin() {
   } catch (e) { errEl.textContent = e.message; errEl.hidden = false; }
 }
 
-function showApp() {
+async function showApp() {
   document.getElementById('login-view').hidden = true;
   document.getElementById('app-shell').hidden = false;
   document.getElementById('user-chip').textContent = currentUser ? `👤 ${currentUser}` : '';
   initSidebar();
-  const hash = window.location.hash.replace('#', '') || 'dashboard';
-  route(ROUTES[hash] ? hash : 'dashboard');
-  // Nachbestellungs-Badge
-  api('/kkh/api/web/lager/nachbestellung').then((d) => {
-    const cnt = (d.artikel || []).length;
-    const badge = document.getElementById('nb-badge');
-    if (badge) { badge.hidden = cnt === 0; badge.textContent = cnt > 0 ? cnt : ''; }
-  }).catch(() => {});
+  await ladeFirma();
+  const hash = window.location.hash.replace('#', '') || 'rechnungen';
+  route(ROUTES[hash] ? hash : 'rechnungen');
 }
 
 function showLogin() {
@@ -95,30 +111,8 @@ function showLogin() {
 }
 
 async function doLogout() {
-  await fetch('/kkh/api/logout', { method: 'POST' }).catch(() => {});
+  await fetch(`${BASE}/api/logout`, { method: 'POST' }).catch(() => {});
   showLogin();
-}
-
-async function doChangePw() {
-  const res = await modal('Passwort ändern', `
-    <div class="form-grid">
-      <div class="form-group"><label class="form-label">Aktuelles Passwort</label>
-        <input type="password" class="form-control" id="cp-alt"></div>
-      <div class="form-group"><label class="form-label">Neues Passwort</label>
-        <input type="password" class="form-control" id="cp-neu"></div>
-      <div class="form-group"><label class="form-label">Wiederholen</label>
-        <input type="password" class="form-control" id="cp-neu2"></div>
-    </div>`,
-    [{ label: 'Abbrechen', value: null }, { label: 'Speichern', cls: 'btn-primary', value: 'ok' }]);
-  if (res !== 'ok') return;
-  const alt = document.getElementById('cp-alt')?.value;
-  const neu = document.getElementById('cp-neu')?.value;
-  const neu2 = document.getElementById('cp-neu2')?.value;
-  if (neu !== neu2) { toast('Passwörter stimmen nicht überein', 'err'); return; }
-  try {
-    await api('/kkh/api/web/me/password', { method: 'PATCH', body: { oldPassword: alt, newPassword: neu }});
-    toast('Passwort geändert');
-  } catch (e) { toast(e.message, 'err'); }
 }
 
 async function init() {
@@ -126,7 +120,6 @@ async function init() {
   document.getElementById('l-pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('l-user').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('l-pw').focus(); });
   document.getElementById('logout-btn').addEventListener('click', doLogout);
-  document.getElementById('pw-btn').addEventListener('click', doChangePw);
   window.addEventListener('session-expired', () => { toast('Sitzung abgelaufen', 'warn'); showLogin(); });
   window.addEventListener('hashchange', () => {
     const r = window.location.hash.replace('#', '');
@@ -134,7 +127,7 @@ async function init() {
   });
 
   const user = await checkAuth();
-  if (user) { currentUser = user; showApp(); }
+  if (user) { currentUser = user; await showApp(); }
   else showLogin();
 }
 

@@ -172,10 +172,10 @@ CREATE TABLE IF NOT EXISTS firmen (
     aktiv            BOOLEAN NOT NULL DEFAULT TRUE,
     erstellt_am      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- Seed: Excero GmbH (Platzhalter-Daten, im UI editierbar)
-INSERT INTO firmen (name, rechtsform, besteuerung, rechnungs_prefix) VALUES
-    ('Excero GmbH', 'GmbH', 'regel', 'EX')
-ON CONFLICT DO NOTHING;
+-- Seed: Excero GmbH (Platzhalter-Daten, im UI editierbar) – nur einmalig
+INSERT INTO firmen (name, rechtsform, besteuerung, rechnungs_prefix)
+SELECT 'Excero GmbH', 'GmbH', 'regel', 'EX'
+WHERE NOT EXISTS (SELECT 1 FROM firmen WHERE name = 'Excero GmbH');
 
 -- Globale Einstellungen (Key/Value, JSONB-Wert)
 CREATE TABLE IF NOT EXISTS einstellungen (
@@ -219,10 +219,10 @@ CREATE TABLE IF NOT EXISTS baustellen (
     notiz       TEXT NOT NULL DEFAULT '',
     erstellt_am TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- KKH als Baustelle vordefiniert
-INSERT INTO baustellen (name, adresse, status, notiz) VALUES
-    ('KKH Amsterdamer Straße', 'Amsterdamer Straße 59, 50735 Köln', 'aktiv', 'TV-Wartung Kinderklinik Köln')
-ON CONFLICT DO NOTHING;
+-- KKH als Baustelle vordefiniert – nur einmalig
+INSERT INTO baustellen (name, adresse, status, notiz)
+SELECT 'KKH Amsterdamer Straße', 'Amsterdamer Straße 59, 50735 Köln', 'aktiv', 'TV-Wartung Kinderklinik Köln'
+WHERE NOT EXISTS (SELECT 1 FROM baustellen WHERE name = 'KKH Amsterdamer Straße');
 CREATE INDEX IF NOT EXISTS idx_baustellen_firma ON baustellen(firma_id);
 
 -- Rechnungen

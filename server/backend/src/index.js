@@ -798,21 +798,31 @@ router.delete('/api/web/zettel-eintraege', requireWebAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Neue Backend-Module (Excero Webapp) ----------
-const firmenRouter = require('./routes/firmen');
-const baulRouter   = require('./routes/baustellen');
-const zeitRouter   = require('./routes/zeiterfassung');
-const finRouter    = require('./routes/finanzen');
-const rechnRouter  = require('./routes/rechnungen');
+// ---------- Excero-Webapp-Modul (eigener Pfad /excero/) ----------
+// Alle Excero-spezifischen Routen werden im exceroRouter registriert
+// und unter /excero/ eingehängt (siehe unten nach dem KKH-Router).
+const exceroRouter = express.Router();
+
+// Gleiche Cookie-Auth wie KKH (kkh_session wird von beiden Systemen genutzt)
+const exceroAuth = (req, res, next) => {
+  const username = checkSession(parseCookies(req).kkh_session);
+  if (username) { req.username = username; return next(); }
+  res.status(401).json({ error: 'Nicht angemeldet' });
+};
+
+const firmenRouter  = require('./routes/firmen');
+const baulRouter    = require('./routes/baustellen');
+const zeitRouter    = require('./routes/zeiterfassung');
+const finRouter     = require('./routes/finanzen');
+const rechnRouter   = require('./routes/rechnungen');
 const hidriveRouter = require('./routes/hidrive');
 
-const authWrap = (r) => router.use('/api/web', requireWebAuth, r);
-authWrap(firmenRouter);
-authWrap(baulRouter);
-authWrap(zeitRouter);
-authWrap(finRouter);
-authWrap(rechnRouter);
-authWrap(hidriveRouter);
+exceroRouter.use('/api/web', exceroAuth, firmenRouter);
+exceroRouter.use('/api/web', exceroAuth, baulRouter);
+exceroRouter.use('/api/web', exceroAuth, zeitRouter);
+exceroRouter.use('/api/web', exceroAuth, finRouter);
+exceroRouter.use('/api/web', exceroAuth, rechnRouter);
+exceroRouter.use('/api/web', exceroAuth, hidriveRouter);
 
 // ---------- Stundenzettel-PDF (App-Upload bevorzugt, sonst server-seitig erzeugt) ----------
 const { erzeugePdf: erzeugeStundenzettelPdf } = require('./pdf/stundenzettel');
@@ -878,10 +888,10 @@ router.get('/api/web/stundenzettel/pdf', requireWebAuth, async (req, res) => {
   }
 });
 
-// ---------- Rechnungs-PDF ----------
+// ---------- Rechnungs-PDF (Excero-Router) ----------
 const { erzeugePdf: erzeugeRechnungsPdf } = require('./pdf/rechnung');
 
-router.get('/api/web/rechnungen/:id/pdf', requireWebAuth, async (req, res) => {
+exceroRouter.get('/api/web/rechnungen/:id/pdf', exceroAuth, async (req, res) => {
   const { rows: r } = await pool.query(
     `SELECT re.*, f.name AS firma_name, f.adresse AS firma_adresse, f.email AS firma_email,
             f.telefon AS firma_telefon, f.steuernummer, f.ust_id, f.besteuerung, f.ust_satz,
@@ -898,11 +908,11 @@ router.get('/api/web/rechnungen/:id/pdf', requireWebAuth, async (req, res) => {
   res.send(pdf);
 });
 
-// ---------- Rechnungs-E-Mail-Versand ----------
+// ---------- Rechnungs-E-Mail-Versand (Excero-Router) ----------
 let nodemailer = null;
 try { nodemailer = require('nodemailer'); } catch { console.log('nodemailer nicht verfügbar'); }
 
-router.post('/api/web/rechnungen/:id/versenden', requireWebAuth, express.json(), async (req, res) => {
+exceroRouter.post('/api/web/rechnungen/:id/versenden', exceroAuth, express.json(), async (req, res) => {
   if (!nodemailer) return res.status(503).json({ error: 'nodemailer nicht installiert' });
   const id = Number(req.params.id);
   const { rows: r } = await pool.query(
@@ -946,7 +956,7 @@ router.post('/api/web/rechnungen/:id/versenden', requireWebAuth, express.json(),
   res.json({ ok: true });
 });
 
-// ---------- Foto-ZIP-Export ----------
+// ---------- Foto-ZIP-Export (KKH – bleibt im KKH-Router, Fotos sind KKH-Daten) ----------
 let archiver = null;
 try { archiver = require('archiver'); } catch { console.log('archiver nicht verfügbar'); }
 
@@ -1407,17 +1417,62 @@ function nightlyBackup() {
 setInterval(nightlyBackup, 24 * 60 * 60 * 1000);
 setTimeout(nightlyBackup, 60 * 1000);
 
-// ---------- Statische Weboberfläche ----------
-
+// ---------- Statische Weboberfläche KKH ----------
 router.use(express.static(path.join(__dirname, '..', 'public')));
 
+// ---------- Excero-Webapp: eigener Pfad /excero/ ----------
+const EXCERO_PATH = '/excero';
+const exceroPublic = path.join(__dirname, '..', 'public-excero');
+
+// Login für /excero/ – setzt denselben kkh_session Cookie
+exceroRouter.post('/api/login', express.json(), async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'Benutzername und Passwort nötig' });
+  try {
+    const u = await findUser(username);
+    if (!u || !verifyPassword(password, u.password_hash, u.salt)) {
+      return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
+    }
+    const token = signSession(u.username, Date.now() + 12 * 60 * 60 * 1000);
+    res.setHeader('Set-Cookie',
+      `kkh_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`);
+    res.json({ ok: true, username: u.username });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+exceroRouter.post('/api/logout', (req, res) => {
+  res.setHeader('Set-Cookie', `kkh_session=; Path=/; HttpOnly; Max-Age=0`);
+  res.json({ ok: true });
+});
+
+exceroRouter.get('/api/me', (req, res) => {
+  const username = checkSession(parseCookies(req).kkh_session);
+  if (username) return res.json({ username });
+  res.status(401).json({ error: 'Nicht angemeldet' });
+});
+
+// Excero-Frontend (SPA) – statische Dateien + Fallback auf index.html
+if (require('fs').existsSync(exceroPublic)) {
+  exceroRouter.use(express.static(exceroPublic));
+  exceroRouter.get('*', (req, res) => {
+    const idx = path.join(exceroPublic, 'index.html');
+    if (require('fs').existsSync(idx)) res.sendFile(idx);
+    else res.status(404).send('Excero-Frontend noch nicht eingerichtet');
+  });
+}
+
 app.use(BASE_PATH || '/', router);
+app.use(EXCERO_PATH, exceroRouter);
 if (BASE_PATH) app.get(BASE_PATH, (req, res) => res.redirect(`${BASE_PATH}/`));
+app.get(EXCERO_PATH, (req, res) => res.redirect(`${EXCERO_PATH}/`));
 app.get('/', (req, res) => res.redirect(`${BASE_PATH}/`));
 
 init().then(async () => {
   await seedFirstUser();
-  app.listen(PORT, () => console.log(`KKH-Server läuft auf Port ${PORT} unter ${BASE_PATH}/`));
+  app.listen(PORT, () => {
+    console.log(`KKH-Server läuft auf Port ${PORT} unter ${BASE_PATH}/`);
+    console.log(`Excero-Webapp erreichbar unter ${EXCERO_PATH}/`);
+  });
 }).catch((e) => {
   console.error('Start fehlgeschlagen:', e);
   process.exit(1);

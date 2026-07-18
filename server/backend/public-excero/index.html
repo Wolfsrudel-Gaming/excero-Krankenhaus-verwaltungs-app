@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Excero Webapp</title>
+  <link rel="stylesheet" href="style.css?v=100">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%231565C0'/><text x='50' y='72' font-size='62' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>E</text></svg>">
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-view" class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">Excero Webapp</div>
+    <div class="login-sub">Internes Firmensystem · EXCERO GmbH</div>
+    <input type="text" id="l-user" placeholder="Benutzername" autocomplete="username" autocapitalize="none">
+    <input type="password" id="l-pw" placeholder="Passwort" autocomplete="current-password">
+    <button class="btn btn-primary" id="l-btn">Anmelden</button>
+    <div id="l-err" class="login-err" hidden></div>
+    <div style="margin-top:12px;text-align:center;font-size:12px;color:#888">
+      <a href="/kkh/" style="color:#888">→ KKH TV-Wartung</a>
+    </div>
+  </div>
+</div>
+
+<!-- App Shell -->
+<div id="app-shell" hidden>
+  <!-- Topbar -->
+  <div id="topbar">
+    <span class="brand">Excero Webapp</span>
+    <span class="sub" id="topbar-firma">Excero GmbH</span>
+    <span class="spacer"></span>
+    <a href="/kkh/" class="btn btn-ghost btn-sm" style="color:#fff;opacity:.8">KKH ↗</a>
+    <span class="user-info" id="user-chip"></span>
+    <button class="btn btn-ghost btn-sm" id="logout-btn">Abmelden</button>
+  </div>
+
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <div class="nav-section">Rechnungen</div>
+    <div class="nav-item" data-route="rechnungen"><span class="nav-icon">🧾</span>Rechnungen</div>
+    <div class="nav-item" data-route="kunden"><span class="nav-icon">🏢</span>Kunden</div>
+
+    <div class="nav-section">Finanzen</div>
+    <div class="nav-item" data-route="ausgaben"><span class="nav-icon">💸</span>Ausgaben</div>
+    <div class="nav-item" data-route="guv"><span class="nav-icon">📈</span>GuV / Auswertung</div>
+
+    <div class="nav-section">Projekte</div>
+    <div class="nav-item" data-route="baustellen"><span class="nav-icon">🏗️</span>Baustellen</div>
+    <div class="nav-item" data-route="zeiterfassung"><span class="nav-icon">⏱️</span>Zeiterfassung</div>
+
+    <div class="nav-section">Dateien</div>
+    <div class="nav-item" data-route="hidrive"><span class="nav-icon">☁️</span>HiDrive</div>
+
+    <div class="nav-section">System</div>
+    <div class="nav-item" data-route="einstellungen"><span class="nav-icon">⚙️</span>Einstellungen</div>
+    <div class="nav-item" data-route="firma"><span class="nav-icon">🏢</span>Firmenprofil</div>
+  </nav>
+
+  <!-- Content -->
+  <main id="content-area"></main>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-wrap"></div>
+
+<script src="ui.js?v=100"></script>
+<script src="views/rechnungen.js?v=100"></script>
+<script src="views/kunden.js?v=100"></script>
+<script src="views/ausgaben.js?v=100"></script>
+<script src="views/guv.js?v=100"></script>
+<script src="views/baustellen.js?v=100"></script>
+<script src="views/zeiterfassung.js?v=100"></script>
+<script src="views/hidrive.js?v=100"></script>
+<script src="views/einstellungen.js?v=100"></script>
+<script src="views/firma.js?v=100"></script>
+<script src="app.js?v=100"></script>
+</body>
+</html>
