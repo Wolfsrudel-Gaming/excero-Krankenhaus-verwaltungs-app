@@ -289,6 +289,20 @@ router.post('/api/logout', (req, res) => {
 
 router.get('/api/web/me', requireWebAuth, (req, res) => res.json({ ok: true, username: req.username }));
 
+router.patch('/api/web/me/password', requireWebAuth, express.json(), async (req, res) => {
+  const { oldPassword, newPassword } = req.body || {};
+  if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Neues Passwort muss mindestens 6 Zeichen haben' });
+  const user = await findUser(req.username);
+  if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+  if (oldPassword && !verifyPassword(oldPassword, user.password_hash, user.salt)) {
+    return res.status(401).json({ error: 'Aktuelles Passwort falsch' });
+  }
+  const { hash, salt } = hashPassword(newPassword);
+  await pool.query('UPDATE users SET password_hash=$1, salt=$2, updated_at=now() WHERE id=$3',
+    [hash, salt, user.id]);
+  res.json({ ok: true });
+});
+
 // ---------- Benutzerverwaltung (alle angemeldeten Benutzer haben Vollzugriff) ----------
 
 router.get('/api/web/users', requireWebAuth, async (req, res) => {
@@ -782,6 +796,356 @@ router.delete('/api/web/zettel-eintraege', requireWebAuth, async (req, res) => {
     'DELETE FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2 AND mitarbeiter=$3',
     [station, zeitraum, mitarbeiter]);
   res.json({ ok: true });
+});
+
+// ---------- Stundenzettel-PDF (aus App-Upload) ----------
+router.get('/api/web/stundenzettel/pdf', requireWebAuth, (req, res) => {
+  const station = String(req.query.station || '').replace(/[^A-Za-z0-9äöüÄÖÜß_-]/g, '_');
+  const zeitraum = String(req.query.zeitraum || '');
+  if (!station || !zeitraum) return res.status(400).json({ error: 'station + zeitraum nötig' });
+  const rel = `_stundenzettel/Stundenzettel_${station}_${zeitraum}.pdf`;
+  const ziel = safeFilePath(rel);
+  if (!ziel || !fs.existsSync(ziel)) return res.status(404).json({ error: 'PDF noch nicht hochgeladen' });
+  res.sendFile(ziel, { headers: { 'Content-Disposition': `inline; filename="Stundenzettel_${station}_${zeitraum}.pdf"` } });
+});
+
+// ---------- Lager-Modul ----------
+
+// Lieferanten
+router.get('/api/web/lieferanten', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM lieferanten ORDER BY name');
+  res.json({ lieferanten: rows });
+});
+router.post('/api/web/lieferanten', requireWebAuth, express.json(), async (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name ist Pflicht' });
+  const { rows } = await pool.query(
+    `INSERT INTO lieferanten (name, kontakt, telefon, email, kundennummer, notiz)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [name, b.kontakt || '', b.telefon || '', b.email || '', b.kundennummer || '', b.notiz || '']);
+  res.json({ ok: true, lieferant: rows[0] });
+});
+router.patch('/api/web/lieferanten/:id', requireWebAuth, express.json(), async (req, res) => {
+  const id = Number(req.params.id);
+  const b = req.body || {};
+  const felder = [], werte = [];
+  const add = (k, v) => { felder.push(`${k}=$${felder.length + 1}`); werte.push(v); };
+  if (b.name !== undefined) add('name', String(b.name).trim());
+  if (b.kontakt !== undefined) add('kontakt', String(b.kontakt));
+  if (b.telefon !== undefined) add('telefon', String(b.telefon));
+  if (b.email !== undefined) add('email', String(b.email));
+  if (b.kundennummer !== undefined) add('kundennummer', String(b.kundennummer));
+  if (b.notiz !== undefined) add('notiz', String(b.notiz));
+  if (b.aktiv !== undefined) add('aktiv', !!b.aktiv);
+  if (!felder.length) return res.status(400).json({ error: 'Nichts zum Aktualisieren' });
+  werte.push(id);
+  await pool.query(`UPDATE lieferanten SET ${felder.join(',')} WHERE id=$${werte.length}`, werte);
+  res.json({ ok: true });
+});
+router.delete('/api/web/lieferanten/:id', requireWebAuth, async (req, res) => {
+  await pool.query('UPDATE lieferanten SET aktiv=FALSE WHERE id=$1', [Number(req.params.id)]);
+  res.json({ ok: true });
+});
+
+// Lager-Artikel
+router.get('/api/web/lager/artikel', requireWebAuth, async (req, res) => {
+  const nurWarn = req.query.nachbestellung === '1';
+  const q = String(req.query.suche || '');
+  const kat = String(req.query.kategorie || '');
+  let sql = `SELECT a.*, l.name AS lieferant_name
+             FROM lager_artikel a LEFT JOIN lieferanten l ON l.id = a.lieferant_id
+             WHERE a.aktiv = TRUE`;
+  const werte = [];
+  if (nurWarn) { werte.push(0); sql += ` AND a.bestand <= a.mindestbestand`; }
+  if (q) { werte.push(`%${q}%`); sql += ` AND (a.bezeichnung ILIKE $${werte.length} OR a.artikelnummer ILIKE $${werte.length})`; }
+  if (kat) { werte.push(kat); sql += ` AND a.kategorie = $${werte.length}`; }
+  sql += ' ORDER BY a.kategorie, a.bezeichnung';
+  const { rows } = await pool.query(sql, werte);
+  const { rows: kats } = await pool.query(
+    `SELECT DISTINCT kategorie FROM lager_artikel WHERE aktiv=TRUE AND kategorie!='' ORDER BY kategorie`);
+  res.json({ artikel: rows, kategorien: kats.map((r) => r.kategorie) });
+});
+router.post('/api/web/lager/artikel', requireWebAuth, express.json(), async (req, res) => {
+  const b = req.body || {};
+  const bez = String(b.bezeichnung || '').trim();
+  if (!bez) return res.status(400).json({ error: 'Bezeichnung ist Pflicht' });
+  const { rows } = await pool.query(
+    `INSERT INTO lager_artikel
+       (bezeichnung, artikelnummer, kategorie, einheit, ek_preis, vk_preis,
+        bestand, mindestbestand, lieferant_id, app_material_name, notiz)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [bez, b.artikelnummer || '', b.kategorie || '', b.einheit || 'Stk.',
+     b.ek_preis || null, b.vk_preis || null,
+     Number(b.bestand) || 0, Number(b.mindestbestand) || 0,
+     b.lieferant_id || null, b.app_material_name || '', b.notiz || '']);
+  res.json({ ok: true, artikel: rows[0] });
+});
+router.patch('/api/web/lager/artikel/:id', requireWebAuth, express.json(), async (req, res) => {
+  const id = Number(req.params.id);
+  const b = req.body || {};
+  const felder = [], werte = [];
+  const add = (k, v) => { felder.push(`${k}=$${felder.length + 1}`); werte.push(v); };
+  if (b.bezeichnung !== undefined) add('bezeichnung', String(b.bezeichnung).trim());
+  if (b.artikelnummer !== undefined) add('artikelnummer', String(b.artikelnummer));
+  if (b.kategorie !== undefined) add('kategorie', String(b.kategorie));
+  if (b.einheit !== undefined) add('einheit', String(b.einheit));
+  if (b.ek_preis !== undefined) add('ek_preis', b.ek_preis === '' ? null : Number(b.ek_preis));
+  if (b.vk_preis !== undefined) add('vk_preis', b.vk_preis === '' ? null : Number(b.vk_preis));
+  if (b.mindestbestand !== undefined) add('mindestbestand', Number(b.mindestbestand) || 0);
+  if (b.lieferant_id !== undefined) add('lieferant_id', b.lieferant_id || null);
+  if (b.app_material_name !== undefined) add('app_material_name', String(b.app_material_name));
+  if (b.notiz !== undefined) add('notiz', String(b.notiz));
+  if (b.aktiv !== undefined) add('aktiv', !!b.aktiv);
+  add('updated_at', new Date().toISOString());
+  if (felder.length < 2) return res.status(400).json({ error: 'Nichts zum Aktualisieren' });
+  werte.push(id);
+  await pool.query(`UPDATE lager_artikel SET ${felder.join(',')} WHERE id=$${werte.length}`, werte);
+  res.json({ ok: true });
+});
+router.delete('/api/web/lager/artikel/:id', requireWebAuth, async (req, res) => {
+  await pool.query('UPDATE lager_artikel SET aktiv=FALSE WHERE id=$1', [Number(req.params.id)]);
+  res.json({ ok: true });
+});
+
+// Buchungen (Ein-/Ausgang / Korrektur)
+router.get('/api/web/lager/buchungen', requireWebAuth, async (req, res) => {
+  const artikelId = req.query.artikel_id ? Number(req.query.artikel_id) : null;
+  const von = String(req.query.von || '');
+  const bis = String(req.query.bis || '');
+  const limit = Math.min(Number(req.query.limit || 200), 2000);
+  let sql = `SELECT b.*, a.bezeichnung, a.einheit
+             FROM lager_buchungen b JOIN lager_artikel a ON a.id = b.artikel_id WHERE 1=1`;
+  const werte = [];
+  if (artikelId) { werte.push(artikelId); sql += ` AND b.artikel_id=$${werte.length}`; }
+  if (von) { werte.push(von + 'T00:00:00'); sql += ` AND b.zeitpunkt >= $${werte.length}::timestamptz`; }
+  if (bis) { werte.push(bis + 'T23:59:59'); sql += ` AND b.zeitpunkt <= $${werte.length}::timestamptz`; }
+  sql += ` ORDER BY b.zeitpunkt DESC LIMIT $${werte.length + 1}`;
+  werte.push(limit);
+  const { rows } = await pool.query(sql, werte);
+  res.json({ buchungen: rows });
+});
+
+router.post('/api/web/lager/buchung', requireWebAuth, express.json(), async (req, res) => {
+  const b = req.body || {};
+  const artikelId = Number(b.artikel_id);
+  const typ = String(b.typ || '');
+  const menge = Number(b.menge);
+  if (!artikelId || !['eingang', 'ausgang', 'korrektur'].includes(typ) || !(menge > 0)) {
+    return res.status(400).json({ error: 'artikel_id, typ (eingang/ausgang/korrektur), menge > 0 nötig' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const delta = typ === 'ausgang' ? -menge : menge;
+    if (typ === 'korrektur') {
+      await client.query('UPDATE lager_artikel SET bestand=$1, updated_at=now() WHERE id=$2',
+        [menge, artikelId]);
+    } else {
+      await client.query('UPDATE lager_artikel SET bestand=bestand+$1, updated_at=now() WHERE id=$2',
+        [delta, artikelId]);
+    }
+    const { rows } = await client.query(
+      `INSERT INTO lager_buchungen (artikel_id, typ, menge, ek_preis, grund, bezug, benutzer)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [artikelId, typ, menge, b.ek_preis || null, b.grund || '', b.bezug || '',
+       req.username || '']);
+    await client.query('COMMIT');
+    res.json({ ok: true, buchung: rows[0] });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally { client.release(); }
+});
+
+// Verbrauchsauswertung aus Prüfungen
+router.get('/api/web/lager/verbrauch', requireWebAuth, async (req, res) => {
+  const von = String(req.query.von || new Date(Date.now() - 30 * 86400e3).toISOString().slice(0, 10));
+  const bis = String(req.query.bis || new Date().toISOString().slice(0, 10));
+  const station = String(req.query.station || '');
+  let sql = `
+    SELECT r.station,
+           elem.value AS material,
+           COUNT(*)::int AS anzahl,
+           a.ek_preis,
+           ROUND((a.ek_preis * COUNT(*))::numeric, 2) AS gesamt_ek
+    FROM inspections i
+    JOIN rooms r ON r.id = i.room_id
+    CROSS JOIN LATERAL jsonb_array_elements_text(i.daten->'arbeiten') AS elem(value)
+    LEFT JOIN lager_artikel a ON lower(a.bezeichnung) = lower(elem.value) AND a.aktiv = TRUE
+    WHERE COALESCE(i.geloescht, FALSE) = FALSE
+      AND i.datum >= $1 AND i.datum <= $2`;
+  const werte = [von, bis];
+  if (station) { werte.push(station); sql += ` AND r.station = $${werte.length}`; }
+  sql += ` GROUP BY r.station, elem.value, a.ek_preis ORDER BY r.station, anzahl DESC`;
+  const { rows } = await pool.query(sql, werte);
+  res.json({ verbrauch: rows, von, bis });
+});
+
+// Nachbestellungsliste
+router.get('/api/web/lager/nachbestellung', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT a.*, l.name AS lieferant_name
+     FROM lager_artikel a LEFT JOIN lieferanten l ON l.id = a.lieferant_id
+     WHERE a.aktiv = TRUE AND a.mindestbestand > 0 AND a.bestand <= a.mindestbestand
+     ORDER BY (a.bestand - a.mindestbestand) ASC, a.bezeichnung`);
+  res.json({ artikel: rows, anzahl: rows.length });
+});
+
+// ---------- Export (XLSX / CSV) ----------
+let ExcelJS = null;
+try { ExcelJS = require('exceljs'); } catch { console.log('exceljs nicht verfügbar'); }
+
+async function sendeXlsx(res, dateiname, sheets) {
+  if (!ExcelJS) return res.status(503).json({ error: 'exceljs nicht installiert' });
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'KKH TV-Wartung';
+  wb.created = new Date();
+  for (const { name, columns, rows } of sheets) {
+    const ws = wb.addWorksheet(name);
+    ws.columns = columns.map((c) => ({
+      header: c.header, key: c.key,
+      width: c.width || 18,
+      style: c.numFmt ? { numFmt: c.numFmt } : {},
+    }));
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2EF' } };
+    ws.getRow(1).border = { bottom: { style: 'thin' } };
+    rows.forEach((r, i) => {
+      const row = ws.addRow(r);
+      if (i % 2 === 0) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4F8F6' } };
+    });
+  }
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${dateiname}"`);
+  await wb.xlsx.write(res);
+  res.end();
+}
+
+function sendeCsv(res, dateiname, headers, rows) {
+  const csvEsc = (v) => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.map(csvEsc).join(',')];
+  rows.forEach((r) => lines.push(r.map(csvEsc).join(',')));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${dateiname}"`);
+  res.send('\uFEFF' + lines.join('\r\n'));
+}
+
+router.get('/api/web/export/zimmer.:fmt', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM rooms ORDER BY station, zimmer');
+  const headers = ['Station','Zimmer','TV-Typ','Seriennummer','Freenet-ID','Gültig bis','Letzte Prüfung','Inaktiv'];
+  const dataRows = rows.map((r) => [r.station, r.zimmer, r.tv_typ, r.seriennummer, r.freenet_id,
+    r.gueltig_bis, r.letzte_pruefung, r.inaktiv ? 'Ja' : '']);
+  if (req.params.fmt === 'csv') return sendeCsv(res, 'KKH-Zimmer.csv', headers, dataRows);
+  await sendeXlsx(res, 'KKH-Zimmer.xlsx', [{ name: 'Zimmer',
+    columns: headers.map((h, i) => ({ header: h, key: String(i), width: 18 })),
+    rows: dataRows }]);
+});
+
+router.get('/api/web/export/pruefungen.:fmt', requireWebAuth, async (req, res) => {
+  const von = req.query.von || '';
+  const bis = req.query.bis || '';
+  let sql = `SELECT i.datum, r.station, r.zimmer, i.mitarbeiter,
+    i.daten->>'bemerkungen' AS bemerkungen,
+    i.daten->'arbeiten' AS arbeiten, i.daten->'punkte' AS punkte
+    FROM inspections i LEFT JOIN rooms r ON r.id=i.room_id
+    WHERE COALESCE(i.geloescht,FALSE)=FALSE`;
+  const werte = [];
+  if (von) { werte.push(von); sql += ` AND i.datum>=$${werte.length}`; }
+  if (bis) { werte.push(bis); sql += ` AND i.datum<=$${werte.length}`; }
+  sql += ' ORDER BY i.datum DESC, r.station, r.zimmer';
+  const { rows } = await pool.query(sql, werte);
+  const headers = ['Datum','Station','Zimmer','Prüfer','Arbeiten','Bemerkungen'];
+  const dataRows = rows.map((r) => [r.datum, r.station, r.zimmer, r.mitarbeiter,
+    (r.arbeiten || []).join(', '), r.bemerkungen || '']);
+  if (req.params.fmt === 'csv') return sendeCsv(res, 'KKH-Pruefungen.csv', headers, dataRows);
+  await sendeXlsx(res, 'KKH-Pruefungen.xlsx', [{ name: 'Prüfungen',
+    columns: headers.map((h, i) => ({ header: h, key: String(i), width: i < 2 ? 14 : 20 })),
+    rows: dataRows }]);
+});
+
+router.get('/api/web/export/stundenzettel.:fmt', requireWebAuth, async (req, res) => {
+  const { rows: zRows } = await pool.query('SELECT * FROM stundenzettel ORDER BY zeitraum_start DESC, station');
+  const { rows: eRows } = await pool.query('SELECT * FROM zettel_eintraege ORDER BY station, zeitraum_start, mitarbeiter');
+  const zHeaders = ['Auftragsnummer','Station','Zeitraum ab','Datum','Stunden','Anfahrt','Techniker'];
+  const zData = zRows.map((r) => [r.auftragsnummer, r.station, r.zeitraum_start, r.datum, r.stunden, r.anfahrt, r.techniker]);
+  const eHeaders = ['Station','Zeitraum ab','Mitarbeiter','Stunden','Anfahrt'];
+  const eData = eRows.map((r) => [r.station, r.zeitraum_start, r.mitarbeiter, r.stunden, r.anfahrt]);
+  if (req.params.fmt === 'csv') return sendeCsv(res, 'KKH-Stundenzettel.csv', zHeaders, zData);
+  await sendeXlsx(res, 'KKH-Stundenzettel.xlsx', [
+    { name: 'Stundenzettel', columns: zHeaders.map((h, i) => ({ header: h, key: String(i), width: 18 })), rows: zData },
+    { name: 'Team-Einträge', columns: eHeaders.map((h, i) => ({ header: h, key: String(i), width: 18 })), rows: eData },
+  ]);
+});
+
+router.get('/api/web/export/abrechnung.:fmt', requireWebAuth, async (req, res) => {
+  const von = req.query.von || new Date(Date.now() - 30 * 86400e3).toISOString().slice(0, 10);
+  const bis = req.query.bis || new Date().toISOString().slice(0, 10);
+  // Prüfungen mit Arbeiten im Zeitraum
+  const { rows } = await pool.query(
+    `SELECT i.datum, r.station, r.zimmer, i.mitarbeiter AS pruefer,
+            elem.value AS material, COUNT(*)::int AS anzahl,
+            a.vk_preis, ROUND((a.vk_preis * COUNT(*))::numeric, 2) AS gesamt_vk
+     FROM inspections i
+     JOIN rooms r ON r.id = i.room_id
+     CROSS JOIN LATERAL jsonb_array_elements_text(i.daten->'arbeiten') AS elem(value)
+     LEFT JOIN lager_artikel a ON lower(a.bezeichnung)=lower(elem.value) AND a.aktiv=TRUE
+     WHERE COALESCE(i.geloescht,FALSE)=FALSE AND i.datum>=$1 AND i.datum<=$2
+     GROUP BY i.datum, r.station, r.zimmer, i.mitarbeiter, elem.value, a.vk_preis
+     ORDER BY r.station, i.datum, r.zimmer`, [von, bis]);
+  // Stundenzettel im Zeitraum
+  const { rows: zRows } = await pool.query(
+    `SELECT station, auftragsnummer, datum, stunden, anfahrt, techniker
+     FROM stundenzettel WHERE zeitraum_start>=$1 AND zeitraum_start<=$2 ORDER BY station`, [von, bis]);
+  const headers = ['Datum','Station','Zimmer','Prüfer','Material/Arbeit','Anzahl','VK-Preis','Gesamt VK'];
+  const dataRows = rows.map((r) => [r.datum, r.station, r.zimmer, r.pruefer,
+    r.material, r.anzahl, r.vk_preis ?? '', r.gesamt_vk ?? '']);
+  const zHeaders = ['Station','Auftragsnummer','Datum','Stunden','Anfahrt','Techniker'];
+  const zData = zRows.map((r) => [r.station, r.auftragsnummer, r.datum, r.stunden, r.anfahrt, r.techniker]);
+  if (req.params.fmt === 'csv') return sendeCsv(res, `KKH-Abrechnung_${von}_${bis}.csv`, headers, dataRows);
+  await sendeXlsx(res, `KKH-Abrechnung_${von}_${bis}.xlsx`, [
+    { name: 'Material-Abrechnung', columns: headers.map((h, i) => ({ header: h, key: String(i), width: 20 })), rows: dataRows },
+    { name: 'Stundenzettel', columns: zHeaders.map((h, i) => ({ header: h, key: String(i), width: 18 })), rows: zData },
+  ]);
+});
+
+router.get('/api/web/export/lager-artikel.:fmt', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT a.bezeichnung, a.artikelnummer, a.kategorie, a.einheit, a.ek_preis, a.vk_preis,
+            a.bestand, a.mindestbestand, l.name AS lieferant, a.app_material_name, a.notiz
+     FROM lager_artikel a LEFT JOIN lieferanten l ON l.id=a.lieferant_id
+     WHERE a.aktiv=TRUE ORDER BY a.kategorie, a.bezeichnung`);
+  const headers = ['Bezeichnung','Artikelnummer','Kategorie','Einheit','EK-Preis','VK-Preis','Bestand','Mindestbestand','Lieferant','App-Material','Notiz'];
+  const dataRows = rows.map((r) => [r.bezeichnung, r.artikelnummer, r.kategorie, r.einheit,
+    r.ek_preis, r.vk_preis, r.bestand, r.mindestbestand, r.lieferant || '', r.app_material_name, r.notiz]);
+  if (req.params.fmt === 'csv') return sendeCsv(res, 'KKH-Lager.csv', headers, dataRows);
+  await sendeXlsx(res, 'KKH-Lager.xlsx', [{ name: 'Artikel',
+    columns: headers.map((h, i) => ({ header: h, key: String(i), width: 20,
+      numFmt: (i === 4 || i === 5) ? '#,##0.00 €' : undefined })),
+    rows: dataRows }]);
+});
+
+router.get('/api/web/export/buchungen.:fmt', requireWebAuth, async (req, res) => {
+  const von = req.query.von || '';
+  const bis = req.query.bis || '';
+  let sql = `SELECT b.zeitpunkt, a.bezeichnung, b.typ, b.menge, a.einheit,
+             b.ek_preis, b.grund, b.bezug, b.benutzer
+             FROM lager_buchungen b JOIN lager_artikel a ON a.id=b.artikel_id WHERE 1=1`;
+  const werte = [];
+  if (von) { werte.push(von + 'T00:00:00'); sql += ` AND b.zeitpunkt>=$${werte.length}::timestamptz`; }
+  if (bis) { werte.push(bis + 'T23:59:59'); sql += ` AND b.zeitpunkt<=$${werte.length}::timestamptz`; }
+  sql += ' ORDER BY b.zeitpunkt DESC';
+  const { rows } = await pool.query(sql, werte);
+  const headers = ['Zeitpunkt','Artikel','Typ','Menge','Einheit','EK-Preis','Grund','Bezug','Benutzer'];
+  const dataRows = rows.map((r) => [r.zeitpunkt.toISOString().slice(0, 16).replace('T', ' '),
+    r.bezeichnung, r.typ, r.menge, r.einheit, r.ek_preis ?? '', r.grund, r.bezug, r.benutzer]);
+  if (req.params.fmt === 'csv') return sendeCsv(res, 'KKH-Buchungen.csv', headers, dataRows);
+  await sendeXlsx(res, 'KKH-Buchungen.xlsx', [{ name: 'Buchungen',
+    columns: headers.map((h, i) => ({ header: h, key: String(i), width: 20 })),
+    rows: dataRows }]);
 });
 
 // ---------- App-Updater ----------

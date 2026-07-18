@@ -4,47 +4,74 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KKH TV-Wartung – Verwaltung</title>
-  <link rel="stylesheet" href="style.css?v=190">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%2300695C'/><rect x='20' y='28' width='60' height='38' rx='5' fill='white'/><path d='M35 45l8 8 18-16' stroke='%2300695C' stroke-width='7' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="style.css?v=200">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%2300695C'/><rect x='18' y='24' width='64' height='42' rx='5' fill='white'/><path d='M32 43l9 9 20-18' stroke='%2300695C' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 </head>
 <body>
-  <div id="app">
-    <!-- Login -->
-    <div id="login-view" class="login-wrap" hidden>
-      <div class="login-card">
-        <div class="login-logo">KKH TV-Wartung</div>
-        <div class="login-sub">Verwaltung · Kinderkrankenhaus Köln · EXCERO GmbH</div>
-        <input type="text" id="login-user" placeholder="Benutzername" autocomplete="username" autocapitalize="none">
-        <input type="password" id="login-pw" placeholder="Passwort" autocomplete="current-password">
-        <button class="btn primary" id="login-btn">Anmelden</button>
-        <div id="login-fehler" class="fehler" hidden></div>
-      </div>
-    </div>
 
-    <!-- Hauptansicht -->
-    <div id="main-view" hidden>
-      <header class="topbar">
-        <div class="topbar-title">
-          <span class="topbar-logo">KKH TV-Wartung</span>
-          <span class="topbar-sub">Kinderkrankenhaus Köln, Amsterdamer Straße</span>
-        </div>
-        <nav class="topnav">
-          <a href="#/dashboard" data-nav="dashboard">Dashboard</a>
-          <a href="#/zimmer" data-nav="zimmer">Zimmer</a>
-          <a href="#/pruefungen" data-nav="pruefungen">Prüfungen</a>
-          <a href="#/stundenzettel" data-nav="stundenzettel">Stundenzettel</a>
-          <a href="#/mitarbeiter" data-nav="mitarbeiter">Mitarbeiter</a>
-          <a href="#/benutzer" data-nav="benutzer">Benutzer</a>
-        </nav>
-        <div class="topbar-user">
-          <span id="aktueller-benutzer" class="benutzer-chip"></span>
-          <button class="btn ghost klein" id="pw-aendern-btn">Passwort ändern</button>
-          <button class="btn ghost" id="logout-btn">Abmelden</button>
-        </div>
-      </header>
-      <main id="content"></main>
-    </div>
+<!-- Login -->
+<div id="login-view" class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">KKH TV-Wartung</div>
+    <div class="login-sub">Verwaltung · Kinderkrankenhaus Köln · EXCERO GmbH</div>
+    <input type="text" id="l-user" placeholder="Benutzername" autocomplete="username" autocapitalize="none">
+    <input type="password" id="l-pw" placeholder="Passwort" autocomplete="current-password">
+    <button class="btn btn-primary" id="l-btn">Anmelden</button>
+    <div id="l-err" class="login-err" hidden></div>
   </div>
-  <script src="app.js?v=190"></script>
+</div>
+
+<!-- App Shell -->
+<div id="app-shell" hidden>
+  <!-- Topbar -->
+  <div id="topbar">
+    <span class="brand">KKH TV-Wartung</span>
+    <span class="sub">Kinderkrankenhaus Köln, Amsterdamer Straße</span>
+    <span class="spacer"></span>
+    <span class="user-info" id="user-chip"></span>
+    <button class="btn btn-ghost btn-sm" id="pw-btn">Passwort</button>
+    <button class="btn btn-ghost btn-sm" id="logout-btn">Abmelden</button>
+  </div>
+
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <div class="nav-section">Übersicht</div>
+    <div class="nav-item" data-route="dashboard"><span class="nav-icon">📊</span>Dashboard</div>
+
+    <div class="nav-section">Wartung</div>
+    <div class="nav-item" data-route="zimmer"><span class="nav-icon">🏥</span>Zimmer</div>
+    <div class="nav-item" data-route="pruefungen"><span class="nav-icon">✅</span>Prüfungen</div>
+    <div class="nav-item" data-route="stundenzettel"><span class="nav-icon">🕐</span>Stundenzettel</div>
+    <div class="nav-item" data-route="mitarbeiter"><span class="nav-icon">👤</span>Mitarbeiter</div>
+
+    <div class="nav-section">Lager</div>
+    <div class="nav-item" data-route="lager-artikel"><span class="nav-icon">📦</span>Artikel</div>
+    <div class="nav-item" data-route="lager-buchungen"><span class="nav-icon">📋</span>Buchungen</div>
+    <div class="nav-item" data-route="lager-verbrauch"><span class="nav-icon">📉</span>Verbrauch</div>
+    <div class="nav-item" data-route="lager-nachbestellung"><span class="nav-icon">⚠️</span>Nachbestellung<span class="nav-badge" id="nb-badge" hidden>!</span></div>
+    <div class="nav-item" data-route="lieferanten"><span class="nav-icon">🚚</span>Lieferanten</div>
+
+    <div class="nav-section">Auswertung</div>
+    <div class="nav-item" data-route="abrechnung"><span class="nav-icon">💶</span>Abrechnung</div>
+
+    <div class="nav-section">System</div>
+    <div class="nav-item" data-route="benutzer"><span class="nav-icon">🔐</span>Benutzer</div>
+  </nav>
+
+  <!-- Content -->
+  <main id="content-area"></main>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-wrap"></div>
+
+<script src="ui.js?v=200"></script>
+<script src="views/dashboard.js?v=200"></script>
+<script src="views/zimmer.js?v=200"></script>
+<script src="views/pruefungen.js?v=200"></script>
+<script src="views/stundenzettel.js?v=200"></script>
+<script src="views/lager.js?v=200"></script>
+<script src="views/benutzer.js?v=200"></script>
+<script src="app.js?v=200"></script>
 </body>
 </html>
