@@ -150,6 +150,12 @@ tr.klickbar:hover td { background: var(--teal-light); }
 .fehler { color: var(--err); font-size: 13px; }
 .hinweis { color: var(--muted); font-size: 13px; }
 
+/* ---- Stundenzettel ---- */
+.klein-input { width: 100%; max-width: 120px; padding: 7px 10px;
+  border: 1px solid #cdd7d3; border-radius: 8px; }
+select { padding: 10px 12px; border: 1px solid #cdd7d3; border-radius: 8px; background: #fff; }
+tr.summenzeile td { border-top: 2px solid var(--teal-light); background: #f7fbfa; }
+
 @media (max-width: 760px) {
   .topbar { flex-wrap: wrap; height: auto; padding: 10px 14px; }
   .topnav { order: 3; width: 100%; overflow-x: auto; }

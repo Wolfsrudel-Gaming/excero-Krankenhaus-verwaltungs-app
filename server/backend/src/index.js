@@ -239,6 +239,19 @@ router.post('/api/sync/stundenzettel', requireApiKey, express.json({ limit: '10m
   res.json({ uebernommen });
 });
 
+// Pull für die App (Web-Edits erreichen so alle Geräte, LWW über updatedAt)
+router.get('/api/sync/stundenzettel', requireApiKey, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM stundenzettel');
+  res.json({
+    zettel: rows.map((z) => ({
+      station: z.station, zeitraumStart: z.zeitraum_start,
+      auftragsnummer: z.auftragsnummer, datum: z.datum,
+      stunden: z.stunden, anfahrt: z.anfahrt, techniker: z.techniker,
+      updatedAt: z.updated_at,
+    })),
+  });
+});
+
 router.get('/api/sync/files', requireApiKey, (req, res) => {
   res.json({ files: listFiles(FILES_DIR, FILES_DIR) });
 });
@@ -469,7 +482,120 @@ router.get('/api/web/inspections', requireWebAuth, async (req, res) => {
 router.get('/api/web/stundenzettel', requireWebAuth, async (req, res) => {
   const { rows } = await pool.query(
     'SELECT * FROM stundenzettel ORDER BY zeitraum_start DESC, station');
-  res.json({ zettel: rows });
+  // Team-Summen je Zettel (für die Listenansicht)
+  const { rows: eintraege } = await pool.query('SELECT * FROM zettel_eintraege');
+  const summen = {};
+  for (const e of eintraege) {
+    const key = `${e.station}|${e.zeitraum_start}`;
+    if (!summen[key]) summen[key] = { anzahl: 0, stunden: 0, anfahrt: 0 };
+    summen[key].anzahl++;
+    const parseStd = (s) => Number(String(s || '').replace(',', '.')) || 0;
+    summen[key].stunden += parseStd(e.stunden);
+    summen[key].anfahrt += parseStd(e.anfahrt);
+  }
+  res.json({
+    zettel: rows.map((z) => ({
+      ...z,
+      team: summen[`${z.station}|${z.zeitraum_start}`] || { anzahl: 0, stunden: 0, anfahrt: 0 },
+    })),
+  });
+});
+
+// Nächste freie Auftragsnummer (A-JJJJ-NNNN)
+router.get('/api/web/stundenzettel/next-nr', requireWebAuth, async (req, res) => {
+  const jahr = new Date().getFullYear();
+  const { rows } = await pool.query(
+    `SELECT auftragsnummer FROM stundenzettel
+     WHERE auftragsnummer LIKE $1 ORDER BY auftragsnummer DESC LIMIT 1`,
+    [`A-${jahr}-%`]);
+  let nr = 1;
+  if (rows[0]) {
+    const m = /A-\d{4}-(\d+)/.exec(rows[0].auftragsnummer || '');
+    if (m) nr = Number(m[1]) + 1;
+  }
+  res.json({ auftragsnummer: `A-${jahr}-${String(nr).padStart(4, '0')}` });
+});
+
+// Detail: Header + Team-Zeilen + Prüfungen der Station im Zeitraum
+router.get('/api/web/stundenzettel/detail', requireWebAuth, async (req, res) => {
+  const station = String(req.query.station || '');
+  const zeitraum = String(req.query.zeitraum || '');
+  if (!station || !zeitraum) return res.status(400).json({ error: 'station und zeitraum nötig' });
+  const { rows } = await pool.query(
+    'SELECT * FROM stundenzettel WHERE station=$1 AND zeitraum_start=$2', [station, zeitraum]);
+  if (!rows[0]) return res.status(404).json({ error: 'Stundenzettel nicht gefunden' });
+  const { rows: eintraege } = await pool.query(
+    `SELECT * FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2
+     ORDER BY mitarbeiter`, [station, zeitraum]);
+  // Nächster Zettel derselben Station begrenzt den Zeitraum
+  const { rows: naechste } = await pool.query(
+    `SELECT zeitraum_start FROM stundenzettel
+     WHERE station=$1 AND zeitraum_start > $2 ORDER BY zeitraum_start LIMIT 1`,
+    [station, zeitraum]);
+  const ende = naechste[0]?.zeitraum_start || null;
+  const { rows: inspections } = ende
+    ? await pool.query(
+        `SELECT i.uuid, i.room_id, i.datum, i.daten, i.mitarbeiter, r.zimmer
+         FROM inspections i LEFT JOIN rooms r ON r.id = i.room_id
+         WHERE r.station=$1 AND i.datum >= $2 AND i.datum < $3
+           AND COALESCE(i.geloescht, FALSE) = FALSE
+         ORDER BY i.datum, r.zimmer`, [station, zeitraum, ende])
+    : await pool.query(
+        `SELECT i.uuid, i.room_id, i.datum, i.daten, i.mitarbeiter, r.zimmer
+         FROM inspections i LEFT JOIN rooms r ON r.id = i.room_id
+         WHERE r.station=$1 AND i.datum >= $2
+           AND COALESCE(i.geloescht, FALSE) = FALSE
+         ORDER BY i.datum, r.zimmer`, [station, zeitraum]);
+  const { rows: mitarbeiter } = await pool.query(
+    'SELECT * FROM mitarbeiter WHERE aktiv = TRUE ORDER BY name');
+  res.json({
+    zettel: rows[0],
+    eintraege,
+    mitarbeiter,
+    zeitraumEnde: ende,
+    inspections: inspections.map((i) => ({
+      uuid: i.uuid, roomId: i.room_id, zimmer: i.zimmer, datum: i.datum,
+      mitarbeiter: i.mitarbeiter || '',
+      arbeiten: (i.daten || {}).arbeiten || [],
+      bemerkungen: (i.daten || {}).bemerkungen || '',
+    })),
+  });
+});
+
+// Anlegen / Speichern (Web) – setzt updated_at neu (gewinnt gegen ältere App-Stände)
+router.put('/api/web/stundenzettel', requireWebAuth, express.json(), async (req, res) => {
+  const b = req.body || {};
+  const station = String(b.station || '').trim();
+  const zeitraum = String(b.zeitraum_start || b.zeitraumStart || '').trim();
+  if (!station || !zeitraum) {
+    return res.status(400).json({ error: 'Station und Zeitraum-Beginn sind Pflicht' });
+  }
+  const updatedAt = nowIso();
+  await pool.query(
+    `INSERT INTO stundenzettel (station, zeitraum_start, auftragsnummer, datum,
+                                stunden, anfahrt, techniker, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (station, zeitraum_start) DO UPDATE SET
+       auftragsnummer=EXCLUDED.auftragsnummer, datum=EXCLUDED.datum,
+       stunden=EXCLUDED.stunden, anfahrt=EXCLUDED.anfahrt,
+       techniker=EXCLUDED.techniker, updated_at=EXCLUDED.updated_at`,
+    [station, zeitraum, String(b.auftragsnummer || '').trim(),
+     String(b.datum || '').trim(), String(b.stunden || '').trim(),
+     String(b.anfahrt || '').trim(), String(b.techniker || '').trim(), updatedAt]);
+  const { rows } = await pool.query(
+    'SELECT * FROM stundenzettel WHERE station=$1 AND zeitraum_start=$2', [station, zeitraum]);
+  res.json({ ok: true, zettel: rows[0] });
+});
+
+router.delete('/api/web/stundenzettel', requireWebAuth, async (req, res) => {
+  const station = String(req.query.station || '');
+  const zeitraum = String(req.query.zeitraum || '');
+  if (!station || !zeitraum) return res.status(400).json({ error: 'station und zeitraum nötig' });
+  await pool.query('DELETE FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2',
+    [station, zeitraum]);
+  await pool.query('DELETE FROM stundenzettel WHERE station=$1 AND zeitraum_start=$2',
+    [station, zeitraum]);
+  res.json({ ok: true });
 });
 
 router.get('/api/web/file', requireWebAuth, (req, res) => {
@@ -616,6 +742,46 @@ router.patch('/api/web/mitarbeiter/:name', requireWebAuth, express.json(), async
 router.get('/api/web/zettel-eintraege', requireWebAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM zettel_eintraege ORDER BY zeitraum_start DESC, station');
   res.json({ eintraege: rows });
+});
+
+// Team-Zeile speichern (Web) – LWW mit frischem updated_at
+router.put('/api/web/zettel-eintraege', requireWebAuth, express.json(), async (req, res) => {
+  const liste = Array.isArray(req.body.eintraege) ? req.body.eintraege : [req.body];
+  let gespeichert = 0;
+  const updatedAt = nowIso();
+  for (const e of liste) {
+    const station = String(e.station || '').trim();
+    const zeitraum = String(e.zeitraum_start || e.zeitraumStart || '').trim();
+    const mitarbeiter = String(e.mitarbeiter || '').trim();
+    if (!station || !zeitraum || !mitarbeiter) continue;
+    // Zettel-Header sicherstellen (falls nur Team-Zeile angelegt wird)
+    await pool.query(
+      `INSERT INTO stundenzettel (station, zeitraum_start, updated_at)
+       VALUES ($1,$2,$3) ON CONFLICT (station, zeitraum_start) DO NOTHING`,
+      [station, zeitraum, updatedAt]);
+    await pool.query(
+      `INSERT INTO zettel_eintraege (station, zeitraum_start, mitarbeiter, stunden, anfahrt, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (station, zeitraum_start, mitarbeiter) DO UPDATE SET
+         stunden=EXCLUDED.stunden, anfahrt=EXCLUDED.anfahrt, updated_at=EXCLUDED.updated_at`,
+      [station, zeitraum, mitarbeiter, String(e.stunden || '').trim(),
+       String(e.anfahrt || '').trim(), updatedAt]);
+    gespeichert++;
+  }
+  res.json({ ok: true, gespeichert });
+});
+
+router.delete('/api/web/zettel-eintraege', requireWebAuth, async (req, res) => {
+  const station = String(req.query.station || '');
+  const zeitraum = String(req.query.zeitraum || '');
+  const mitarbeiter = String(req.query.mitarbeiter || '');
+  if (!station || !zeitraum || !mitarbeiter) {
+    return res.status(400).json({ error: 'station, zeitraum und mitarbeiter nötig' });
+  }
+  await pool.query(
+    'DELETE FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2 AND mitarbeiter=$3',
+    [station, zeitraum, mitarbeiter]);
+  res.json({ ok: true });
 });
 
 // ---------- App-Updater ----------
