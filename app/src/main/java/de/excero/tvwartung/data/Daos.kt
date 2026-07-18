@@ -74,10 +74,16 @@ interface InspectionDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnore(inspection: Inspection): Long
+
+    @Query("DELETE FROM inspections")
+    suspend fun deleteAll()
 }
 
 @Dao
 interface StundenzettelEintragDao {
+    @Query("DELETE FROM stundenzettel_eintraege")
+    suspend fun deleteAll()
+
     @Query("SELECT * FROM stundenzettel_eintraege WHERE station = :station AND zeitraumStart = :zeitraumStart ORDER BY mitarbeiter")
     fun observeFor(station: String, zeitraumStart: String): Flow<List<StundenzettelEintrag>>
 
@@ -96,6 +102,9 @@ interface StundenzettelEintragDao {
 
 @Dao
 interface EinsatzDao {
+    @Query("DELETE FROM einsaetze")
+    suspend fun deleteAll()
+
     @Query("SELECT * FROM einsaetze WHERE mitarbeiter = :mitarbeiter AND ende = '' LIMIT 1")
     suspend fun laufender(mitarbeiter: String): Einsatz?
 
@@ -114,6 +123,9 @@ interface EinsatzDao {
 
 @Dao
 interface RoomSperreDao {
+    @Query("DELETE FROM room_sperren")
+    suspend fun deleteAll()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(sperre: RoomSperre)
 
@@ -129,6 +141,9 @@ interface RoomSperreDao {
 
 @Dao
 interface ActivityLogDao {
+    @Query("DELETE FROM activity_log")
+    suspend fun deleteAll()
+
     @Insert
     suspend fun insert(entry: ActivityLog)
 
@@ -186,6 +201,9 @@ interface CustomPruefpunktDao {
 
 @Dao
 interface StundenzettelDao {
+    @Query("DELETE FROM stundenzettel")
+    suspend fun deleteAll()
+
     @Query("SELECT * FROM stundenzettel WHERE station = :station AND zeitraumStart = :zeitraumStart LIMIT 1")
     suspend fun getFor(station: String, zeitraumStart: String): StundenzettelEntity?
 

@@ -79,6 +79,12 @@ fun HomeScreen(
     val checkedInPeriod = remember(inspectionsInPeriod) {
         inspectionsInPeriod.map { it.roomId }.toSet()
     }
+    // Wer hat welches Zimmer im Zeitraum geprüft (Team-Sicht)
+    val prueferProZimmer = remember(inspectionsInPeriod) {
+        inspectionsInPeriod.filter { it.mitarbeiter.isNotBlank() }
+            .associate { it.roomId to it.mitarbeiter }
+    }
+    val update by viewModel.updateVerfuegbar.collectAsState()
     val aktiveRooms = remember(rooms) { rooms.filter { !it.inaktiv } }
     val inaktiveRooms = remember(rooms) { rooms.filter { it.inaktiv } }
     val filtered = remember(aktiveRooms, query) {
@@ -123,6 +129,31 @@ fun HomeScreen(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )
         )
+
+        update?.let { (_, versionName) ->
+            Card(
+                onClick = { viewModel.installiereUpdate() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "🔄 Update auf Version $versionName verfügbar – tippen zum Installieren",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
 
         OutlinedTextField(
             value = query,
@@ -188,6 +219,7 @@ fun HomeScreen(
                         room = stationRooms[index],
                         checkedToday = stationRooms[index].id in checkedInPeriod,
                         blocked = stationRooms[index].id in gesperrt,
+                        pruefer = prueferProZimmer[stationRooms[index].id] ?: "",
                         onClick = { onRoomClick(stationRooms[index].id) }
                     )
                 }
@@ -321,7 +353,13 @@ private fun SperrDialog(
 }
 
 @Composable
-private fun RoomCard(room: TvRoom, checkedToday: Boolean, blocked: Boolean, onClick: () -> Unit) {
+private fun RoomCard(
+    room: TvRoom,
+    checkedToday: Boolean,
+    blocked: Boolean,
+    pruefer: String = "",
+    onClick: () -> Unit
+) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -368,6 +406,10 @@ private fun RoomCard(room: TvRoom, checkedToday: Boolean, blocked: Boolean, onCl
                             tint = OkGreen,
                             modifier = Modifier.size(18.dp)
                         )
+                        if (pruefer.isNotBlank()) {
+                            Spacer(Modifier.width(4.dp))
+                            StatusBadge(pruefer, OkGreen)
+                        }
                     }
                 }
                 Text(

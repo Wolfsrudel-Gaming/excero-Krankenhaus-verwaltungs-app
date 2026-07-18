@@ -25,6 +25,14 @@ object StundenzettelPdf {
         val arbeiten: List<String>
     )
 
+    /** Zeile eines Mitarbeiters auf dem Team-Stundenzettel. */
+    data class MaZeile(
+        val name: String,
+        val stunden: String,        // z. B. "3,5"
+        val anfahrt: String,
+        val signatur: Bitmap? = null
+    )
+
     data class Stundenzettel(
         val station: String,
         val zeitraum: String,       // z. B. "diese Woche (ab 13.07.2026)"
@@ -36,6 +44,7 @@ object StundenzettelPdf {
         val arbeitsstunden: String = "",          // z. B. "3,5 Std."
         val anfahrt: String = "",                 // z. B. "0,5 Std."
         val techniker: String = "",               // Name Dienstleister
+        val eintraege: List<MaZeile> = emptyList(), // Team: eine Zeile je Mitarbeiter
         val signaturStation: Bitmap? = null,
         val signaturTechniker: Bitmap? = null
     )
@@ -178,6 +187,10 @@ object StundenzettelPdf {
     }
 
     private fun drawZeiten(ctx: Ctx, zettel: Stundenzettel) {
+        if (zettel.eintraege.isNotEmpty()) {
+            drawTeamZeilen(ctx, zettel)
+            return
+        }
         val canvas = ctx.canvas!!
         val boxH = 44f
         canvas.drawRoundRect(RectF(MARGIN, ctx.y, MARGIN + CONTENT_W, ctx.y + boxH), 8f, 8f,
@@ -197,6 +210,48 @@ object StundenzettelPdf {
             canvas.drawText(v.ifBlank { "–" }, x, ctx.y + 32f, value)
         }
         ctx.y += boxH + 18f
+    }
+
+    /** Team-Stundenzettel: eine Zeile je Mitarbeiter plus Summen. */
+    private fun drawTeamZeilen(ctx: Ctx, zettel: Stundenzettel) {
+        val canvas = ctx.canvas!!
+        canvas.drawText("Arbeitszeiten", MARGIN, ctx.y + 4f, paint(13f, TEAL, bold = true))
+        ctx.y += 16f
+        val kopf = paint(9f, GRAY, bold = true)
+        val body = paint(10f, Color.BLACK)
+        val bodyBold = paint(10f, Color.BLACK, bold = true)
+        val col2 = MARGIN + 260f
+        val col3 = MARGIN + 380f
+        canvas.drawText("Mitarbeiter", MARGIN + 4f, ctx.y + 11f, kopf)
+        canvas.drawText("Arbeitsstunden", col2, ctx.y + 11f, kopf)
+        canvas.drawText("Anfahrt", col3, ctx.y + 11f, kopf)
+        ctx.y += 16f
+        canvas.drawLine(MARGIN, ctx.y, MARGIN + CONTENT_W, ctx.y, Paint().apply { color = LINE })
+        var summeStunden = 0.0
+        var summeAnfahrt = 0.0
+        fun zahl(t: String) = t.replace(',', '.').toDoubleOrNull() ?: 0.0
+        zettel.eintraege.forEachIndexed { i, z ->
+            if (i % 2 == 0) {
+                canvas.drawRect(MARGIN, ctx.y, MARGIN + CONTENT_W, ctx.y + 18f, Paint().apply { color = ROW_ALT })
+            }
+            canvas.drawText(z.name, MARGIN + 4f, ctx.y + 13f, body)
+            canvas.drawText(if (z.stunden.isBlank()) "–" else "${z.stunden} Std.", col2, ctx.y + 13f, body)
+            canvas.drawText(if (z.anfahrt.isBlank()) "–" else "${z.anfahrt} Std.", col3, ctx.y + 13f, body)
+            summeStunden += zahl(z.stunden)
+            summeAnfahrt += zahl(z.anfahrt)
+            ctx.y += 18f
+        }
+        canvas.drawLine(MARGIN, ctx.y, MARGIN + CONTENT_W, ctx.y, Paint().apply { color = LINE })
+        fun fmt(d: Double) = String.format("%.2f", d).trimEnd('0').trimEnd('.', ',').replace('.', ',')
+        canvas.drawText("Gesamt", MARGIN + 4f, ctx.y + 14f, bodyBold)
+        canvas.drawText("${fmt(summeStunden)} Std.", col2, ctx.y + 14f, bodyBold)
+        canvas.drawText("${fmt(summeAnfahrt)} Std.", col3, ctx.y + 14f, bodyBold)
+        ctx.y += 22f
+        if (zettel.datum.isNotBlank()) {
+            canvas.drawText("Datum der Leistung: ${zettel.datum}", MARGIN + 4f, ctx.y + 10f, paint(9.5f, GRAY))
+            ctx.y += 16f
+        }
+        ctx.y += 6f
     }
 
     private fun drawLeistungen(ctx: Ctx, zettel: Stundenzettel) {
@@ -273,6 +328,10 @@ object StundenzettelPdf {
     }
 
     private fun drawUnterschriften(ctx: Ctx, zettel: Stundenzettel) {
+        if (zettel.eintraege.isNotEmpty()) {
+            drawTeamUnterschriften(ctx, zettel)
+            return
+        }
         ctx.ensure(130f)
         val c = ctx.canvas!!
         c.drawText("Bestätigung", MARGIN, ctx.y + 4f, paint(13f, TEAL, bold = true))
@@ -310,5 +369,38 @@ object StundenzettelPdf {
         c.drawText(zettel.techniker.ifBlank { "Datum, Name" }, x2, lineY + 26f, sub)
 
         ctx.y = lineY + 40f
+    }
+
+    /** Unterschriften: Station plus ein Feld je Mitarbeiter (2 Spalten, mehrzeilig). */
+    private fun drawTeamUnterschriften(ctx: Ctx, zettel: Stundenzettel) {
+        val felder = buildList {
+            add("Unterschrift Station (Datum, Name, Stempel)" to zettel.signaturStation)
+            zettel.eintraege.forEach { add("Unterschrift ${it.name}" to it.signatur) }
+        }
+        ctx.ensure(40f)
+        ctx.canvas!!.drawText("Bestätigung", MARGIN, ctx.y + 4f, paint(13f, TEAL, bold = true))
+        ctx.y += 20f
+        val gap = 30f
+        val colW = (CONTENT_W - gap) / 2
+        val sigH = 46f
+        val label = paint(9f, GRAY)
+        val linePaint = Paint().apply { color = Color.BLACK; strokeWidth = 1f }
+        felder.chunked(2).forEach { reihe ->
+            ctx.ensure(sigH + 34f)
+            val c = ctx.canvas!!
+            val lineY = ctx.y + sigH
+            reihe.forEachIndexed { i, (titel, bmp) ->
+                val x = MARGIN + i * (colW + gap)
+                if (bmp != null && bmp.width > 0 && bmp.height > 0) {
+                    val scale = minOf(colW / bmp.width, sigH / bmp.height)
+                    val w = bmp.width * scale
+                    val h = bmp.height * scale
+                    c.drawBitmap(bmp, null, RectF(x, lineY - h, x + w, lineY), Paint(Paint.FILTER_BITMAP_FLAG))
+                }
+                c.drawLine(x, lineY, x + colW, lineY, linePaint)
+                c.drawText(titel, x, lineY + 13f, label)
+            }
+            ctx.y = lineY + 30f
+        }
     }
 }

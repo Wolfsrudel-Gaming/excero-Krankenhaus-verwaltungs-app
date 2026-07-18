@@ -134,7 +134,7 @@ object XlsxWriter {
             headerRow(
                 1,
                 listOf(
-                    "Datum", "Zimmer", "Empfang vorhanden?", "Seriennummer TV stimmt?",
+                    "Datum", "Zimmer", "Mitarbeiter", "Empfang vorhanden?", "Seriennummer TV stimmt?",
                     "Freenet TV-ID stimmt?", "DVD-Test", "Fernbedienung", "Halterung (fest?)",
                     "Gültigkeit Freenet > 3 Monate?", "Freenet verlängert", "Bemerkungen"
                 )
@@ -156,15 +156,16 @@ object XlsxWriter {
             append("<row r=\"$r\">")
             append(dateCell(0, r, insp.datum))
             append(textCell(1, r, insp.roomId))
-            append(boolCell(2, r, insp.empfangVorhanden))
-            append(boolCell(3, r, insp.seriennummerStimmt))
-            append(boolCell(4, r, insp.freenetIdStimmt))
-            append(boolCell(5, r, insp.dvdTest))
-            append(boolCell(6, r, insp.fernbedienung))
-            append(boolCell(7, r, insp.halterungFest))
-            append(boolCell(8, r, insp.gueltigkeitAusreichend))
-            append(boolCell(9, r, insp.freenetVerlaengert))
-            append(textCell(10, r, remarks))
+            append(textCell(2, r, insp.mitarbeiter))
+            append(boolCell(3, r, insp.empfangVorhanden))
+            append(boolCell(4, r, insp.seriennummerStimmt))
+            append(boolCell(5, r, insp.freenetIdStimmt))
+            append(boolCell(6, r, insp.dvdTest))
+            append(boolCell(7, r, insp.fernbedienung))
+            append(boolCell(8, r, insp.halterungFest))
+            append(boolCell(9, r, insp.gueltigkeitAusreichend))
+            append(boolCell(10, r, insp.freenetVerlaengert))
+            append(textCell(11, r, remarks))
             append("</row>")
         }
         append("</sheetData></worksheet>")

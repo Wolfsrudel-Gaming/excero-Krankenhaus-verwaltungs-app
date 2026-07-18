@@ -33,6 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -45,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +84,25 @@ fun StundenzettelScreen(
     val basis by produceState<AppViewModel.StundenzettelBasis?>(initialValue = null, zettel.id) {
         value = viewModel.stundenzettelVorschau(zettel)
     }
+    val settings by viewModel.settings.collectAsState()
+    val eintraege by viewModel.eintraegeFor(zettel.station, zettel.zeitraumStart)
+        .collectAsState(initial = emptyList())
+    val laufenderEinsatz by viewModel.laufenderEinsatz().collectAsState(initial = null)
+    var meineStunden by remember(zettel.id) { mutableStateOf("") }
+    var meineAnfahrt by remember(zettel.id) { mutableStateOf("") }
+    var meineGeladen by remember(zettel.id) { mutableStateOf(false) }
+    LaunchedEffect(eintraege) {
+        if (!meineGeladen) {
+            eintraege.find { it.mitarbeiter == settings.mitarbeiter }?.let {
+                meineStunden = it.stunden
+                meineAnfahrt = it.anfahrt
+                meineGeladen = true
+            }
+        }
+    }
+    // Unterschriften je Mitarbeiter (alle unterschreiben auf diesem Gerät)
+    val maSigStates = remember(zettel.id) { mutableMapOf<String, SignatureState>() }
+    fun sigStateFor(name: String) = maSigStates.getOrPut(name) { SignatureState() }
 
     var auftragsnummer by remember { mutableStateOf("") }
     var datum by remember { mutableStateOf("") }
@@ -139,11 +160,21 @@ fun StundenzettelScreen(
         if (uri != null) {
             val sigStation = sichereSignatur(sigStationState, sigStationGespeichert, SignatureStore.ROLLE_STATION)
             val sigTechniker = sichereSignatur(sigTechnikerState, sigTechnikerGespeichert, SignatureStore.ROLLE_TECHNIKER)
+            val zeilen = eintraege.map { e ->
+                val rolle = "ma_" + e.mitarbeiter.replace(Regex("[^A-Za-z0-9]"), "_")
+                val sig = sigStateFor(e.mitarbeiter).toBitmap()?.also {
+                    viewModel.signatureStore.save(zettel.id, rolle, it)
+                } ?: viewModel.signatureStore.load(zettel.id, rolle)
+                de.excero.tvwartung.pdf.StundenzettelPdf.MaZeile(
+                    name = e.mitarbeiter, stunden = e.stunden, anfahrt = e.anfahrt, signatur = sig
+                )
+            }
             viewModel.exportStundenzettel(
                 uri = uri,
                 eingabe = aktuelleEingabe(),
                 signaturStation = sigStation,
-                signaturTechniker = sigTechniker
+                signaturTechniker = sigTechniker,
+                eintraege = zeilen
             )
             onBack()
         }
@@ -218,6 +249,79 @@ fun StundenzettelScreen(
                 }
             }
 
+            // Team: Arbeitszeiten je Mitarbeiter (gemeinsamer Stationszettel)
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Team-Arbeitszeiten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Eine Zeile je Mitarbeiter – Kollegen tragen ihre Stunden auf ihrem " +
+                            "Gerät ein, der Sync führt alles zusammen.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (laufenderEinsatz == null) {
+                        OutlinedButton(
+                            onClick = { viewModel.starteEinsatz(zettel.station) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("▶ Einsatz starten (Zeit läuft)") }
+                    } else {
+                        Button(
+                            onClick = { viewModel.beendeEinsatz(zettel.zeitraumStart) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "⏹ Einsatz beenden (läuft seit " +
+                                    Dates.isoDateTimeToGerman(laufenderEinsatz!!.start).substringAfter(' ') + ")"
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = meineStunden, onValueChange = { meineStunden = it },
+                            label = { Text("Meine Stunden") }, singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = meineAnfahrt, onValueChange = { meineAnfahrt = it },
+                            label = { Text("Meine Anfahrt") }, singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.speichereMeinenEintrag(
+                                zettel.station, zettel.zeitraumStart, meineStunden, meineAnfahrt
+                            )
+                        },
+                        enabled = settings.mitarbeiter.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Meine Zeile speichern (${settings.mitarbeiter.ifBlank { "erst Mitarbeiter in Einstellungen setzen" }})") }
+                    HorizontalDivider()
+                    if (eintraege.isEmpty()) {
+                        Text(
+                            "Noch keine Einträge.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        eintraege.forEach { e ->
+                            Row(Modifier.fillMaxWidth()) {
+                                Text(
+                                    e.mitarbeiter + if (e.mitarbeiter == settings.mitarbeiter) " (ich)" else "",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    (e.stunden.ifBlank { "–" }) + " Std. · Anfahrt " + (e.anfahrt.ifBlank { "–" }),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Vorschau der Leistungen
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -272,16 +376,36 @@ fun StundenzettelScreen(
                     sigStationGespeichert = null
                 }
             )
-            SignaturCard(
-                titel = "Unterschrift Dienstleister",
-                state = sigTechnikerState,
-                gespeichert = sigTechnikerGespeichert,
-                onDelete = {
-                    sigTechnikerState.clear()
-                    viewModel.signatureStore.delete(zettel.id, SignatureStore.ROLLE_TECHNIKER)
-                    sigTechnikerGespeichert = null
+            if (eintraege.isEmpty()) {
+                SignaturCard(
+                    titel = "Unterschrift Dienstleister",
+                    state = sigTechnikerState,
+                    gespeichert = sigTechnikerGespeichert,
+                    onDelete = {
+                        sigTechnikerState.clear()
+                        viewModel.signatureStore.delete(zettel.id, SignatureStore.ROLLE_TECHNIKER)
+                        sigTechnikerGespeichert = null
+                    }
+                )
+            } else {
+                // Eine Unterschrift je Mitarbeiter – alle unterschreiben auf diesem Gerät
+                eintraege.forEach { e ->
+                    val rolle = "ma_" + e.mitarbeiter.replace(Regex("[^A-Za-z0-9]"), "_")
+                    var gespeicherteSig by remember(zettel.id, e.mitarbeiter) {
+                        mutableStateOf(viewModel.signatureStore.load(zettel.id, rolle))
+                    }
+                    SignaturCard(
+                        titel = "Unterschrift ${e.mitarbeiter}",
+                        state = sigStateFor(e.mitarbeiter),
+                        gespeichert = gespeicherteSig,
+                        onDelete = {
+                            sigStateFor(e.mitarbeiter).clear()
+                            viewModel.signatureStore.delete(zettel.id, rolle)
+                            gespeicherteSig = null
+                        }
+                    )
                 }
-            )
+            }
 
             OutlinedButton(
                 onClick = {

@@ -67,7 +67,8 @@ fun BerichtScreen(
                 Column {
                     Text("Prüfbericht", fontWeight = FontWeight.Bold)
                     Text(
-                        "${current.roomId} · ${Dates.isoToGerman(current.datum)}",
+                        "${current.roomId} · ${Dates.isoToGerman(current.datum)}" +
+                            if (current.mitarbeiter.isNotBlank()) " · ${current.mitarbeiter}" else "",
                         style = MaterialTheme.typography.labelMedium
                     )
                 }

@@ -154,10 +154,67 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
-        // Beim App-Start automatisch abgleichen, falls aktiviert
+        // Beim App-Start automatisch abgleichen und danach quasi-live weiterpollen
         viewModelScope.launch {
             kotlinx.coroutines.delay(2000)
-            if (settings.value.autoSync) syncNow(leise = true)
+            while (true) {
+                if (settings.value.autoSync) {
+                    syncNow(leise = true)
+                    pruefeUpdate()
+                }
+                kotlinx.coroutines.delay(90_000)
+            }
+        }
+    }
+
+    // ----- In-App-Updates -----
+
+    /** Neue Version auf dem Server? (versionCode, versionName, apkUrl) */
+    val updateVerfuegbar = MutableStateFlow<Pair<Int, String>?>(null)
+
+    private suspend fun pruefeUpdate() {
+        val s = settings.value
+        if (s.serverUrl.isBlank()) return
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val url = java.net.URL(s.serverUrl.trimEnd('/') + "/app/version.json")
+                val text = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 10_000; readTimeout = 10_000
+                }.inputStream.bufferedReader().use { it.readText() }
+                val o = org.json.JSONObject(text)
+                val code = o.optInt("versionCode", 0)
+                if (code > de.excero.tvwartung.BuildConfig.VERSION_CODE) {
+                    updateVerfuegbar.value = code to o.optString("versionName", "?")
+                }
+            }
+        }
+    }
+
+    /** Neue APK herunterladen und den Android-Installationsdialog öffnen. */
+    fun installiereUpdate() {
+        val s = settings.value
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                _message.value = "Update wird heruntergeladen …"
+                val url = java.net.URL(s.serverUrl.trimEnd('/') + "/app/kkh-tv-wartung.apk")
+                val ziel = java.io.File(app.cacheDir, "update.apk")
+                (url.openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 15_000; readTimeout = 300_000
+                }.inputStream.use { input ->
+                    ziel.outputStream().use { input.copyTo(it) }
+                }
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    app, "${app.packageName}.fileprovider", ziel
+                )
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(
+                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+                app.startActivity(intent)
+            }.onFailure { _message.value = "Update fehlgeschlagen: ${it.message}" }
         }
     }
 
@@ -170,6 +227,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun inspectionsFor(roomId: String): Flow<List<Inspection>> = repository.inspectionsFor(roomId)
 
     fun activityFor(roomId: String): Flow<List<ActivityLog>> = repository.activityFor(roomId)
+
+    /** Vom Server gepflegte Mitarbeiterliste (für die Geräteeinrichtung). */
+    fun bekannteMitarbeiter(): List<String> = app.settingsStore.bekannteMitarbeiter()
 
     /** Alle bekannten TV-Marken (für die Schnellauswahl). */
     fun bekannteTvTypen(): List<String> =
@@ -207,7 +267,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch {
             repository.saveInspection(
-                inspection, lebenslaufEintrag, neuesGueltigBis,
+                inspection.copy(mitarbeiter = settings.value.mitarbeiter),
+                lebenslaufEintrag, neuesGueltigBis,
                 neueSeriennummer, neueFreenetId, neuerTvTyp
             )
             _message.value = "Prüfbogen für ${inspection.roomId} gespeichert"
@@ -322,6 +383,57 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun ladeStundenzettelById(id: Long): StundenzettelEntity? =
         withContext(Dispatchers.IO) { repository.getStundenzettelById(id) }
 
+    fun eintraegeFor(station: String, zeitraumStart: String) =
+        repository.eintraegeFor(station, zeitraumStart)
+
+    /** Eigene Stunden-Zeile auf dem Team-Zettel speichern. */
+    fun speichereMeinenEintrag(station: String, zeitraumStart: String, stunden: String, anfahrt: String) {
+        val name = settings.value.mitarbeiter.ifBlank { "Unbenannt" }
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.upsertEintrag(
+                de.excero.tvwartung.data.StundenzettelEintrag(
+                    station = station, zeitraumStart = zeitraumStart,
+                    mitarbeiter = name, stunden = stunden.trim(), anfahrt = anfahrt.trim()
+                )
+            )
+            if (settings.value.autoSync) syncNow(leise = true)
+        }
+    }
+
+    fun laufenderEinsatz() = repository.laufenderEinsatz(settings.value.mitarbeiter)
+
+    fun starteEinsatz(station: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.starteEinsatz(station, settings.value.mitarbeiter.ifBlank { "Unbenannt" })
+            _message.value = "Einsatz auf Station $station gestartet"
+        }
+    }
+
+    /** Einsatz beenden und die gearbeiteten Stunden in die eigene Zeile übernehmen. */
+    fun beendeEinsatz(zeitraumStart: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ergebnis = repository.beendeEinsatz(settings.value.mitarbeiter.ifBlank { "Unbenannt" })
+            if (ergebnis != null) {
+                val (einsatz, stunden) = ergebnis
+                val name = settings.value.mitarbeiter.ifBlank { "Unbenannt" }
+                val vorhanden = repository.getEintraege(einsatz.station, zeitraumStart)
+                    .find { it.mitarbeiter == name }
+                val alt = vorhanden?.stunden?.replace(',', '.')?.toDoubleOrNull() ?: 0.0
+                val neu = alt + (stunden.replace(',', '.').toDoubleOrNull() ?: 0.0)
+                val text = String.format("%.2f", neu).trimEnd('0').trimEnd('.', ',').replace('.', ',')
+                repository.upsertEintrag(
+                    de.excero.tvwartung.data.StundenzettelEintrag(
+                        station = einsatz.station, zeitraumStart = zeitraumStart,
+                        mitarbeiter = name, stunden = text,
+                        anfahrt = vorhanden?.anfahrt ?: ""
+                    )
+                )
+                _message.value = "Einsatz beendet – $stunden Std. übernommen"
+                if (settings.value.autoSync) syncNow(leise = true)
+            }
+        }
+    }
+
     /** Stundenzettel-Eingaben speichern (Stunden lassen sich später wieder ändern). */
     fun speichereStundenzettel(zettel: StundenzettelEntity, quiet: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -384,7 +496,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         uri: Uri,
         eingabe: StundenzettelEntity,
         signaturStation: android.graphics.Bitmap?,
-        signaturTechniker: android.graphics.Bitmap?
+        signaturTechniker: android.graphics.Bitmap?,
+        eintraege: List<StundenzettelPdf.MaZeile> = emptyList()
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
@@ -403,6 +516,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     arbeitsstunden = eingabe.stunden.trim().let { if (it.isBlank()) "" else "$it Std." },
                     anfahrt = eingabe.anfahrt.trim().let { if (it.isBlank()) "" else "$it Std." },
                     techniker = eingabe.techniker,
+                    eintraege = eintraege,
                     signaturStation = signaturStation,
                     signaturTechniker = signaturTechniker,
                     logo = logo
@@ -512,6 +626,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun photoCountToday(): Int = withContext(Dispatchers.IO) {
         photoStore.countToday()
+    }
+
+    /** Testdaten bereinigen (Zimmer/Material bleiben) – vor dem Echtstart. */
+    fun testdatenBereinigen() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.testdatenBereinigen()
+            photoStore.rootDir().deleteRecursively()
+            _message.value = "Testdaten gelöscht – Stammdaten und Material bleiben erhalten"
+        }
     }
 
     // ----- Backup & Gerätewechsel -----

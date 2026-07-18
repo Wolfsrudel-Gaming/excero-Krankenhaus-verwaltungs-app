@@ -310,6 +310,21 @@ class Repository(private val db: AppDatabase) {
         }
     }
 
+    /**
+     * Testdaten bereinigen: löscht alle Prüfbögen, Stundenzettel, Einsätze,
+     * Sperren und das Aktivitätsprotokoll – Zimmer/Material bleiben erhalten.
+     */
+    suspend fun testdatenBereinigen() {
+        db.withTransaction {
+            db.inspectionDao().deleteAll()
+            db.stundenzettelDao().deleteAll()
+            db.stundenzettelEintragDao().deleteAll()
+            db.einsatzDao().deleteAll()
+            db.activityLogDao().deleteAll()
+            db.roomSperreDao().deleteAll()
+        }
+    }
+
     /** Lädt die mitgelieferten Stammdaten (Stand der KKH-Übersicht), falls die DB leer ist. */
     suspend fun seedIfEmpty(context: Context) {
         seedMaterialienIfEmpty()
