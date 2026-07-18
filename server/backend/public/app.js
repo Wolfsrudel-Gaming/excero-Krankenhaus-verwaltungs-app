@@ -27,9 +27,9 @@ const ROUTES = {
 };
 
 let currentUser = null;
-// Aktuell ausgewählte Firma (Mandant), wird aus localStorage geladen
-window.aktiveFirmaId = Number(localStorage.getItem('aktiveFirmaId') || '0') || null;
-window.aktiveFirmaName = localStorage.getItem('aktiveFirmaName') || '';
+// Firma: Excero GmbH (einzige Firma, wird beim Start geladen)
+window.aktiveFirmaId = null;
+window.aktiveFirmaName = '';
 
 function setzeAktiveNav(route) {
   document.querySelectorAll('.nav-item').forEach((el) => {
@@ -55,42 +55,12 @@ async function ladeFirmen() {
   try {
     const d = await api('/kkh/api/web/firmen');
     const firmen = d.firmen || [];
-    const sel = document.getElementById('firma-switcher');
-    sel.innerHTML = '';
-    if (firmen.length === 0) {
-      sel.innerHTML = '<option value="">Keine Firmen</option>';
-      return;
-    }
-    for (const f of firmen) {
-      const opt = document.createElement('option');
-      opt.value = f.id;
-      opt.textContent = f.name;
-      if (Number(window.aktiveFirmaId) === f.id) opt.selected = true;
-      sel.appendChild(opt);
-    }
-    // Falls nichts gesetzt, erste Firma als Standard
-    if (!window.aktiveFirmaId) {
+    if (firmen.length > 0) {
       window.aktiveFirmaId = firmen[0].id;
       window.aktiveFirmaName = firmen[0].name;
+      document.getElementById('topbar-sub').textContent = firmen[0].name;
     }
-    aktualisiereFirmaInfo(firmen.find((f) => f.id === Number(sel.value)) || firmen[0]);
-    sel.addEventListener('change', () => {
-      const f = firmen.find((x) => x.id === Number(sel.value));
-      if (!f) return;
-      window.aktiveFirmaId = f.id;
-      window.aktiveFirmaName = f.name;
-      localStorage.setItem('aktiveFirmaId', f.id);
-      localStorage.setItem('aktiveFirmaName', f.name);
-      aktualisiereFirmaInfo(f);
-      // Aktuellen View neu laden
-      const r = window.location.hash.replace('#', '') || 'dashboard';
-      if (ROUTES[r]) route(r);
-    });
   } catch {}
-}
-
-function aktualisiereFirmaInfo(f) {
-  document.getElementById('topbar-sub').textContent = f ? f.name : '';
 }
 
 async function checkAuth() {

@@ -172,10 +172,9 @@ CREATE TABLE IF NOT EXISTS firmen (
     aktiv            BOOLEAN NOT NULL DEFAULT TRUE,
     erstellt_am      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- Seed: Excero GmbH und Wolfsrudel Media Studio (Platzhalter, im UI editierbar)
+-- Seed: Excero GmbH (Platzhalter-Daten, im UI editierbar)
 INSERT INTO firmen (name, rechtsform, besteuerung, rechnungs_prefix) VALUES
-    ('Excero GmbH', 'GmbH', 'regel', 'EX'),
-    ('Wolfsrudel Media Studio', 'Einzelunternehmen', 'kleinunternehmer', 'WM')
+    ('Excero GmbH', 'GmbH', 'regel', 'EX')
 ON CONFLICT DO NOTHING;
 
 -- Globale Einstellungen (Key/Value, JSONB-Wert)
