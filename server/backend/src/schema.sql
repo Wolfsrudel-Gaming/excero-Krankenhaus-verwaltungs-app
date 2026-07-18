@@ -62,3 +62,29 @@ CREATE TABLE IF NOT EXISTS app_aktivitaet (
     zeitpunkt TEXT NOT NULL,
     aktion    TEXT NOT NULL
 );
+
+-- v1.9: Mehrbenutzer & Team-Stundenzettel
+ALTER TABLE inspections ADD COLUMN IF NOT EXISTS mitarbeiter TEXT NOT NULL DEFAULT '';
+ALTER TABLE inspections ADD COLUMN IF NOT EXISTS geloescht BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_inspections_created ON inspections(created_at);
+
+CREATE TABLE IF NOT EXISTS mitarbeiter (
+    name  TEXT PRIMARY KEY,
+    aktiv BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS zettel_eintraege (
+    station        TEXT NOT NULL,
+    zeitraum_start TEXT NOT NULL,
+    mitarbeiter    TEXT NOT NULL,
+    stunden        TEXT NOT NULL DEFAULT '',
+    anfahrt        TEXT NOT NULL DEFAULT '',
+    updated_at     TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (station, zeitraum_start, mitarbeiter)
+);
+
+CREATE TABLE IF NOT EXISTS web_users (
+    username TEXT PRIMARY KEY,
+    pw_hash  TEXT NOT NULL,
+    salt     TEXT NOT NULL
+);

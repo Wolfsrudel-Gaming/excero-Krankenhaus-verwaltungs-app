@@ -56,6 +56,14 @@ class SettingsStore(context: Context) {
         )
     }
 
+    /** Vom Server bekannte (aktive) Mitarbeiter für die Geräteeinrichtung. */
+    fun bekannteMitarbeiter(): List<String> =
+        prefs.getString("bekannteMitarbeiter", "")!!.split("\n").filter { it.isNotBlank() }
+
+    fun setBekannteMitarbeiter(namen: List<String>) {
+        prefs.edit().putString("bekannteMitarbeiter", namen.joinToString("\n")).apply()
+    }
+
     fun update(settings: AppSettings) {
         prefs.edit()
             .putString("zeitraum", settings.zeitraum.name)

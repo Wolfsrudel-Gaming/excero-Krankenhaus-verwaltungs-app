@@ -35,6 +35,32 @@ fi
 
 docker compose up -d --build
 
+# Automatische Updates: systemd-Timer prüft alle 5 Min auf neue Git-Commits
+if command -v systemctl >/dev/null 2>&1; then
+  chmod +x autodeploy.sh
+  REPO_DIR="$(cd .. && pwd)"
+  cat > /etc/systemd/system/kkh-autodeploy.service <<UNIT
+[Unit]
+Description=KKH/EXCERO Auto-Deployment (git pull + docker compose)
+[Service]
+Type=oneshot
+WorkingDirectory=${REPO_DIR}/server
+ExecStart=${REPO_DIR}/server/autodeploy.sh
+UNIT
+  cat > /etc/systemd/system/kkh-autodeploy.timer <<UNIT
+[Unit]
+Description=KKH/EXCERO Auto-Deployment alle 5 Minuten
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+[Install]
+WantedBy=timers.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now kkh-autodeploy.timer
+  echo "Auto-Deployment aktiv: neue Git-Commits werden alle 5 Min automatisch ausgerollt."
+fi
+
 echo ""
 echo "================================================================"
 echo " Fertig! Der KKH-Server läuft lokal auf Port \${KKH_PORT:-8090}."
