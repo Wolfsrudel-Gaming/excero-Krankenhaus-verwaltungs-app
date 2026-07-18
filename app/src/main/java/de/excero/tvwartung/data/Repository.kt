@@ -253,6 +253,18 @@ class Repository(private val db: AppDatabase) {
         return if (mitZeit.id == 0L) mitZeit.copy(id = id) else mitZeit
     }
 
+    /**
+     * Übernimmt einen Stundenzettel vom Server (LWW über updatedAt).
+     * Bestehende lokale ID bleibt erhalten, damit Unterschriften weiterhin passen.
+     */
+    suspend fun applyStundenzettel(vomServer: StundenzettelEntity) {
+        val lokal = db.stundenzettelDao().getFor(vomServer.station, vomServer.zeitraumStart)
+        if (lokal != null && lokal.updatedAt >= vomServer.updatedAt) return
+        db.stundenzettelDao().upsert(
+            vomServer.copy(id = lokal?.id ?: 0L)
+        )
+    }
+
     /** Fortlaufende Auftragsnummer, z. B. "A-2026-0007". */
     suspend fun naechsteAuftragsnummer(): String {
         val nr = db.stundenzettelDao().count() + 1

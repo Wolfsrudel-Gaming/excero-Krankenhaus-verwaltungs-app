@@ -37,6 +37,13 @@ Body: `{ "zettel": [ { station, zeitraumStart, auftragsnummer, datum,
   stunden, anfahrt, techniker, updatedAt } ] }`
 Upsert über (station, zeitraumStart) mit LWW. Antwort: `{ "uebernommen": n }`
 
+## GET /api/sync/stundenzettel
+Pull aller Zettel-Header (inkl. Web-Edits). Antwort:
+`{ "zettel": [ { station, zeitraumStart, auftragsnummer, datum,
+  stunden, anfahrt, techniker, updatedAt } ] }`
+Die App merged LWW über `updatedAt` und behält die lokale ID
+(Unterschriften bleiben damit erhalten).
+
 ## GET /api/sync/files
 Antwort: `{ "files": [ { path, size } ] }` — relative Pfade unter dem
 Dateispeicher, z. B. `A4_01a/20260715/A4_01a_20260715_nah_101530.jpg`.

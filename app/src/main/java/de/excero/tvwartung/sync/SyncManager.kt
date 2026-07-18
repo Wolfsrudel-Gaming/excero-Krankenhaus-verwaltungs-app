@@ -175,6 +175,25 @@ class SyncManager(
         // --- 4b) Team-Stundenzettel-Einträge: Push (LWW) und Pull ---
         var kollegenBerichte = 0
         runCatching {
+            // Header vom Server ziehen (Web-Edits → alle Geräte)
+            val serverZettel = httpJson("/api/sync/stundenzettel", "GET")
+                .optJSONArray("zettel") ?: JSONArray()
+            for (i in 0 until serverZettel.length()) {
+                val o = serverZettel.getJSONObject(i)
+                repository.applyStundenzettel(
+                    de.excero.tvwartung.data.StundenzettelEntity(
+                        station = o.optString("station"),
+                        zeitraumStart = o.optString("zeitraumStart"),
+                        auftragsnummer = o.optString("auftragsnummer"),
+                        datum = o.optString("datum"),
+                        stunden = o.optString("stunden"),
+                        anfahrt = o.optString("anfahrt"),
+                        techniker = o.optString("techniker"),
+                        updatedAt = o.optString("updatedAt")
+                    )
+                )
+            }
+
             val eintraegeJson = JSONArray()
             repository.getAllEintraege().forEach { e ->
                 eintraegeJson.put(JSONObject().apply {

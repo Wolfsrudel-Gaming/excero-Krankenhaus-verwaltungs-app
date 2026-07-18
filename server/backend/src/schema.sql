@@ -38,6 +38,19 @@ CREATE TABLE IF NOT EXISTS stundenzettel (
     PRIMARY KEY (station, zeitraum_start)
 );
 
+-- Benutzer der Weboberfläche (Mehrbenutzer-Login mit vollem Zugriff).
+-- Passwörter werden mit scrypt + zufälligem Salt gehasht (nie im Klartext).
+CREATE TABLE IF NOT EXISTS users (
+    id            SERIAL PRIMARY KEY,
+    username      TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    salt          TEXT NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Login unabhängig von Groß-/Kleinschreibung des Benutzernamens
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (lower(username));
+
 -- Voll-Synchronisation: Spiegel der App-Daten (Anzeige im Web optional)
 CREATE TABLE IF NOT EXISTS sperren (
     room_id     TEXT PRIMARY KEY,
@@ -83,8 +96,3 @@ CREATE TABLE IF NOT EXISTS zettel_eintraege (
     PRIMARY KEY (station, zeitraum_start, mitarbeiter)
 );
 
-CREATE TABLE IF NOT EXISTS web_users (
-    username TEXT PRIMARY KEY,
-    pw_hash  TEXT NOT NULL,
-    salt     TEXT NOT NULL
-);
