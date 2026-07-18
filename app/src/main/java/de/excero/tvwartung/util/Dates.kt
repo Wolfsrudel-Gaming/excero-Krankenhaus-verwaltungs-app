@@ -21,6 +21,16 @@ object Dates {
         runCatching { java.time.LocalDateTime.parse(value, dateTime).format(germanDateTime) }
             .getOrDefault(value)
 
+    /** Stunden zwischen zwei ISO-Zeitstempeln, auf Viertelstunden gerundet, z. B. "3,25". */
+    fun stundenZwischen(startIso: String, endeIso: String): String = runCatching {
+        val start = java.time.LocalDateTime.parse(startIso, dateTime)
+        val ende = java.time.LocalDateTime.parse(endeIso, dateTime)
+        val minuten = java.time.temporal.ChronoUnit.MINUTES.between(start, ende).coerceAtLeast(0)
+        val viertel = Math.round(minuten / 15.0) * 0.25
+        String.format("%.2f", viertel).trimEnd('0').trimEnd('.', ',').replace('.', ',')
+            .ifBlank { "0" }
+    }.getOrDefault("")
+
     /** Montag der aktuellen Woche (ISO). */
     fun mondayIso(): String =
         LocalDate.now().with(java.time.DayOfWeek.MONDAY).format(iso)

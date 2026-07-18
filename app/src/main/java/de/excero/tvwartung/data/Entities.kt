@@ -55,7 +55,11 @@ data class Inspection(
     @ColumnInfo(defaultValue = "")
     val extraPunkte: String = "",        // eigene Prüfpunkte als JSON: [{"t":Titel,"e":true/false/null,"b":Bemerkung}]
     @ColumnInfo(defaultValue = "")
-    val uuid: String = ""                // geräteübergreifend eindeutige ID für die Server-Synchronisation
+    val uuid: String = "",               // geräteübergreifend eindeutige ID für die Server-Synchronisation
+    @ColumnInfo(defaultValue = "")
+    val mitarbeiter: String = "",        // wer geprüft hat (Gerät = Mitarbeiter)
+    @ColumnInfo(defaultValue = "0")
+    val geloescht: Boolean = false       // Papierkorb: ausgeblendet statt endgültig weg
 ) {
     /** Prüfpunkte in Bogen-Reihenfolge: Titel, Ergebnis, Bemerkung. */
     fun punkte(): List<Triple<String, Boolean?, String>> = listOf(
@@ -171,4 +175,32 @@ data class ActivityLog(
     val roomId: String,
     val zeitpunkt: String,               // ISO-Datum+Zeit, z. B. 2026-07-14T10:32:05
     val aktion: String                   // z. B. "Prüfbogen gespeichert"
+)
+
+
+/**
+ * Team-Stundenzettel: eine Zeile je Mitarbeiter auf dem gemeinsamen
+ * Stationszettel (Stunden + Anfahrt), über den Server geteilt (LWW).
+ */
+@Entity(tableName = "stundenzettel_eintraege", primaryKeys = ["station", "zeitraumStart", "mitarbeiter"])
+data class StundenzettelEintrag(
+    val station: String,
+    val zeitraumStart: String,           // ISO-Datum des Zeitraumbeginns
+    val mitarbeiter: String,
+    val stunden: String = "",            // z. B. "3,5"
+    val anfahrt: String = "",
+    val updatedAt: String = ""
+)
+
+/**
+ * Einsatz-Zeiterfassung: "Einsatz starten/beenden" je Station –
+ * befüllt die eigene Stundenzeile automatisch vor.
+ */
+@Entity(tableName = "einsaetze")
+data class Einsatz(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val station: String,
+    val mitarbeiter: String,
+    val start: String,                   // ISO-Datum+Zeit
+    val ende: String = ""                // leer = läuft noch
 )
