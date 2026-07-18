@@ -18,7 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,11 +31,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +66,30 @@ fun BerichtScreen(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri -> uri?.let { viewModel.exportInspectionPdf(it, inspectionId) } }
 
+    var loeschDialog by remember { mutableStateOf(false) }
+    if (loeschDialog) {
+        AlertDialog(
+            onDismissRequest = { loeschDialog = false },
+            title = { Text("Bericht löschen?") },
+            text = {
+                Text(
+                    "Der Bericht wandert in den Papierkorb und lässt sich dort " +
+                        "jederzeit wiederherstellen (Suche → Papierkorb)."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    loeschDialog = false
+                    viewModel.loescheBericht(inspectionId)
+                    onBack()
+                }) { Text("In den Papierkorb", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { loeschDialog = false }) { Text("Abbrechen") }
+            }
+        )
+    }
+
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = {
@@ -76,6 +105,15 @@ fun BerichtScreen(
             navigationIcon = {
                 IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                }
+            },
+            actions = {
+                IconButton(onClick = { loeschDialog = true }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "In den Papierkorb",
+                        tint = MaterialTheme.colorScheme.error
+                    )
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(

@@ -14,22 +14,27 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -67,7 +72,10 @@ fun HomeScreen(
     onSettingsClick: () -> Unit,
     onStundenzettel: (String) -> Unit,
     onVerwaltung: () -> Unit,
-    onNeuesZimmer: () -> Unit
+    onNeuesZimmer: () -> Unit,
+    onFreenet: () -> Unit,
+    onStatistik: () -> Unit,
+    onSuche: () -> Unit
 ) {
     val rooms by viewModel.rooms.collectAsState()
     val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
@@ -165,6 +173,36 @@ fun HomeScreen(
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine = true
         )
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AssistChip(
+                onClick = onFreenet,
+                label = { Text("Freenet-Ablauf") },
+                leadingIcon = {
+                    Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+            )
+            AssistChip(
+                onClick = onSuche,
+                label = { Text("Berichte & Papierkorb") },
+                leadingIcon = {
+                    Icon(Icons.Default.FindInPage, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+            )
+            AssistChip(
+                onClick = onStatistik,
+                label = { Text("Statistik") },
+                leadingIcon = {
+                    Icon(Icons.Default.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+            )
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

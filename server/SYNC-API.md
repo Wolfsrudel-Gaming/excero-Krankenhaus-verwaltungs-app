@@ -60,6 +60,42 @@ Datei-Upload unter dem Pfadpräfix `_signaturen/`. Lesend fürs Web:
 GET /api/web/material, /api/web/sperren, /api/web/aktivitaet.
 Die App toleriert Server ohne diese Endpunkte (Hinweis in der Sync-Meldung).
 
+## Mehrbenutzer-Betrieb (ab App v1.9)
+
+`POST /api/sync/inspections`: jede Inspection trägt zusätzlich die optionalen
+Felder `mitarbeiter` (String, wer geprüft hat) und `geloescht` (bool,
+Papierkorb). Der Server upsertet über `uuid` und übernimmt bei Konflikt
+`geloescht`/`mitarbeiter` (damit Papierkorb-Änderungen alle Geräte erreichen).
+
+### GET /api/sync/inspections[?since=<Zeitstempel>]
+Delta-Pull der Berichte ALLER Geräte. Ohne `since` alles, sonst nur Zeilen mit
+`created_at > since` (Server-Empfangszeit, ISO). Antwort:
+`{ "inspections": [ { uuid, roomId, datum, punkte, arbeiten, bemerkungen,
+mitarbeiter, geloescht } ] }` — gleiche Punkte-Struktur wie beim POST.
+Die App dedupliziert lokal über `uuid` (Berichte der Kollegen erscheinen so
+auf jedem Gerät; Fotos der Kollegen werden bewusst NICHT übertragen).
+
+### GET /api/sync/mitarbeiter
+Antwort: `{ "mitarbeiter": [ { name, aktiv } ] }` — die im Web gepflegte
+Mitarbeiterliste; die App bietet sie bei der Geräteeinrichtung zur Auswahl an.
+
+### GET/POST /api/sync/zettel-eintraege (Team-Stundenzettel)
+Eine Zeile je (station, zeitraumStart, mitarbeiter) mit `stunden`, `anfahrt`,
+`updatedAt`. GET liefert alle (`{ "eintraege": [...] }`), POST upsertet mit
+LWW über `updatedAt` (Antwort `{ "uebernommen": n }`). So rechnen mehrere
+Mitarbeiter zeitgleich auf einer Station ab — ein Zettel, eine Zeile pro Kopf.
+
+## App-Verteilung & In-App-Updates (ab v1.9)
+
+- `GET /app/version.json` (öffentlich, ohne Auth):
+  `{ "versionCode": n, "versionName": "…" }` — die App vergleicht beim Sync
+  gegen ihre eigene Version und zeigt bei neuerem Stand ein Update-Banner.
+- `GET /app/kkh-tv-wartung.apk` (öffentlich): aktuelle signierte APK; die App
+  lädt sie herunter und startet den Android-Installationsdialog.
+  Beide Dateien liegen in `server/backend/public/app/` und kommen per
+  Git-Commit + Autodeploy auf den Server. Download-Link für neue Geräte:
+  `https://riegel-troisdorf.de/kkh/app/kkh-tv-wartung.apk`.
+
 ## Fehlerformat
 Fehler immer `{ "error": "Beschreibung" }` mit passendem HTTP-Status;
 die App zeigt `error` dem Nutzer an. 401 = ungültiger API-Schlüssel.

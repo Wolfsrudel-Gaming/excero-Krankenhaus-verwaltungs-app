@@ -20,7 +20,10 @@ import androidx.navigation.compose.rememberNavController
 import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.ui.screens.BerichtScreen
 import de.excero.tvwartung.ui.screens.ExportScreen
+import de.excero.tvwartung.ui.screens.FreenetScreen
 import de.excero.tvwartung.ui.screens.HomeScreen
+import de.excero.tvwartung.ui.screens.StatistikScreen
+import de.excero.tvwartung.ui.screens.SucheScreen
 import de.excero.tvwartung.ui.screens.PruefbogenScreen
 import de.excero.tvwartung.ui.screens.RoomDetailScreen
 import de.excero.tvwartung.ui.screens.RoomEditScreen
@@ -38,6 +41,9 @@ object Routes {
     const val SETTINGS = "settings"
     const val VERWALTUNG = "verwaltung"
     const val ZIMMER_NEU = "zimmer_neu"
+    const val FREENET = "freenet"
+    const val STATISTIK = "statistik"
+    const val SUCHE = "suche"
     fun room(id: String) = "room/${URLEncoder.encode(id, "UTF-8")}"
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
     fun bericht(id: Long) = "bericht/$id"
@@ -80,7 +86,30 @@ class MainActivity : ComponentActivity() {
                                 onSettingsClick = { navController.navigate(Routes.SETTINGS) },
                                 onStundenzettel = { navController.navigate(Routes.stundenzettel(it)) },
                                 onVerwaltung = { navController.navigate(Routes.VERWALTUNG) },
-                                onNeuesZimmer = { navController.navigate(Routes.ZIMMER_NEU) }
+                                onNeuesZimmer = { navController.navigate(Routes.ZIMMER_NEU) },
+                                onFreenet = { navController.navigate(Routes.FREENET) },
+                                onStatistik = { navController.navigate(Routes.STATISTIK) },
+                                onSuche = { navController.navigate(Routes.SUCHE) }
+                            )
+                        }
+                        composable(Routes.FREENET) {
+                            FreenetScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onRoomClick = { navController.navigate(Routes.room(it)) }
+                            )
+                        }
+                        composable(Routes.STATISTIK) {
+                            StatistikScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Routes.SUCHE) {
+                            SucheScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onOpen = { navController.navigate(Routes.bericht(it)) }
                             )
                         }
                         composable("room/{roomId}") { entry ->

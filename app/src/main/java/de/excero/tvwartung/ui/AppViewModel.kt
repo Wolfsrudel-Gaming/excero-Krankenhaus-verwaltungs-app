@@ -298,6 +298,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun inspection(id: Long): Flow<Inspection?> = repository.inspection(id)
 
+    // ----- Berichtssuche & Papierkorb -----
+
+    /** Alle sichtbaren Prüfberichte (für Suche und Statistik). */
+    val alleBerichte: StateFlow<List<Inspection>> = repository.alleSichtbarenInspections()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Berichte im Papierkorb (soft-delete, jederzeit wiederherstellbar). */
+    val geloeschteBerichte: StateFlow<List<Inspection>> = repository.geloeschteInspections()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun loescheBericht(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.setInspectionGeloescht(id, true)
+            _message.value = "Bericht in den Papierkorb verschoben"
+            if (settings.value.autoSync) syncNow(leise = true)
+        }
+    }
+
+    fun stelleBerichtWieder(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.setInspectionGeloescht(id, false)
+            _message.value = "Bericht wiederhergestellt"
+            if (settings.value.autoSync) syncNow(leise = true)
+        }
+    }
+
     /** Fotos, die zum Prüfdatum eines Berichts gehören. */
     fun photosForInspection(inspection: Inspection) =
         photoStore.photosFor(inspection.roomId, Dates.isoToFolder(inspection.datum))

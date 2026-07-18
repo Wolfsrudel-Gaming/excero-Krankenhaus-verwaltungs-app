@@ -127,8 +127,9 @@ object XlsxWriter {
         append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">")
         append("<cols><col min=\"1\" max=\"1\" width=\"12\" customWidth=\"1\"/>")
         append("<col min=\"2\" max=\"2\" width=\"10\" customWidth=\"1\"/>")
-        append("<col min=\"3\" max=\"10\" width=\"14\" customWidth=\"1\"/>")
-        append("<col min=\"11\" max=\"11\" width=\"50\" customWidth=\"1\"/></cols>")
+        append("<col min=\"3\" max=\"3\" width=\"16\" customWidth=\"1\"/>")
+        append("<col min=\"4\" max=\"11\" width=\"14\" customWidth=\"1\"/>")
+        append("<col min=\"12\" max=\"12\" width=\"50\" customWidth=\"1\"/></cols>")
         append("<sheetData>")
         append(
             headerRow(

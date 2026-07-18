@@ -35,6 +35,36 @@ manuellen Abgleich mit der Excel-Liste (KKH-Übersicht).
 - **Startdaten:** Der Stand der hochgeladenen KKH-Übersicht (101 Zimmer)
   ist als Ausgangsdatenbank in der App enthalten.
 
+### Neu in Version 1.9 – Produktreif-Update (Mehrbenutzer)
+
+- **Mehrere Mitarbeiter, mehrere Geräte, ein Server:** Jedes Gerät bekommt in
+  den Einstellungen einen Mitarbeiter-Namen (Auswahl aus der im Web gepflegten
+  Liste). Alle Prüfberichte tragen den Prüfer und erscheinen per Delta-Sync
+  auf allen Geräten – in der Übersicht steht am geprüften Zimmer, WER geprüft
+  hat. Fotos der Kollegen werden bewusst nicht übertragen (Datenvolumen).
+- **Team-Stundenzettel:** EIN Stundenzettel pro Station mit einer Zeile je
+  Mitarbeiter (Stunden + Anfahrt, Summenzeile im PDF) und Unterschrift von
+  Station UND jedem Mitarbeiter. Einsatz-Zeiterfassung („Einsatz starten/
+  beenden“) füllt die eigene Zeile automatisch vor; Zeilen der Kollegen
+  kommen über den Server (last-write-wins).
+- **Automatische Updates:** Der Server liefert unter `/kkh/app/` immer die
+  aktuelle APK samt `version.json`. Die App prüft beim Sync auf neue
+  Versionen, zeigt ein Update-Banner und installiert per Tipp direkt vom
+  Server. Der Server selbst aktualisiert sich per systemd-Timer alle
+  5 Minuten aus Git (Autodeploy).
+- **Neue Screens:** Stationsübergreifende **Freenet-Ablaufübersicht**
+  (sortiert nach Restlaufzeit, Filter, Verlängern-Link), interne **Statistik**
+  (Prüfungen pro Monat/Station/Mitarbeiter, n.i.O.-Quoten je Prüfpunkt,
+  Verlängerungen – wird nicht exportiert) und **Berichtssuche mit Papierkorb**
+  (Freitext + Filter; gelöschte Berichte landen im Papierkorb und sind
+  wiederherstellbar, synchronisiert auf alle Geräte).
+- **Server-Power:** Delta-Sync (nur Neues seit letztem Abgleich), Thumbnails
+  fürs Web (sharp), nächtliche PostgreSQL-Backups mit 30-Tage-Rotation.
+- **Echtstart:** Einstellungen → „Echtstart vorbereiten“ löscht alle
+  Testberichte/-zettel/-fotos, behält Zimmer-Stammdaten und Material.
+- Excel-Export mit Mitarbeiter-Spalte; DB-Migration v8 – Update installiert
+  wie immer über die bestehende Version, alle Daten bleiben erhalten.
+
 ### Neu in Version 1.8
 
 - **Server-Synchronisation & Weboberfläche:** Neues Verzeichnis `server/`
