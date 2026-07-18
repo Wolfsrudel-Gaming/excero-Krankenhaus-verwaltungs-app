@@ -37,3 +37,16 @@ CREATE TABLE IF NOT EXISTS stundenzettel (
     updated_at     TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (station, zeitraum_start)
 );
+
+-- Benutzer der Weboberfläche (Mehrbenutzer-Login mit vollem Zugriff).
+-- Passwörter werden mit scrypt + zufälligem Salt gehasht (nie im Klartext).
+CREATE TABLE IF NOT EXISTS users (
+    id            SERIAL PRIMARY KEY,
+    username      TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    salt          TEXT NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Login unabhängig von Groß-/Kleinschreibung des Benutzernamens
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (lower(username));

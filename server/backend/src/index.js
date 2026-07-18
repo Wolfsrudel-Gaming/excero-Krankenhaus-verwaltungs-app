@@ -15,10 +15,13 @@ const ADMIN_PASSWORD = process.env.KKH_ADMIN_PASSWORD || '';
 const SECRET = process.env.KKH_SECRET || crypto.randomBytes(32).toString('hex');
 const FILES_DIR = process.env.FILES_DIR || '/data/files';
 
-if (!API_KEY || !ADMIN_PASSWORD) {
-  console.error('KKH_API_KEY und KKH_ADMIN_PASSWORD müssen gesetzt sein (.env).');
+if (!API_KEY) {
+  console.error('KKH_API_KEY muss gesetzt sein (.env).');
   process.exit(1);
 }
+// ADMIN_PASSWORD wird nicht mehr für den Login verwendet (Mehrbenutzer über
+// die users-Tabelle), bleibt aber für die Abwärtskompatibilität akzeptiert.
+void ADMIN_PASSWORD;
 fs.mkdirSync(FILES_DIR, { recursive: true });
 
 const app = express();
@@ -29,23 +32,52 @@ const router = express.Router();
 
 const nowIso = () => new Date().toISOString().slice(0, 19);
 
-function signSession(expiresMs) {
-  const payload = String(expiresMs);
-  const mac = crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
-  return `${payload}.${mac}`;
+// ---------- Passwort-Hashing (scrypt, ohne externe Abhängigkeiten) ----------
+
+function hashPassword(passwort) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(passwort), salt, 64).toString('hex');
+  return { hash, salt };
 }
 
+function verifyPassword(passwort, hash, salt) {
+  if (!hash || !salt) return false;
+  const kandidat = crypto.scryptSync(String(passwort), salt, 64);
+  const erwartet = Buffer.from(hash, 'hex');
+  if (kandidat.length !== erwartet.length) return false;
+  return crypto.timingSafeEqual(kandidat, erwartet);
+}
+
+// ---------- Session (signiertes Cookie mit Benutzeridentität) ----------
+
+function hmac(payload) {
+  return crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
+}
+
+function signSession(username, expiresMs) {
+  const payload = Buffer.from(JSON.stringify({ u: username, e: expiresMs }))
+    .toString('base64url');
+  return `${payload}.${hmac(payload)}`;
+}
+
+// Gibt bei gültiger Session den Benutzernamen zurück, sonst null.
 function checkSession(token) {
-  if (!token) return false;
+  if (!token) return null;
   const [payload, mac] = token.split('.');
-  if (!payload || !mac) return false;
-  const expected = crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
+  if (!payload || !mac) return null;
+  const expected = hmac(payload);
   try {
-    if (!crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return false;
+    if (!crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return null;
   } catch {
-    return false;
+    return null;
   }
-  return Number(payload) > Date.now();
+  try {
+    const { u, e } = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!e || Number(e) <= Date.now()) return null;
+    return u || null;
+  } catch {
+    return null;
+  }
 }
 
 function parseCookies(req) {
@@ -67,8 +99,40 @@ function requireApiKey(req, res, next) {
 
 // Weboberfläche: Session-Cookie
 function requireWebAuth(req, res, next) {
-  if (checkSession(parseCookies(req).kkh_session)) return next();
+  const username = checkSession(parseCookies(req).kkh_session);
+  if (username) { req.username = username; return next(); }
   res.status(401).json({ error: 'Nicht angemeldet' });
+}
+
+// ---------- Benutzer-Hilfsfunktionen ----------
+
+async function findUser(username) {
+  const { rows } = await pool.query(
+    'SELECT * FROM users WHERE lower(username) = lower($1)', [String(username || '')]);
+  return rows[0] || null;
+}
+
+async function countUsers() {
+  return Number((await pool.query('SELECT count(*) AS n FROM users')).rows[0].n);
+}
+
+async function createUser(username, passwort) {
+  const name = String(username || '').trim();
+  if (name.length < 2) throw new Error('Benutzername muss mindestens 2 Zeichen haben');
+  if (String(passwort || '').length < 4) throw new Error('Passwort muss mindestens 4 Zeichen haben');
+  if (await findUser(name)) throw new Error(`Benutzer „${name}" existiert bereits`);
+  const { hash, salt } = hashPassword(passwort);
+  const { rows } = await pool.query(
+    `INSERT INTO users (username, password_hash, salt) VALUES ($1,$2,$3)
+     RETURNING id, username, created_at, updated_at`, [name, hash, salt]);
+  return rows[0];
+}
+
+// Erstellt bei leerer Benutzertabelle den ersten Benutzer (Alexander).
+async function seedFirstUser() {
+  if (await countUsers() > 0) return;
+  await createUser('Alexander', '123434');
+  console.log('Erster Benutzer angelegt: Alexander (bitte Passwort nach dem ersten Login ändern).');
 }
 
 // Pfade im Dateispeicher absichern (kein Ausbruch aus FILES_DIR)
@@ -188,15 +252,19 @@ router.put('/api/sync/file', requireApiKey,
 
 // ---------- Web-API (Session) ----------
 
-router.post('/api/login', express.json(), (req, res) => {
+router.post('/api/login', express.json(), async (req, res) => {
+  const username = String(req.body.username || '').trim();
   const pw = String(req.body.password || '');
-  const ok = pw.length === ADMIN_PASSWORD.length &&
-    crypto.timingSafeEqual(Buffer.from(pw), Buffer.from(ADMIN_PASSWORD.padEnd(pw.length)));
-  if (!ok) return res.status(401).json({ error: 'Falsches Passwort' });
-  const token = signSession(Date.now() + 12 * 60 * 60 * 1000); // 12 Stunden
+  const user = username ? await findUser(username) : null;
+  // Immer scrypt ausführen (Timing) – auch bei unbekanntem Benutzer
+  const ok = user
+    ? verifyPassword(pw, user.password_hash, user.salt)
+    : verifyPassword(pw, crypto.randomBytes(64).toString('hex'), 'x') && false;
+  if (!user || !ok) return res.status(401).json({ error: 'Benutzername oder Passwort falsch' });
+  const token = signSession(user.username, Date.now() + 12 * 60 * 60 * 1000); // 12 Stunden
   res.setHeader('Set-Cookie',
     `kkh_session=${encodeURIComponent(token)}; Path=${BASE_PATH || '/'}; HttpOnly; SameSite=Lax; Max-Age=43200`);
-  res.json({ ok: true });
+  res.json({ ok: true, username: user.username });
 });
 
 router.post('/api/logout', (req, res) => {
@@ -204,7 +272,103 @@ router.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-router.get('/api/web/me', requireWebAuth, (req, res) => res.json({ ok: true }));
+router.get('/api/web/me', requireWebAuth, (req, res) => res.json({ ok: true, username: req.username }));
+
+// ---------- Benutzerverwaltung (alle angemeldeten Benutzer haben Vollzugriff) ----------
+
+router.get('/api/web/users', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT id, username, created_at, updated_at FROM users ORDER BY lower(username)');
+  res.json({ users: rows, aktuell: req.username });
+});
+
+router.post('/api/web/users', requireWebAuth, express.json(), async (req, res) => {
+  try {
+    const user = await createUser(req.body.username, req.body.password);
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Passwort eines beliebigen Benutzers zurücksetzen / Benutzer umbenennen
+router.patch('/api/web/users/:id', requireWebAuth, express.json(), async (req, res) => {
+  const id = Number(req.params.id);
+  const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [id]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+  const felder = [];
+  const werte = [];
+  if (req.body.username !== undefined) {
+    const name = String(req.body.username).trim();
+    if (name.length < 2) return res.status(400).json({ error: 'Benutzername zu kurz' });
+    const kollision = await findUser(name);
+    if (kollision && kollision.id !== id) return res.status(409).json({ error: 'Benutzername bereits vergeben' });
+    werte.push(name); felder.push(`username=$${werte.length}`);
+  }
+  if (req.body.password !== undefined) {
+    if (String(req.body.password).length < 4) return res.status(400).json({ error: 'Passwort muss mindestens 4 Zeichen haben' });
+    const { hash, salt } = hashPassword(req.body.password);
+    werte.push(hash); felder.push(`password_hash=$${werte.length}`);
+    werte.push(salt); felder.push(`salt=$${werte.length}`);
+  }
+  if (felder.length === 0) return res.status(400).json({ error: 'Nichts zu ändern' });
+  werte.push(id);
+  await pool.query(
+    `UPDATE users SET ${felder.join(', ')}, updated_at=now() WHERE id=$${werte.length}`, werte);
+  res.json({ ok: true });
+});
+
+router.delete('/api/web/users/:id', requireWebAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const { rows } = await pool.query('SELECT username FROM users WHERE id=$1', [id]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+  if (rows[0].username.toLowerCase() === String(req.username).toLowerCase())
+    return res.status(400).json({ error: 'Der eigene Benutzer kann nicht gelöscht werden' });
+  if (await countUsers() <= 1)
+    return res.status(400).json({ error: 'Der letzte Benutzer kann nicht gelöscht werden' });
+  await pool.query('DELETE FROM users WHERE id=$1', [id]);
+  res.json({ ok: true });
+});
+
+// Eigenes Passwort ändern (aktuelles Passwort erforderlich)
+router.post('/api/web/change-password', requireWebAuth, express.json(), async (req, res) => {
+  const user = await findUser(req.username);
+  if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+  if (!verifyPassword(String(req.body.aktuell || ''), user.password_hash, user.salt))
+    return res.status(401).json({ error: 'Aktuelles Passwort ist falsch' });
+  if (String(req.body.neu || '').length < 4)
+    return res.status(400).json({ error: 'Neues Passwort muss mindestens 4 Zeichen haben' });
+  const { hash, salt } = hashPassword(req.body.neu);
+  await pool.query('UPDATE users SET password_hash=$1, salt=$2, updated_at=now() WHERE id=$3',
+    [hash, salt, user.id]);
+  res.json({ ok: true });
+});
+
+// Verbindungsdaten & Sync-Datenstand für die Android-App
+router.get('/api/web/app-info', requireWebAuth, async (req, res) => {
+  const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+  const host = req.get('host') || '';
+  const agg = (await pool.query(`SELECT
+      (SELECT count(*) FROM rooms)                          AS rooms,
+      (SELECT count(*) FROM rooms WHERE NOT inaktiv)        AS rooms_aktiv,
+      (SELECT count(*) FROM inspections)                    AS inspections,
+      (SELECT count(*) FROM stundenzettel)                  AS zettel,
+      (SELECT max(updated_at) FROM rooms)                   AS rooms_stand,
+      (SELECT max(created_at) FROM inspections)             AS insp_stand`)).rows[0];
+  const dateien = listFiles(FILES_DIR, FILES_DIR);
+  res.json({
+    serverUrl: host ? `${proto}://${host}${BASE_PATH}` : BASE_PATH,
+    apiKey: API_KEY,
+    daten: {
+      zimmer: Number(agg.rooms), zimmerAktiv: Number(agg.rooms_aktiv),
+      pruefberichte: Number(agg.inspections), stundenzettel: Number(agg.zettel),
+      dateien: dateien.length,
+      dateienMb: Math.round(dateien.reduce((s, f) => s + f.size, 0) / 1048576 * 10) / 10,
+      zimmerStand: agg.rooms_stand || null,
+      pruefungenStand: agg.insp_stand || null,
+    },
+  });
+});
 
 router.get('/api/web/overview', requireWebAuth, async (req, res) => {
   const rooms = (await pool.query('SELECT * FROM rooms')).rows;
@@ -320,7 +484,8 @@ app.use(BASE_PATH || '/', router);
 if (BASE_PATH) app.get(BASE_PATH, (req, res) => res.redirect(`${BASE_PATH}/`));
 app.get('/', (req, res) => res.redirect(`${BASE_PATH}/`));
 
-init().then(() => {
+init().then(async () => {
+  await seedFirstUser();
   app.listen(PORT, () => console.log(`KKH-Server läuft auf Port ${PORT} unter ${BASE_PATH}/`));
 }).catch((e) => {
   console.error('Start fehlgeschlagen:', e);

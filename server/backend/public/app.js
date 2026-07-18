@@ -49,23 +49,29 @@
   function zeigeLogin() {
     $('#main-view').hidden = true;
     $('#login-view').hidden = false;
-    $('#login-pw').focus();
+    ($('#login-user').value ? $('#login-pw') : $('#login-user')).focus();
   }
-  async function zeigeApp() {
+  let aktuellerBenutzer = '';
+  async function zeigeApp(me) {
+    if (me && me.username) aktuellerBenutzer = me.username;
+    const chip = $('#aktueller-benutzer');
+    if (chip) chip.textContent = aktuellerBenutzer ? `angemeldet: ${aktuellerBenutzer}` : '';
     $('#login-view').hidden = true;
     $('#main-view').hidden = false;
     route();
   }
 
   $('#login-btn').addEventListener('click', anmelden);
+  $('#login-user').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#login-pw').focus(); });
   $('#login-pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') anmelden(); });
   async function anmelden() {
     const fehler = $('#login-fehler');
     fehler.hidden = true;
     try {
-      await api('login', { method: 'POST', body: { password: $('#login-pw').value } });
+      const r = await api('login', { method: 'POST', body: {
+        username: $('#login-user').value, password: $('#login-pw').value } });
       $('#login-pw').value = '';
-      zeigeApp();
+      zeigeApp(r);
     } catch (e) {
       fehler.textContent = e.message;
       fehler.hidden = false;
@@ -73,8 +79,44 @@
   }
   $('#logout-btn').addEventListener('click', async () => {
     await api('logout', { method: 'POST' }).catch(() => {});
+    aktuellerBenutzer = '';
     zeigeLogin();
   });
+  $('#pw-aendern-btn').addEventListener('click', eigenesPasswortModal);
+
+  function eigenesPasswortModal() {
+    modal(`
+      <h3>Mein Passwort ändern</h3>
+      <div class="felder">
+        <div class="feld"><label>Aktuelles Passwort</label>
+          <input id="pw-alt" type="password" autocomplete="current-password"></div>
+        <div class="feld"><label>Neues Passwort (min. 4 Zeichen)</label>
+          <input id="pw-neu" type="password" autocomplete="new-password"></div>
+        <div class="feld"><label>Neues Passwort wiederholen</label>
+          <input id="pw-neu2" type="password" autocomplete="new-password"></div>
+      </div>
+      <div id="pw-fehler" class="fehler" hidden></div>
+      <div class="modal-aktionen">
+        <button class="btn outline" data-schliessen>Abbrechen</button>
+        <button class="btn primary" id="pw-speichern">Ändern</button>
+      </div>`);
+    $('#pw-speichern').addEventListener('click', async () => {
+      const fehler = $('#pw-fehler');
+      fehler.hidden = true;
+      if ($('#pw-neu').value !== $('#pw-neu2').value) {
+        fehler.textContent = 'Die neuen Passwörter stimmen nicht überein.';
+        fehler.hidden = false; return;
+      }
+      try {
+        await api('web/change-password', { method: 'POST', body: {
+          aktuell: $('#pw-alt').value, neu: $('#pw-neu').value } });
+        schliesseModal();
+        meldung('Passwort geändert.');
+      } catch (e) {
+        fehler.textContent = e.message; fehler.hidden = false;
+      }
+    });
+  }
 
   // ---------- Routing ----------
   window.addEventListener('hashchange', route);
@@ -89,6 +131,7 @@
       else if (teile[0] === 'zimmer') await zeigeZimmer();
       else if (teile[0] === 'pruefungen') await zeigePruefungen();
       else if (teile[0] === 'stundenzettel') await zeigeStundenzettel();
+      else if (teile[0] === 'benutzer') await zeigeBenutzer();
       else await zeigeDashboard();
     } catch (e) {
       if (e.message !== 'Nicht angemeldet') {
@@ -99,7 +142,9 @@
 
   // ---------- Dashboard ----------
   async function zeigeDashboard() {
-    const d = await api('web/overview');
+    const [d, app] = await Promise.all([api('web/overview'), api('web/app-info')]);
+    const ad = app.daten || {};
+    const stand = [ad.zimmerStand, ad.pruefungenStand].filter(Boolean).sort().pop();
     content().innerHTML = `
       <div class="seitentitel">Dashboard</div>
       <div class="seitensub">Überblick über die TV-Wartung im Kinderkrankenhaus</div>
@@ -110,6 +155,33 @@
         <div class="kpi warn"><div class="wert">${d.freenetBald}</div><div class="label">Freenet läuft in &lt; 3 Monaten ab</div></div>
         <div class="kpi err"><div class="wert">${d.freenetAbgelaufen}</div><div class="label">Freenet abgelaufen</div></div>
       </div>
+
+      <div class="card">
+        <h3>App-Anbindung (Server-Synchronisation)</h3>
+        <div class="app-info-grid">
+          <div>
+            <div class="feld"><label>Server-URL (in der App eintragen)</label>
+              <div class="code-zeile"><code id="ai-url">${esc(app.serverUrl)}</code>
+                <button class="btn outline klein" id="ai-url-copy">Kopieren</button></div></div>
+            <div class="feld"><label>API-Schlüssel (in der App eintragen)</label>
+              <div class="code-zeile"><code id="ai-key" data-key="${esc(app.apiKey)}">••••••••••••••••</code>
+                <button class="btn outline klein" id="ai-key-zeigen">Anzeigen</button>
+                <button class="btn outline klein" id="ai-key-copy">Kopieren</button></div></div>
+            <div class="hinweis">In der App: Einstellungen → Server-Synchronisation → URL und Schlüssel
+              eintragen, „Automatisch synchronisieren" aktivieren, dann „Jetzt synchronisieren".</div>
+          </div>
+          <div>
+            <table class="daten-tabelle"><tbody>
+              <tr><td>Zimmer (synchronisiert)</td><td><b>${ad.zimmer}</b> (${ad.zimmerAktiv} aktiv)</td></tr>
+              <tr><td>Prüfberichte</td><td><b>${ad.pruefberichte}</b></td></tr>
+              <tr><td>Stundenzettel</td><td><b>${ad.stundenzettel}</b></td></tr>
+              <tr><td>Fotos &amp; PDFs</td><td><b>${ad.dateien}</b> Dateien (${ad.dateienMb} MB)</td></tr>
+              <tr><td>Letzter Datenstand</td><td><b>${stand ? deDatum(stand) : 'noch keine Sync-Daten'}</b></td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <h3>Letzte Prüfungen</h3>
         ${d.letztePruefungen.length === 0 ? '<div class="hinweis">Noch keine Prüfungen synchronisiert. Sobald die App synchronisiert, erscheinen die Daten hier.</div>' : `
@@ -118,6 +190,21 @@
         </tbody></table>`}
       </div>`;
     bindePruefungsZeilen();
+
+    const kopiere = async (text, btn) => {
+      try { await navigator.clipboard.writeText(text); } catch { /* Clipboard evtl. gesperrt */ }
+      const alt = btn.textContent;
+      btn.textContent = 'Kopiert ✓';
+      setTimeout(() => { btn.textContent = alt; }, 1500);
+    };
+    $('#ai-url-copy').addEventListener('click', (e) => kopiere($('#ai-url').textContent, e.target));
+    $('#ai-key-copy').addEventListener('click', (e) => kopiere($('#ai-key').dataset.key, e.target));
+    $('#ai-key-zeigen').addEventListener('click', (e) => {
+      const el = $('#ai-key');
+      const versteckt = el.textContent.startsWith('•');
+      el.textContent = versteckt ? el.dataset.key : '••••••••••••••••';
+      e.target.textContent = versteckt ? 'Verbergen' : 'Anzeigen';
+    });
   }
 
   function pruefungsZeile(p) {
@@ -344,6 +431,109 @@
       </div>`;
   }
 
+  // ---------- Benutzer (Admin) ----------
+  async function zeigeBenutzer() {
+    const { users, aktuell } = await api('web/users');
+    aktuellerBenutzer = aktuell || aktuellerBenutzer;
+    content().innerHTML = `
+      <div class="seitentitel">Benutzer</div>
+      <div class="seitensub">${users.length} Benutzer · alle haben vollen Zugriff auf die Weboberfläche</div>
+      <div class="werkzeuge">
+        <button class="btn primary" id="neu-benutzer-btn">+ Neuer Benutzer</button>
+      </div>
+      <div class="card">
+        <table><thead><tr><th>Benutzername</th><th>Angelegt</th><th>Zuletzt geändert</th><th></th></tr></thead>
+        <tbody>${users.map((u) => `
+          <tr>
+            <td><b>${esc(u.username)}</b>${u.username === aktuell ? ' <span class="badge ok">Sie</span>' : ''}</td>
+            <td>${deDatum(u.created_at)}</td>
+            <td>${deDatum(u.updated_at)}</td>
+            <td class="aktionen-zelle">
+              <button class="btn outline klein" data-pw="${u.id}" data-name="${esc(u.username)}">Passwort zurücksetzen</button>
+              ${u.username === aktuell ? '' : `<button class="btn danger klein" data-del="${u.id}" data-name="${esc(u.username)}">Löschen</button>`}
+            </td>
+          </tr>`).join('')}</tbody></table>
+      </div>`;
+
+    $('#neu-benutzer-btn').addEventListener('click', neuerBenutzerModal);
+    document.querySelectorAll('[data-pw]').forEach((b) => b.addEventListener('click',
+      () => passwortResetModal(b.dataset.pw, b.dataset.name)));
+    document.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click',
+      () => benutzerLoeschen(b.dataset.del, b.dataset.name)));
+  }
+
+  function neuerBenutzerModal() {
+    modal(`
+      <h3>Neuen Benutzer anlegen</h3>
+      <div class="felder">
+        <div class="feld"><label>Benutzername</label>
+          <input id="nb-user" autocapitalize="none" autocomplete="off"></div>
+        <div class="feld"><label>Passwort (min. 4 Zeichen)</label>
+          <input id="nb-pw" type="password" autocomplete="new-password"></div>
+      </div>
+      <div id="nb-fehler" class="fehler" hidden></div>
+      <div class="modal-aktionen">
+        <button class="btn outline" data-schliessen>Abbrechen</button>
+        <button class="btn primary" id="nb-anlegen">Anlegen</button>
+      </div>`);
+    $('#nb-anlegen').addEventListener('click', async () => {
+      try {
+        await api('web/users', { method: 'POST', body: {
+          username: $('#nb-user').value, password: $('#nb-pw').value } });
+        schliesseModal();
+        meldung('Benutzer angelegt.');
+        zeigeBenutzer();
+      } catch (e) {
+        $('#nb-fehler').textContent = e.message; $('#nb-fehler').hidden = false;
+      }
+    });
+  }
+
+  function passwortResetModal(id, name) {
+    modal(`
+      <h3>Passwort zurücksetzen</h3>
+      <div class="seitensub">für Benutzer <b>${esc(name)}</b></div>
+      <div class="felder">
+        <div class="feld"><label>Neues Passwort (min. 4 Zeichen)</label>
+          <input id="rp-pw" type="password" autocomplete="new-password"></div>
+      </div>
+      <div id="rp-fehler" class="fehler" hidden></div>
+      <div class="modal-aktionen">
+        <button class="btn outline" data-schliessen>Abbrechen</button>
+        <button class="btn primary" id="rp-speichern">Passwort setzen</button>
+      </div>`);
+    $('#rp-speichern').addEventListener('click', async () => {
+      try {
+        await api(`web/users/${id}`, { method: 'PATCH', body: { password: $('#rp-pw').value } });
+        schliesseModal();
+        meldung('Passwort gesetzt.');
+      } catch (e) {
+        $('#rp-fehler').textContent = e.message; $('#rp-fehler').hidden = false;
+      }
+    });
+  }
+
+  async function benutzerLoeschen(id, name) {
+    if (!confirm(`Benutzer „${name}" wirklich löschen?`)) return;
+    try {
+      await api(`web/users/${id}`, { method: 'DELETE' });
+      meldung('Benutzer gelöscht.');
+      zeigeBenutzer();
+    } catch (e) {
+      meldung(e.message, true);
+    }
+  }
+
+  // ---------- Toast-Meldung ----------
+  function meldung(text, istFehler = false) {
+    const t = document.createElement('div');
+    t.className = `toast ${istFehler ? 'toast-fehler' : ''}`;
+    t.textContent = text;
+    document.body.appendChild(t);
+    setTimeout(() => t.classList.add('sichtbar'), 10);
+    setTimeout(() => { t.classList.remove('sichtbar'); setTimeout(() => t.remove(), 300); }, 3000);
+  }
+
   // ---------- Modal ----------
   function modal(html) {
     schliesseModal();
@@ -358,5 +548,5 @@
   function schliesseModal() { $('#modal')?.remove(); }
 
   // ---------- Start ----------
-  api('web/me').then(zeigeApp).catch(() => {});
+  api('web/me').then((me) => zeigeApp(me)).catch(() => zeigeLogin());
 })();
