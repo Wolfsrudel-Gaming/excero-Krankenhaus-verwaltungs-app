@@ -312,6 +312,72 @@ router.get('/api/web/file', requireWebAuth, (req, res) => {
   res.sendFile(ziel);
 });
 
+
+// ---------- Voll-Synchronisation (Spiegel der App-Daten, Replace-All) ----------
+
+async function replaceAll(tabelle, spalten, zeilen) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM ${tabelle}`);
+    for (const z of zeilen) {
+      const platzhalter = spalten.map((_, i) => `$${i + 1}`).join(',');
+      await client.query(
+        `INSERT INTO ${tabelle} (${spalten.join(',')}) VALUES (${platzhalter})`,
+        spalten.map((sp) => z[sp]));
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+router.post('/api/sync/sperren', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
+  await replaceAll('sperren', ['room_id', 'gesperrt_am', 'grund'],
+    (req.body.sperren || []).map((s) => ({
+      room_id: s.roomId, gesperrt_am: s.gesperrtAm || '', grund: s.grund || '' })));
+  res.json({ ok: true });
+});
+
+router.post('/api/sync/material', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
+  await replaceAll('material', ['name', 'bestand', 'bestand_aktiv', 'aktiv', 'sort_index'],
+    (req.body.material || []).map((m) => ({
+      name: m.name, bestand: m.bestand || 0, bestand_aktiv: !!m.bestandAktiv,
+      aktiv: m.aktiv !== false, sort_index: m.sortIndex || 0 })));
+  res.json({ ok: true });
+});
+
+router.post('/api/sync/pruefpunkte', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
+  await replaceAll('app_pruefpunkte', ['titel', 'aktiv', 'sort_index'],
+    (req.body.punkte || []).map((p) => ({
+      titel: p.titel, aktiv: p.aktiv !== false, sort_index: p.sortIndex || 0 })));
+  res.json({ ok: true });
+});
+
+router.post('/api/sync/aktivitaet', requireApiKey, express.json({ limit: '50mb' }), async (req, res) => {
+  await replaceAll('app_aktivitaet', ['room_id', 'zeitpunkt', 'aktion'],
+    (req.body.eintraege || []).map((a) => ({
+      room_id: a.roomId, zeitpunkt: a.zeitpunkt || '', aktion: a.aktion || '' })));
+  res.json({ ok: true });
+});
+
+// Lesend für die Weboberfläche (Einbindung optional)
+router.get('/api/web/material', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM material ORDER BY sort_index, name');
+  res.json({ material: rows });
+});
+router.get('/api/web/sperren', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM sperren ORDER BY room_id');
+  res.json({ sperren: rows });
+});
+router.get('/api/web/aktivitaet', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM app_aktivitaet ORDER BY zeitpunkt DESC LIMIT 500');
+  res.json({ aktivitaet: rows });
+});
+
 // ---------- Statische Weboberfläche ----------
 
 router.use(express.static(path.join(__dirname, '..', 'public')));

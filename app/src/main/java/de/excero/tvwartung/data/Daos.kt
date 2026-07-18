@@ -71,6 +71,9 @@ interface RoomSperreDao {
 
     @Query("SELECT * FROM room_sperren")
     fun observeAll(): Flow<List<RoomSperre>>
+
+    @Query("SELECT * FROM room_sperren")
+    suspend fun getAll(): List<RoomSperre>
 }
 
 @Dao
@@ -83,6 +86,9 @@ interface ActivityLogDao {
 
     @Query("SELECT * FROM activity_log ORDER BY zeitpunkt DESC LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<ActivityLog>>
+
+    @Query("SELECT * FROM activity_log ORDER BY id")
+    suspend fun getAll(): List<ActivityLog>
 }
 
 @Dao
@@ -113,6 +119,9 @@ interface MaterialDao {
 interface CustomPruefpunktDao {
     @Query("SELECT * FROM custom_pruefpunkte ORDER BY sortIndex, titel")
     fun observeAll(): Flow<List<CustomPruefpunkt>>
+
+    @Query("SELECT * FROM custom_pruefpunkte ORDER BY sortIndex, titel")
+    suspend fun getAll(): List<CustomPruefpunkt>
 
     @Query("SELECT * FROM custom_pruefpunkte WHERE aktiv = 1 ORDER BY sortIndex, titel")
     fun observeAktive(): Flow<List<CustomPruefpunkt>>

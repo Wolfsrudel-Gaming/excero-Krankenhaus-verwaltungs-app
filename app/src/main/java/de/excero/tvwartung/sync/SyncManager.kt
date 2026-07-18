@@ -20,6 +20,7 @@ import java.net.URLEncoder
 class SyncManager(
     private val repository: Repository,
     private val photoStore: PhotoStore,
+    private val signatureStore: de.excero.tvwartung.files.SignatureStore?,
     private val serverUrl: String,
     private val apiKey: String
 ) {
@@ -29,11 +30,12 @@ class SyncManager(
         val zimmerEmpfangen: Int,
         val pruefungen: Int,
         val zettel: Int,
-        val dateien: Int
+        val dateien: Int,
+        val hinweis: String = ""
     ) {
         fun meldung(): String =
             "Sync ok: $zimmerGesendet Zimmer ↑, $zimmerEmpfangen Zimmer ↓, " +
-                "$pruefungen Prüfbögen, $zettel Stundenzettel, $dateien Dateien"
+                "$pruefungen Prüfbögen, $zettel Stundenzettel, $dateien Dateien" + hinweis
     }
 
     private val basis = serverUrl.trimEnd('/')
@@ -179,8 +181,58 @@ class SyncManager(
                 hochgeladen++
             }
         }
+        // Unterschriften ebenfalls hochladen (unter _signaturen/, kollidiert nicht mit Zimmern)
+        signatureStore?.alleDateien()?.forEach { f ->
+            val rel = "_signaturen/${f.name}"
+            if ("$rel|${f.length()}" !in vorhandene) {
+                ladeDateiHoch(rel, f)
+                hochgeladen++
+            }
+        }
 
-        return Ergebnis(gesendet, empfangen, neuePruefungen, zettelListe.size, hochgeladen)
+        // --- 6) Vollständigkeit: Sperren, Material, Prüfpunkte, Aktivität ---
+        // Prinzip: Es wird immer alles übertragen; was die Web-Seite damit
+        // anzeigt, entscheidet sie selbst. Tolerant gegenüber älteren Servern.
+        var hinweis = ""
+        runCatching {
+            val sperrenJson = JSONArray()
+            repository.getAllSperren().forEach { sp ->
+                sperrenJson.put(JSONObject().apply {
+                    put("roomId", sp.roomId); put("gesperrtAm", sp.gesperrtAm); put("grund", sp.grund)
+                })
+            }
+            httpJson("/api/sync/sperren", "POST", JSONObject().put("sperren", sperrenJson))
+
+            val materialJson = JSONArray()
+            repository.getAllMaterial().forEach { m ->
+                materialJson.put(JSONObject().apply {
+                    put("name", m.name); put("bestand", m.bestand)
+                    put("bestandAktiv", m.bestandAktiv); put("aktiv", m.aktiv)
+                    put("sortIndex", m.sortIndex)
+                })
+            }
+            httpJson("/api/sync/material", "POST", JSONObject().put("material", materialJson))
+
+            val punkteJson = JSONArray()
+            repository.getAllPruefpunkte().forEach { pp ->
+                punkteJson.put(JSONObject().apply {
+                    put("titel", pp.titel); put("aktiv", pp.aktiv); put("sortIndex", pp.sortIndex)
+                })
+            }
+            httpJson("/api/sync/pruefpunkte", "POST", JSONObject().put("punkte", punkteJson))
+
+            val aktJson = JSONArray()
+            repository.getAllActivity().forEach { a ->
+                aktJson.put(JSONObject().apply {
+                    put("roomId", a.roomId); put("zeitpunkt", a.zeitpunkt); put("aktion", a.aktion)
+                })
+            }
+            httpJson("/api/sync/aktivitaet", "POST", JSONObject().put("eintraege", aktJson))
+        }.onFailure {
+            hinweis = " – Hinweis: Server-Update nötig für Sperren/Material/Aktivität"
+        }
+
+        return Ergebnis(gesendet, empfangen, neuePruefungen, zettelListe.size, hochgeladen, hinweis)
     }
 
     private fun ladeDateiHoch(relPfad: String, datei: File) {

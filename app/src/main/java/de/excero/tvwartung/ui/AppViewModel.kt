@@ -143,7 +143,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         syncLaeuft = true
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                de.excero.tvwartung.sync.SyncManager(repository, photoStore, s.serverUrl, s.apiKey).sync()
+                de.excero.tvwartung.sync.SyncManager(repository, photoStore, signatureStore, s.serverUrl, s.apiKey).sync()
             }.onSuccess {
                 _message.value = it.meldung()
             }.onFailure {

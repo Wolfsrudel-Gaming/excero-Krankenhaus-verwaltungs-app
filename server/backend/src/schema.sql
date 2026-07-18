@@ -37,3 +37,28 @@ CREATE TABLE IF NOT EXISTS stundenzettel (
     updated_at     TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (station, zeitraum_start)
 );
+
+-- Voll-Synchronisation: Spiegel der App-Daten (Anzeige im Web optional)
+CREATE TABLE IF NOT EXISTS sperren (
+    room_id     TEXT PRIMARY KEY,
+    gesperrt_am TEXT NOT NULL,
+    grund       TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS material (
+    name          TEXT PRIMARY KEY,
+    bestand       NUMERIC(14,2) NOT NULL DEFAULT 0,
+    bestand_aktiv BOOLEAN NOT NULL DEFAULT FALSE,
+    aktiv         BOOLEAN NOT NULL DEFAULT TRUE,
+    sort_index    INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS app_pruefpunkte (
+    titel      TEXT PRIMARY KEY,
+    aktiv      BOOLEAN NOT NULL DEFAULT TRUE,
+    sort_index INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS app_aktivitaet (
+    id        SERIAL PRIMARY KEY,
+    room_id   TEXT NOT NULL,
+    zeitpunkt TEXT NOT NULL,
+    aktion    TEXT NOT NULL
+);

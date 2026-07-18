@@ -79,6 +79,12 @@ class Repository(private val db: AppDatabase) {
 
     suspend fun allInspections(): List<Inspection> = db.inspectionDao().getAll()
 
+    // Für die Voll-Synchronisation mit dem Server
+    suspend fun getAllSperren(): List<RoomSperre> = db.roomSperreDao().getAll()
+    suspend fun getAllMaterial(): List<Material> = db.materialDao().getAll()
+    suspend fun getAllPruefpunkte(): List<CustomPruefpunkt> = db.customPruefpunktDao().getAll()
+    suspend fun getAllActivity(): List<ActivityLog> = db.activityLogDao().getAll()
+
     /** Interne Protokollierung: wann wurde welches Zimmer bearbeitet (wird nie exportiert). */
     suspend fun logAction(roomId: String, aktion: String) {
         db.activityLogDao().insert(

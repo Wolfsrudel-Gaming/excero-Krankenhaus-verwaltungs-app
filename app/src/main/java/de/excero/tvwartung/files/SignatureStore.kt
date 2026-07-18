@@ -41,6 +41,10 @@ class SignatureStore(private val context: Context) {
         file(zettelId, rolle).delete()
     }
 
+    /** Alle gespeicherten Unterschrift-Dateien (für die Server-Synchronisation). */
+    fun alleDateien(): List<File> =
+        dir().listFiles { f -> f.isFile && f.length() > 0 }?.toList() ?: emptyList()
+
     fun has(zettelId: Long, rolle: String): Boolean =
         file(zettelId, rolle).let { it.exists() && it.length() > 0 }
 }
