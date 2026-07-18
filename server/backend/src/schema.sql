@@ -1,7 +1,7 @@
--- KKH TV-Wartung – Serverdatenbank (PostgreSQL)
--- Phase 1: Zimmer/Stationen, Prüfbögen, Stundenzettel, Dateien-Metadaten.
--- (Das Schema ist bewusst so angelegt, dass später Lager/Artikel/Baustellen
---  als weitere Tabellen ergänzt werden können.)
+-- Excero Webapp – Serverdatenbank (PostgreSQL)
+-- Mandantenfähiges internes Firmensystem (Excero GmbH + Wolfsrudel Media Studio)
+-- KKH TV-Wartung ist ein Modul davon.
+-- Alle Tabellen werden per CREATE TABLE IF NOT EXISTS additiv ergänzt.
 
 CREATE TABLE IF NOT EXISTS rooms (
     id              TEXT PRIMARY KEY,          -- z. B. A4_01a
@@ -144,3 +144,156 @@ CREATE TABLE IF NOT EXISTS lager_buchungen (
 );
 CREATE INDEX IF NOT EXISTS idx_lager_buchungen_artikel ON lager_buchungen(artikel_id);
 CREATE INDEX IF NOT EXISTS idx_lager_buchungen_zeitpunkt ON lager_buchungen(zeitpunkt DESC);
+
+-- =====================================================================
+-- Excero Webapp: Mandanten, Einstellungen, Rechnungen, Finanzen, etc.
+-- =====================================================================
+
+-- Firmenprofil / Mandant
+CREATE TABLE IF NOT EXISTS firmen (
+    id               SERIAL PRIMARY KEY,
+    name             TEXT NOT NULL,
+    rechtsform       TEXT NOT NULL DEFAULT '',     -- GmbH, Einzelunternehmen, etc.
+    adresse          TEXT NOT NULL DEFAULT '',
+    steuernummer     TEXT NOT NULL DEFAULT '',
+    ust_id           TEXT NOT NULL DEFAULT '',
+    besteuerung      TEXT NOT NULL DEFAULT 'regel' CHECK (besteuerung IN ('regel','kleinunternehmer')),
+    ust_satz         NUMERIC(5,2) NOT NULL DEFAULT 19.00,
+    iban             TEXT NOT NULL DEFAULT '',
+    bic              TEXT NOT NULL DEFAULT '',
+    bank_name        TEXT NOT NULL DEFAULT '',
+    stundensatz      NUMERIC(10,2),               -- Standard-Stundensatz für Abrechnung
+    logo_pfad        TEXT NOT NULL DEFAULT '',     -- relativer Pfad zu /data/files
+    rechnungs_prefix TEXT NOT NULL DEFAULT 'RE',
+    rechnungs_fusstext TEXT NOT NULL DEFAULT '',
+    email            TEXT NOT NULL DEFAULT '',
+    telefon          TEXT NOT NULL DEFAULT '',
+    webseite         TEXT NOT NULL DEFAULT '',
+    aktiv            BOOLEAN NOT NULL DEFAULT TRUE,
+    erstellt_am      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Seed: Excero GmbH und Wolfsrudel Media Studio (Platzhalter, im UI editierbar)
+INSERT INTO firmen (name, rechtsform, besteuerung, rechnungs_prefix) VALUES
+    ('Excero GmbH', 'GmbH', 'regel', 'EX'),
+    ('Wolfsrudel Media Studio', 'Einzelunternehmen', 'kleinunternehmer', 'WM')
+ON CONFLICT DO NOTHING;
+
+-- Globale Einstellungen (Key/Value, JSONB-Wert)
+CREATE TABLE IF NOT EXISTS einstellungen (
+    key   TEXT PRIMARY KEY,
+    wert  JSONB NOT NULL DEFAULT 'null'::jsonb
+);
+-- Leere Platzhalter für UI-Konfiguration
+INSERT INTO einstellungen (key, wert) VALUES
+    ('smtp', 'null'::jsonb),
+    ('hidrive', 'null'::jsonb)
+ON CONFLICT DO NOTHING;
+
+-- Kunden (firmenübergreifend, zur Wiederverwendung in Rechnungen)
+CREATE TABLE IF NOT EXISTS kunden (
+    id          SERIAL PRIMARY KEY,
+    firma_id    INTEGER REFERENCES firmen(id) ON DELETE SET NULL,
+    name        TEXT NOT NULL,
+    anrede      TEXT NOT NULL DEFAULT '',
+    adresse     TEXT NOT NULL DEFAULT '',
+    email       TEXT NOT NULL DEFAULT '',
+    telefon     TEXT NOT NULL DEFAULT '',
+    steuernummer TEXT NOT NULL DEFAULT '',
+    ust_id      TEXT NOT NULL DEFAULT '',
+    notiz       TEXT NOT NULL DEFAULT '',
+    aktiv       BOOLEAN NOT NULL DEFAULT TRUE,
+    erstellt_am TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_kunden_firma ON kunden(firma_id);
+
+-- Baustellen / Projekte
+CREATE TABLE IF NOT EXISTS baustellen (
+    id          SERIAL PRIMARY KEY,
+    firma_id    INTEGER REFERENCES firmen(id) ON DELETE SET NULL,
+    kunde_id    INTEGER REFERENCES kunden(id) ON DELETE SET NULL,
+    name        TEXT NOT NULL,
+    adresse     TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL DEFAULT 'aktiv' CHECK (status IN ('aktiv','pausiert','abgeschlossen')),
+    beginn      TEXT NOT NULL DEFAULT '',          -- ISO-Datum
+    ende        TEXT NOT NULL DEFAULT '',          -- ISO-Datum
+    stundensatz NUMERIC(10,2),                    -- überschreibt Firmenprofil wenn gesetzt
+    notiz       TEXT NOT NULL DEFAULT '',
+    erstellt_am TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- KKH als Baustelle vordefiniert
+INSERT INTO baustellen (name, adresse, status, notiz) VALUES
+    ('KKH Amsterdamer Straße', 'Amsterdamer Straße 59, 50735 Köln', 'aktiv', 'TV-Wartung Kinderklinik Köln')
+ON CONFLICT DO NOTHING;
+CREATE INDEX IF NOT EXISTS idx_baustellen_firma ON baustellen(firma_id);
+
+-- Rechnungen
+CREATE TABLE IF NOT EXISTS rechnungen (
+    id               SERIAL PRIMARY KEY,
+    firma_id         INTEGER NOT NULL REFERENCES firmen(id),
+    baustelle_id     INTEGER REFERENCES baustellen(id) ON DELETE SET NULL,
+    nummer           TEXT NOT NULL UNIQUE,         -- z. B. EX-2026-0001
+    kunde_name       TEXT NOT NULL DEFAULT '',
+    kunde_anrede     TEXT NOT NULL DEFAULT '',
+    kunde_adresse    TEXT NOT NULL DEFAULT '',
+    kunde_email      TEXT NOT NULL DEFAULT '',
+    datum            TEXT NOT NULL DEFAULT '',     -- ISO-Datum
+    leistungszeitraum TEXT NOT NULL DEFAULT '',
+    zahlungsziel     INTEGER NOT NULL DEFAULT 30, -- Tage
+    status           TEXT NOT NULL DEFAULT 'entwurf'
+                     CHECK (status IN ('entwurf','versendet','bezahlt','storniert','ueberfaellig')),
+    netto            NUMERIC(12,2) NOT NULL DEFAULT 0,
+    ust_betrag       NUMERIC(12,2) NOT NULL DEFAULT 0,
+    brutto           NUMERIC(12,2) NOT NULL DEFAULT 0,
+    notiz            TEXT NOT NULL DEFAULT '',
+    betreff          TEXT NOT NULL DEFAULT '',
+    versendet_am     TIMESTAMPTZ,
+    bezahlt_am       TIMESTAMPTZ,
+    erstellt_am      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    geaendert_am     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_rechnungen_firma ON rechnungen(firma_id);
+CREATE INDEX IF NOT EXISTS idx_rechnungen_status ON rechnungen(status);
+CREATE INDEX IF NOT EXISTS idx_rechnungen_datum ON rechnungen(datum DESC);
+
+CREATE TABLE IF NOT EXISTS rechnung_positionen (
+    id           SERIAL PRIMARY KEY,
+    rechnung_id  INTEGER NOT NULL REFERENCES rechnungen(id) ON DELETE CASCADE,
+    pos          INTEGER NOT NULL DEFAULT 1,
+    bezeichnung  TEXT NOT NULL,
+    menge        NUMERIC(10,2) NOT NULL DEFAULT 1,
+    einheit      TEXT NOT NULL DEFAULT 'Stk.',
+    einzelpreis  NUMERIC(10,2) NOT NULL DEFAULT 0,
+    betrag       NUMERIC(12,2) NOT NULL DEFAULT 0   -- menge * einzelpreis
+);
+CREATE INDEX IF NOT EXISTS idx_rechnung_pos ON rechnung_positionen(rechnung_id, pos);
+
+-- Ausgaben / Kosten
+CREATE TABLE IF NOT EXISTS ausgaben (
+    id           SERIAL PRIMARY KEY,
+    firma_id     INTEGER REFERENCES firmen(id) ON DELETE SET NULL,
+    baustelle_id INTEGER REFERENCES baustellen(id) ON DELETE SET NULL,
+    datum        TEXT NOT NULL,
+    kategorie    TEXT NOT NULL DEFAULT '',        -- Material, Fahrt, Werkzeug, etc.
+    bezeichnung  TEXT NOT NULL,
+    betrag       NUMERIC(12,2) NOT NULL,
+    beleg_notiz  TEXT NOT NULL DEFAULT '',
+    erstellt_am  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ausgaben_firma ON ausgaben(firma_id);
+CREATE INDEX IF NOT EXISTS idx_ausgaben_datum ON ausgaben(datum DESC);
+
+-- Arbeitszeiterfassung
+CREATE TABLE IF NOT EXISTS zeiterfassung (
+    id           SERIAL PRIMARY KEY,
+    mitarbeiter  TEXT NOT NULL,
+    datum        TEXT NOT NULL,
+    von          TEXT NOT NULL DEFAULT '',        -- HH:MM
+    bis          TEXT NOT NULL DEFAULT '',        -- HH:MM
+    pause_min    INTEGER NOT NULL DEFAULT 0,
+    baustelle_id INTEGER REFERENCES baustellen(id) ON DELETE SET NULL,
+    taetigkeit   TEXT NOT NULL DEFAULT '',
+    bemerkung    TEXT NOT NULL DEFAULT '',
+    erstellt_am  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_zeiterfassung_ma ON zeiterfassung(mitarbeiter, datum DESC);
+CREATE INDEX IF NOT EXISTS idx_zeiterfassung_datum ON zeiterfassung(datum DESC);

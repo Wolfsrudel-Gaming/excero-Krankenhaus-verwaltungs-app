@@ -1,24 +1,35 @@
 /**
- * app.js – Shell, Router, Auth
- * Enthält Login, Logout, Passwort-Änderung und Sidebar-Navigation.
+ * Excero Webapp – Shell, Router, Auth, Mandanten-Umschalter
  */
 
 const ROUTES = {
-  'dashboard':           viewDashboard,
-  'zimmer':              viewZimmer,
-  'pruefungen':          viewPruefungen,
-  'stundenzettel':       viewStundenzettel,
-  'mitarbeiter':         viewMitarbeiter,
-  'lager-artikel':       viewLagerArtikel,
-  'lager-buchungen':     viewLagerBuchungen,
-  'lager-verbrauch':     viewLagerVerbrauch,
-  'lager-nachbestellung':viewLagerNachbestellung,
-  'lieferanten':         viewLieferanten,
-  'abrechnung':          viewAbrechnung,
-  'benutzer':            viewBenutzer,
+  'dashboard':            viewDashboard,
+  'zimmer':               viewZimmer,
+  'pruefungen':           viewPruefungen,
+  'stundenzettel':        viewStundenzettel,
+  'mitarbeiter':          viewMitarbeiter,
+  'dateien':              viewDateien,
+  'lager-artikel':        viewLagerArtikel,
+  'lager-buchungen':      viewLagerBuchungen,
+  'lager-verbrauch':      viewLagerVerbrauch,
+  'lager-nachbestellung': viewLagerNachbestellung,
+  'lieferanten':          viewLieferanten,
+  'abrechnung':           viewAbrechnung,
+  'rechnungen':           viewRechnungen,
+  'ausgaben':             viewAusgaben,
+  'guv':                  viewGuv,
+  'baustellen':           viewBaustellen,
+  'zeiterfassung':        viewZeiterfassung,
+  'hidrive':              viewHiDrive,
+  'einstellungen':        viewEinstellungen,
+  'firmen':               viewFirmen,
+  'benutzer':             viewBenutzer,
 };
 
 let currentUser = null;
+// Aktuell ausgewählte Firma (Mandant), wird aus localStorage geladen
+window.aktiveFirmaId = Number(localStorage.getItem('aktiveFirmaId') || '0') || null;
+window.aktiveFirmaName = localStorage.getItem('aktiveFirmaName') || '';
 
 function setzeAktiveNav(route) {
   document.querySelectorAll('.nav-item').forEach((el) => {
@@ -38,6 +49,48 @@ function initSidebar() {
   document.querySelectorAll('.nav-item[data-route]').forEach((el) => {
     el.addEventListener('click', () => route(el.dataset.route));
   });
+}
+
+async function ladeFirmen() {
+  try {
+    const d = await api('/kkh/api/web/firmen');
+    const firmen = d.firmen || [];
+    const sel = document.getElementById('firma-switcher');
+    sel.innerHTML = '';
+    if (firmen.length === 0) {
+      sel.innerHTML = '<option value="">Keine Firmen</option>';
+      return;
+    }
+    for (const f of firmen) {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.name;
+      if (Number(window.aktiveFirmaId) === f.id) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    // Falls nichts gesetzt, erste Firma als Standard
+    if (!window.aktiveFirmaId) {
+      window.aktiveFirmaId = firmen[0].id;
+      window.aktiveFirmaName = firmen[0].name;
+    }
+    aktualisiereFirmaInfo(firmen.find((f) => f.id === Number(sel.value)) || firmen[0]);
+    sel.addEventListener('change', () => {
+      const f = firmen.find((x) => x.id === Number(sel.value));
+      if (!f) return;
+      window.aktiveFirmaId = f.id;
+      window.aktiveFirmaName = f.name;
+      localStorage.setItem('aktiveFirmaId', f.id);
+      localStorage.setItem('aktiveFirmaName', f.name);
+      aktualisiereFirmaInfo(f);
+      // Aktuellen View neu laden
+      const r = window.location.hash.replace('#', '') || 'dashboard';
+      if (ROUTES[r]) route(r);
+    });
+  } catch {}
+}
+
+function aktualisiereFirmaInfo(f) {
+  document.getElementById('topbar-sub').textContent = f ? f.name : '';
 }
 
 async function checkAuth() {
@@ -62,7 +115,7 @@ async function doLogin() {
     if (r.ok) {
       const d = await r.json();
       currentUser = d.username || username;
-      showApp();
+      await showApp();
     } else {
       const d = await r.json().catch(() => ({}));
       errEl.textContent = d.error || 'Anmeldung fehlgeschlagen.';
@@ -71,13 +124,21 @@ async function doLogin() {
   } catch (e) { errEl.textContent = e.message; errEl.hidden = false; }
 }
 
-function showApp() {
+async function showApp() {
   document.getElementById('login-view').hidden = true;
   document.getElementById('app-shell').hidden = false;
   document.getElementById('user-chip').textContent = currentUser ? `👤 ${currentUser}` : '';
   initSidebar();
+  await ladeFirmen();
   const hash = window.location.hash.replace('#', '') || 'dashboard';
   route(ROUTES[hash] ? hash : 'dashboard');
+  // Nachbestellungs-Badge laden
+  try {
+    const d = await api('/kkh/api/web/lager/nachbestellung');
+    const cnt = (d.artikel || []).length;
+    const badge = document.getElementById('nb-badge');
+    if (badge) { badge.hidden = cnt === 0; badge.textContent = cnt > 0 ? cnt : ''; }
+  } catch {}
 }
 
 function showLogin() {
@@ -128,7 +189,7 @@ async function init() {
   });
 
   const user = await checkAuth();
-  if (user) { currentUser = user; showApp(); }
+  if (user) { currentUser = user; await showApp(); }
   else showLogin();
 }
 

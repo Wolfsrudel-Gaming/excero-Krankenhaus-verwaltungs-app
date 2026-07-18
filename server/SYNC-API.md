@@ -67,15 +67,6 @@ Datei-Upload unter dem Pfadpräfix `_signaturen/`. Lesend fürs Web:
 GET /api/web/material, /api/web/sperren, /api/web/aktivitaet.
 Die App toleriert Server ohne diese Endpunkte (Hinweis in der Sync-Meldung).
 
-Datei-Pfadpräfixe im Dateispeicher (alles über GET files / PUT file):
-- `<Zimmer-ID>/<JJJJMMTT>/…` – Fotos UND das Prüfbericht-PDF des Tages
-  (`Pruefbericht_<Zimmer>_<JJJJMMTT>.pdf`); das PDF wird von der App bei jedem
-  gespeicherten Prüfbogen und jeder Fotoänderung neu erzeugt.
-- `_signaturen/` – Unterschriften-PNGs der Stundenzettel.
-- `_stundenzettel/` – fertige, unterschriebene Stundenzettel-PDFs
-  (`Stundenzettel_<Station>_<ZeitraumStart>.pdf`), bei jedem PDF-Export
-  aktualisiert. Fürs Web direkt verlinkbar über GET /api/web/file?path=….
-
 ## Mehrbenutzer-Betrieb (ab App v1.9)
 
 `POST /api/sync/inspections`: jede Inspection trägt zusätzlich die optionalen

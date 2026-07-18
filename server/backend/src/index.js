@@ -798,15 +798,193 @@ router.delete('/api/web/zettel-eintraege', requireWebAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Stundenzettel-PDF (aus App-Upload) ----------
-router.get('/api/web/stundenzettel/pdf', requireWebAuth, (req, res) => {
-  const station = String(req.query.station || '').replace(/[^A-Za-z0-9äöüÄÖÜß_-]/g, '_');
+// ---------- Neue Backend-Module (Excero Webapp) ----------
+const firmenRouter = require('./routes/firmen');
+const baulRouter   = require('./routes/baustellen');
+const zeitRouter   = require('./routes/zeiterfassung');
+const finRouter    = require('./routes/finanzen');
+const rechnRouter  = require('./routes/rechnungen');
+const hidriveRouter = require('./routes/hidrive');
+
+const authWrap = (r) => router.use('/api/web', requireWebAuth, r);
+authWrap(firmenRouter);
+authWrap(baulRouter);
+authWrap(zeitRouter);
+authWrap(finRouter);
+authWrap(rechnRouter);
+authWrap(hidriveRouter);
+
+// ---------- Stundenzettel-PDF (App-Upload bevorzugt, sonst server-seitig erzeugt) ----------
+const { erzeugePdf: erzeugeStundenzettelPdf } = require('./pdf/stundenzettel');
+
+router.get('/api/web/stundenzettel/pdf', requireWebAuth, async (req, res) => {
+  const station = String(req.query.station || '');
   const zeitraum = String(req.query.zeitraum || '');
   if (!station || !zeitraum) return res.status(400).json({ error: 'station + zeitraum nötig' });
-  const rel = `_stundenzettel/Stundenzettel_${station}_${zeitraum}.pdf`;
-  const ziel = safeFilePath(rel);
-  if (!ziel || !fs.existsSync(ziel)) return res.status(404).json({ error: 'PDF noch nicht hochgeladen' });
-  res.sendFile(ziel, { headers: { 'Content-Disposition': `inline; filename="Stundenzettel_${station}_${zeitraum}.pdf"` } });
+  const stationSafe = station.replace(/[^A-Za-z0-9äöüÄÖÜß_-]/g, '_');
+  const dateiname = `Stundenzettel_${stationSafe}_${zeitraum}.pdf`;
+
+  // Bevorzugt: App-hochgeladene Datei
+  const appPdf = safeFilePath(`_stundenzettel/${dateiname}`);
+  if (appPdf && fs.existsSync(appPdf)) {
+    return res.sendFile(appPdf, { headers: { 'Content-Disposition': `inline; filename="${dateiname}"` } });
+  }
+
+  // Fallback: server-seitig erzeugen
+  try {
+    const [zettelQ, eintraegeQ, inspQ] = await Promise.all([
+      pool.query('SELECT * FROM stundenzettel WHERE station=$1 AND zeitraum_start=$2', [station, zeitraum]),
+      pool.query('SELECT * FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2', [station, zeitraum]),
+      pool.query(
+        `SELECT i.datum, r.zimmer, i.daten->'arbeiten' AS arbeiten
+         FROM inspections i JOIN rooms r ON r.id=i.room_id
+         WHERE r.station=$1 AND i.datum>=$2 AND COALESCE(i.geloescht,FALSE)=FALSE
+         ORDER BY i.datum, r.zimmer`, [station, zeitraum]),
+    ]);
+    if (!zettelQ.rows.length) return res.status(404).json({ error: 'Stundenzettel nicht gefunden' });
+    const z = zettelQ.rows[0];
+
+    // Signaturen: deterministischer Pfad seit v1.9.3
+    const sigSta = safeFilePath(`_signaturen/${stationSafe}_${zeitraum}_station.png`);
+    const sigTech = safeFilePath(`_signaturen/${stationSafe}_${zeitraum}_techniker.png`);
+
+    // Material-Zusammenfassung
+    const matMap = {};
+    for (const i of inspQ.rows) {
+      for (const a of (i.arbeiten || [])) { matMap[a] = (matMap[a] || 0) + 1; }
+    }
+
+    const pdf = await erzeugeStundenzettelPdf({
+      station, zeitraum: `ab ${zeitraum}`, zeitraumStart: zeitraum,
+      auftragsnummer: z.auftragsnummer, datum: z.datum, techniker: z.techniker,
+      eintraege: eintraegeQ.rows.map((e) => ({
+        mitarbeiter: e.mitarbeiter, stunden: e.stunden, anfahrt: e.anfahrt
+      })),
+      leistungen: inspQ.rows.map((i) => ({
+        zimmer: i.zimmer, datum: i.datum,
+        arbeiten: (i.arbeiten || []).filter((a) => typeof a === 'string'),
+      })),
+      material: Object.entries(matMap).map(([bezeichnung, anzahl]) => ({ bezeichnung, anzahl })),
+      signaturStation: sigSta && fs.existsSync(sigSta) ? sigSta : null,
+      signaturTechniker: sigTech && fs.existsSync(sigTech) ? sigTech : null,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${dateiname}"`);
+    res.send(pdf);
+  } catch (e) {
+    console.error('PDF-Erzeugung fehlgeschlagen:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---------- Rechnungs-PDF ----------
+const { erzeugePdf: erzeugeRechnungsPdf } = require('./pdf/rechnung');
+
+router.get('/api/web/rechnungen/:id/pdf', requireWebAuth, async (req, res) => {
+  const { rows: r } = await pool.query(
+    `SELECT re.*, f.name AS firma_name, f.adresse AS firma_adresse, f.email AS firma_email,
+            f.telefon AS firma_telefon, f.steuernummer, f.ust_id, f.besteuerung, f.ust_satz,
+            f.iban, f.bic, f.bank_name, f.rechnungs_fusstext, f.logo_pfad
+     FROM rechnungen re LEFT JOIN firmen f ON f.id=re.firma_id WHERE re.id=$1`,
+    [Number(req.params.id)]);
+  if (!r.length) return res.status(404).json({ error: 'Nicht gefunden' });
+  const { rows: pos } = await pool.query(
+    'SELECT * FROM rechnung_positionen WHERE rechnung_id=$1 ORDER BY pos',
+    [Number(req.params.id)]);
+  const pdf = await erzeugeRechnungsPdf(r[0], pos);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="Rechnung_${r[0].nummer}.pdf"`);
+  res.send(pdf);
+});
+
+// ---------- Rechnungs-E-Mail-Versand ----------
+let nodemailer = null;
+try { nodemailer = require('nodemailer'); } catch { console.log('nodemailer nicht verfügbar'); }
+
+router.post('/api/web/rechnungen/:id/versenden', requireWebAuth, express.json(), async (req, res) => {
+  if (!nodemailer) return res.status(503).json({ error: 'nodemailer nicht installiert' });
+  const id = Number(req.params.id);
+  const { rows: r } = await pool.query(
+    `SELECT re.*, f.name AS firma_name, f.adresse AS firma_adresse, f.email AS firma_email,
+            f.telefon AS firma_telefon, f.steuernummer, f.ust_id, f.besteuerung, f.ust_satz,
+            f.iban, f.bic, f.bank_name, f.rechnungs_fusstext, f.logo_pfad
+     FROM rechnungen re LEFT JOIN firmen f ON f.id=re.firma_id WHERE re.id=$1`, [id]);
+  if (!r.length) return res.status(404).json({ error: 'Rechnung nicht gefunden' });
+  const re = r[0];
+  const { rows: pos } = await pool.query('SELECT * FROM rechnung_positionen WHERE rechnung_id=$1 ORDER BY pos', [id]);
+
+  // SMTP aus Einstellungen
+  const { rows: smtp } = await pool.query("SELECT wert FROM einstellungen WHERE key='smtp'");
+  const smtpCfg = smtp[0]?.wert;
+  if (!smtpCfg?.host) return res.status(503).json({ error: 'SMTP nicht konfiguriert (Einstellungen → SMTP)' });
+
+  const empfaenger = req.body?.an || re.kunde_email;
+  if (!empfaenger) return res.status(400).json({ error: 'Empfänger-E-Mail fehlt' });
+
+  const pdf = await erzeugeRechnungsPdf(re, pos);
+  const betreff = req.body?.betreff || `Rechnung ${re.nummer} von ${re.firma_name}`;
+  const text = req.body?.text || `Sehr geehrte Damen und Herren,\n\nerbeten finde ich anbei die Rechnung ${re.nummer}.\n\nMit freundlichen Grüßen\n${re.firma_name}`;
+
+  const transporter = nodemailer.createTransporter({
+    host: smtpCfg.host,
+    port: Number(smtpCfg.port) || 587,
+    secure: smtpCfg.secure === true,
+    auth: { user: smtpCfg.user, pass: smtpCfg.passwort },
+  });
+
+  await transporter.sendMail({
+    from: smtpCfg.absender || smtpCfg.user,
+    to: empfaenger,
+    subject: betreff,
+    text,
+    attachments: [{ filename: `Rechnung_${re.nummer}.pdf`, content: pdf }],
+  });
+
+  await pool.query(
+    "UPDATE rechnungen SET status='versendet', versendet_am=now(), geaendert_am=now() WHERE id=$1", [id]);
+  res.json({ ok: true });
+});
+
+// ---------- Foto-ZIP-Export ----------
+let archiver = null;
+try { archiver = require('archiver'); } catch { console.log('archiver nicht verfügbar'); }
+
+router.get('/api/web/export/fotos.zip', requireWebAuth, (req, res) => {
+  if (!archiver) return res.status(503).json({ error: 'archiver nicht installiert' });
+  const station = String(req.query.station || '');
+  const zimmer  = String(req.query.zimmer || '');
+  const von     = String(req.query.von || '');
+  const bis     = String(req.query.bis || '');
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="KKH-Fotos${station ? '-' + station : ''}.zip"`);
+
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  archive.pipe(res);
+  archive.on('error', (e) => { console.error('ZIP-Fehler:', e.message); });
+
+  // Dateien aus FILES_DIR durchlaufen
+  const root = fs.existsSync(FILES_DIR) ? FILES_DIR : null;
+  if (!root) { archive.finalize(); return; }
+
+  const dateien = listFiles(root, root);
+  for (const datei of dateien) {
+    const p = datei.path;
+    if (!/\.(jpe?g|png)$/i.test(p)) continue;
+    const teile = p.split('/');
+    // Struktur: <Station_Zimmer>/<JJJJMMTT>/Foto.jpg
+    if (teile.length < 2) continue;
+    const zimmerOrdner = teile[0]; // z. B. A4_01a
+    const datum        = teile[1]; // z. B. 20260715
+    if (station && !zimmerOrdner.startsWith(station)) continue;
+    if (zimmer && !zimmerOrdner.includes(zimmer)) continue;
+    if (von && datum < von.replace(/-/g, '')) continue;
+    if (bis && datum > bis.replace(/-/g, '')) continue;
+    const abs = path.join(root, p);
+    if (fs.existsSync(abs)) archive.file(abs, { name: p });
+  }
+  archive.finalize();
 });
 
 // ---------- Lager-Modul ----------
@@ -1146,6 +1324,35 @@ router.get('/api/web/export/buchungen.:fmt', requireWebAuth, async (req, res) =>
   await sendeXlsx(res, 'KKH-Buchungen.xlsx', [{ name: 'Buchungen',
     columns: headers.map((h, i) => ({ header: h, key: String(i), width: 20 })),
     rows: dataRows }]);
+});
+
+// XLSX-Export Zeiterfassung
+router.get('/api/web/export/zeiterfassung.xlsx', requireWebAuth, async (req, res) => {
+  const von = req.query.von || '';
+  const bis = req.query.bis || '';
+  let sql = `SELECT z.datum, z.mitarbeiter, z.von, z.bis, z.pause_min, b.name AS baustelle, z.taetigkeit, z.bemerkung
+             FROM zeiterfassung z LEFT JOIN baustellen b ON b.id=z.baustelle_id WHERE 1=1`;
+  const werte = [];
+  if (von) { werte.push(von); sql += ` AND z.datum>=$${werte.length}`; }
+  if (bis) { werte.push(bis); sql += ` AND z.datum<=$${werte.length}`; }
+  sql += ' ORDER BY z.datum, z.mitarbeiter';
+  const { rows } = await pool.query(sql, werte);
+  const headers = ['Datum','Mitarbeiter','Von','Bis','Pause (Min.)','Stunden','Baustelle','Tätigkeit','Bemerkung'];
+  const dataRows = rows.map((r) => {
+    let std = '';
+    if (r.von && r.bis && /^\d{2}:\d{2}/.test(r.von) && /^\d{2}:\d{2}/.test(r.bis)) {
+      const [hV, mV] = r.von.split(':').map(Number);
+      const [hB, mB] = r.bis.split(':').map(Number);
+      const min = (hB * 60 + mB) - (hV * 60 + mV) - (r.pause_min || 0);
+      std = min > 0 ? (min / 60).toFixed(2) : '0';
+    }
+    return [r.datum, r.mitarbeiter, r.von, r.bis, r.pause_min, std, r.baustelle || '', r.taetigkeit, r.bemerkung];
+  });
+  await sendeXlsx(res, `Zeiterfassung_${von || 'gesamt'}_${bis || ''}.xlsx`, [{
+    name: 'Zeiterfassung',
+    columns: headers.map((h, i) => ({ header: h, key: String(i), width: 16 })),
+    rows: dataRows,
+  }]);
 });
 
 // ---------- App-Updater ----------

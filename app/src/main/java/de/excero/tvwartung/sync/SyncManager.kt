@@ -264,9 +264,26 @@ class SyncManager(
                 hochgeladen++
             }
         }
-        // Unterschriften ebenfalls hochladen (unter _signaturen/, kollidiert nicht mit Zimmern)
+        // Unterschriften hochladen – deterministischer Name <station>_<zeitraumStart>_<rolle>.png
+        // damit der Server bei der PDF-Erzeugung die Datei ohne lokale Room-ID auflösen kann.
+        val zettelIndex = repository.getAllStundenzettel()
+            .associateBy { it.id }  // id -> StundenzettelEntity
         signatureStore?.alleDateien()?.forEach { f ->
-            val rel = "_signaturen/${f.name}"
+            // Dateiname: zettel_<id>_<rolle>.png
+            val match = Regex("^zettel_(\\d+)_(.+)\\.png$").matchEntire(f.name)
+            val rel = if (match != null) {
+                val zettelId = match.groupValues[1].toLongOrNull()
+                val rolle    = match.groupValues[2]
+                val zettel   = zettelId?.let { zettelIndex[it] }
+                if (zettel != null) {
+                    val stationSafe = zettel.station.replace(Regex("[^A-Za-z0-9äöüÄÖÜß_-]"), "_")
+                    "_signaturen/${stationSafe}_${zettel.zeitraumStart}_${rolle}.png"
+                } else {
+                    "_signaturen/${f.name}"
+                }
+            } else {
+                "_signaturen/${f.name}"
+            }
             if ("$rel|${f.length()}" !in vorhandene) {
                 ladeDateiHoch(rel, f)
                 hochgeladen++
