@@ -334,9 +334,10 @@ router.patch('/api/web/users/:id', requireWebAuth, express.json(), async (req, r
     if (kollision && kollision.id !== id) return res.status(409).json({ error: 'Benutzername bereits vergeben' });
     werte.push(name); felder.push(`username=$${werte.length}`);
   }
-  if (req.body.password !== undefined) {
-    if (String(req.body.password).length < 4) return res.status(400).json({ error: 'Passwort muss mindestens 4 Zeichen haben' });
-    const { hash, salt } = hashPassword(req.body.password);
+  const neuPw = req.body.password ?? req.body.newPassword; // Kompatibilität
+  if (neuPw !== undefined) {
+    if (String(neuPw).length < 4) return res.status(400).json({ error: 'Passwort muss mindestens 4 Zeichen haben' });
+    const { hash, salt } = hashPassword(neuPw);
     werte.push(hash); felder.push(`password_hash=$${werte.length}`);
     werte.push(salt); felder.push(`salt=$${werte.length}`);
   }
@@ -479,18 +480,56 @@ router.get('/api/web/rooms/:id', requireWebAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM rooms WHERE id=$1', [req.params.id]);
   if (rows.length === 0) return res.status(404).json({ error: 'Zimmer nicht gefunden' });
   const inspections = (await pool.query(
-    'SELECT uuid, datum, daten FROM inspections WHERE room_id=$1 ORDER BY datum DESC', [req.params.id])).rows;
+    `SELECT uuid, datum, daten, mitarbeiter FROM inspections
+     WHERE room_id=$1 AND COALESCE(geloescht, FALSE) = FALSE
+     ORDER BY datum DESC`, [req.params.id])).rows;
+  let sperren = [];
+  try {
+    sperren = (await pool.query(
+      `SELECT * FROM sperren WHERE room_id=$1 AND COALESCE(aufgehoben, FALSE) = FALSE ORDER BY created_at DESC`,
+      [req.params.id])).rows;
+  } catch {}
   const dateien = listFiles(path.join(FILES_DIR, req.params.id), FILES_DIR);
-  res.json({ room: roomToJson(rows[0]), inspections, files: dateien });
+  res.json({ room: roomToJson(rows[0]), inspections, sperren, files: dateien });
 });
 
 router.get('/api/web/inspections', requireWebAuth, async (req, res) => {
-  const limit = Math.min(Number(req.query.limit || 300), 1000);
-  const { rows } = await pool.query(
-    `SELECT i.uuid, i.room_id, i.datum, i.daten, r.station, r.zimmer
-     FROM inspections i LEFT JOIN rooms r ON r.id = i.room_id
-     ORDER BY i.datum DESC, i.created_at DESC LIMIT $1`, [limit]);
+  const limit = Math.min(Number(req.query.limit || 300), 2000);
+  const von = req.query.von || '';
+  const bis = req.query.bis || '';
+  const station = req.query.station || '';
+  const mitarbeiter = req.query.mitarbeiter || '';
+  const nurAktiv = req.query.geloescht !== '1';
+  let sql = `SELECT i.uuid, i.room_id, i.datum, i.daten, i.mitarbeiter, i.geloescht,
+               r.station, r.zimmer, r.tv_typ
+             FROM inspections i LEFT JOIN rooms r ON r.id = i.room_id
+             WHERE 1=1`;
+  const werte = [];
+  if (nurAktiv) sql += ` AND COALESCE(i.geloescht, FALSE) = FALSE`;
+  if (von) { werte.push(von); sql += ` AND i.datum >= $${werte.length}`; }
+  if (bis) { werte.push(bis); sql += ` AND i.datum <= $${werte.length}`; }
+  if (station) { werte.push(station); sql += ` AND r.station = $${werte.length}`; }
+  if (mitarbeiter) { werte.push(`%${mitarbeiter}%`); sql += ` AND i.mitarbeiter ILIKE $${werte.length}`; }
+  sql += ` ORDER BY i.datum DESC, i.created_at DESC LIMIT $${werte.length + 1}`;
+  werte.push(limit);
+  const { rows } = await pool.query(sql, werte);
   res.json({ inspections: rows });
+});
+
+// Einzelne Prüfung
+router.get('/api/web/inspections/:uuid', requireWebAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT i.*, r.station, r.zimmer, r.tv_typ
+     FROM inspections i LEFT JOIN rooms r ON r.id = i.room_id
+     WHERE i.uuid = $1`, [req.params.uuid]);
+  if (!rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+  res.json({ inspection: rows[0] });
+});
+
+// Prüfung löschen (Soft-Delete)
+router.delete('/api/web/inspections/:uuid', requireWebAuth, async (req, res) => {
+  await pool.query('UPDATE inspections SET geloescht=TRUE WHERE uuid=$1', [req.params.uuid]);
+  res.json({ ok: true });
 });
 
 router.get('/api/web/stundenzettel', requireWebAuth, async (req, res) => {
@@ -527,7 +566,8 @@ router.get('/api/web/stundenzettel/next-nr', requireWebAuth, async (req, res) =>
     const m = /A-\d{4}-(\d+)/.exec(rows[0].auftragsnummer || '');
     if (m) nr = Number(m[1]) + 1;
   }
-  res.json({ auftragsnummer: `A-${jahr}-${String(nr).padStart(4, '0')}` });
+  const nr_str = `A-${jahr}-${String(nr).padStart(4, '0')}`;
+  res.json({ auftragsnummer: nr_str, nr: nr_str }); // nr für Kompatibilität
 });
 
 // Detail: Header + Team-Zeilen + Prüfungen der Station im Zeitraum

@@ -1,57 +1,134 @@
-/* ── Benutzer-View ──────────────────────────────────────────────────── */
+/**
+ * Benutzer-View – KKH TV-Wartung
+ * - Anlegen / Löschen
+ * - Passwort-Reset via PATCH /api/web/users/:id
+ * - Umbenennen
+ */
+
 async function viewBenutzer() {
-  const area = document.getElementById('content-area');
-  area.innerHTML = `
-    <div class="page-header"><span class="page-title">Benutzer</span></div>
-    <div class="toolbar"><button class="btn btn-primary" id="bu-neu">+ Benutzer</button></div>
-    <div class="grid-wrap"><div id="bu-grid"></div></div>`;
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    ${pageHeader('Benutzer & Zugänge', `
+      <button class="btn btn-primary" id="bu-neu">+ Benutzer anlegen</button>
+    `)}
+    <div class="alert alert-info" style="margin-bottom:16px">
+      <strong>Hinweis:</strong> Passwörter werden sicher als bcrypt-Hash gespeichert. Vergessene Passwörter können hier zurückgesetzt werden.
+    </div>
+    <div id="bu-container"><div class="loading">Wird geladen…</div></div>
+  `;
 
   async function lade() {
-    const data = await api('/kkh/api/web/users');
-    if (!data) return;
-    new DataGrid('bu-grid', {
+    const container = document.getElementById('bu-container');
+    if (!container) return;
+    let data;
+    try { data = await api('/kkh/api/web/users'); }
+    catch (e) { container.innerHTML = `<div class="alert alert-err">${escH(e.message)}</div>`; return; }
+
+    new DataGrid(container, {
+      data: data.users || [],
+      filterKeys: ['username'],
       columns: [
-        { key: 'id', label: 'ID', num: true },
-        { key: 'username', label: 'Benutzername' },
-        { key: 'created_at', label: 'Erstellt', render: (r) =>
-          escH(new Date(r.created_at).toLocaleString('de-DE')) },
+        { key: 'id', label: '#', sort: true, width: '50px', align: 'right' },
+        { key: 'username', label: 'Benutzername', sort: true,
+          render: (v) => `<strong>${escH(v)}</strong>` },
+        { key: 'created_at', label: 'Erstellt am', sort: true, width: '160px',
+          render: (v) => v ? new Date(v).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–' },
+        { key: '_actions', label: 'Aktionen', width: '230px', align: 'right',
+          render: (v, row) => `
+            <button class="btn btn-xs btn-secondary bu-rename" data-id="${row.id}" data-name="${escH(row.username)}">✏ Umbenennen</button>
+            <button class="btn btn-xs btn-secondary bu-reset" data-id="${row.id}" data-name="${escH(row.username)}">🔑 PW Reset</button>
+            <button class="btn btn-xs btn-danger bu-del" data-id="${row.id}" data-name="${escH(row.username)}">🗑</button>
+          ` },
       ],
-      rows: data.users || [],
-      actions: (r) => `<button class="btn btn-danger btn-sm" onclick="loescheBenutzer(${r.id},'${escH(r.username)}')">Löschen</button>`,
+    });
+
+    container.addEventListener('click', async (e) => {
+      const resetBtn = e.target.closest('.bu-reset');
+      const renameBtn = e.target.closest('.bu-rename');
+      const delBtn = e.target.closest('.bu-del');
+
+      if (resetBtn) {
+        const id = resetBtn.dataset.id;
+        const name = resetBtn.dataset.name;
+        await resetPasswort(id, name);
+      } else if (renameBtn) {
+        const id = renameBtn.dataset.id;
+        const name = renameBtn.dataset.name;
+        await umbenennen(id, name);
+      } else if (delBtn) {
+        const id = delBtn.dataset.id;
+        const name = delBtn.dataset.name;
+        if (!(await confirm(`Benutzer "${name}" wirklich löschen? Diese Aktion ist nicht rückgängig zu machen.`))) return;
+        try {
+          await api(`/kkh/api/web/users/${id}`, { method: 'DELETE' });
+          toast('Benutzer gelöscht');
+          lade();
+        } catch (err) { toast(err.message, 'err'); }
+      }
     });
   }
-  await lade();
-  document.getElementById('bu-neu').addEventListener('click', async () => {
-    const res = await modal('Neuer Benutzer', `
+
+  async function resetPasswort(id, name) {
+    const res = await modal(`Passwort zurücksetzen: ${name}`, `
       <div class="form-grid">
-        <div class="form-group"><label class="form-label">Benutzername <span class="req">*</span></label>
-          <input class="form-control" id="bu-user" autocapitalize="none"></div>
-        <div class="form-group"><label class="form-label">Passwort <span class="req">*</span></label>
-          <input type="password" class="form-control" id="bu-pw"></div>
-        <div class="form-group"><label class="form-label">Passwort wiederholen</label>
+        <div class="form-group"><label class="form-label">Neues Passwort *</label>
+          <input type="password" class="form-control" id="rp-pw1" placeholder="Mindestens 4 Zeichen"></div>
+        <div class="form-group"><label class="form-label">Wiederholen *</label>
+          <input type="password" class="form-control" id="rp-pw2"></div>
+      </div>`,
+      [{ label: 'Abbrechen', value: null, cls: 'btn-secondary' }, { label: 'Zurücksetzen', cls: 'btn-danger', value: 'ok' }]);
+    if (!res || res.action !== 'ok') return;
+    const pw1 = mf(res, 'rp-pw1');
+    const pw2 = mf(res, 'rp-pw2');
+    if (!pw1 || pw1.length < 4) { toast('Passwort muss mindestens 4 Zeichen haben', 'err'); return; }
+    if (pw1 !== pw2) { toast('Passwörter stimmen nicht überein', 'err'); return; }
+    try {
+      await api(`/kkh/api/web/users/${id}`, { method: 'PATCH', body: { newPassword: pw1 } });
+      toast(`Passwort von "${name}" erfolgreich zurückgesetzt`);
+    } catch (e) { toast(e.message, 'err'); }
+  }
+
+  async function umbenennen(id, name) {
+    const res = await modal(`Benutzer umbenennen: ${name}`, `
+      <div class="form-group">
+        <label class="form-label">Neuer Benutzername *</label>
+        <input class="form-control" id="rn-name" value="${escH(name)}" autocapitalize="none">
+      </div>`,
+      [{ label: 'Abbrechen', value: null, cls: 'btn-secondary' }, { label: 'Umbenennen', cls: 'btn-primary', value: 'ok' }]);
+    if (!res || res.action !== 'ok') return;
+    const newName = mf(res, 'rn-name')?.trim();
+    if (!newName || newName === name) return;
+    try {
+      await api(`/kkh/api/web/users/${id}`, { method: 'PATCH', body: { username: newName } });
+      toast('Benutzername geändert');
+      lade();
+    } catch (e) { toast(e.message, 'err'); }
+  }
+
+  document.getElementById('bu-neu').addEventListener('click', async () => {
+    const res = await modal('Neuen Benutzer anlegen', `
+      <div class="form-grid">
+        <div class="form-group full"><label class="form-label">Benutzername *</label>
+          <input class="form-control" id="bu-user" autocapitalize="none" placeholder="Kleinbuchstaben, keine Sonderzeichen"></div>
+        <div class="form-group"><label class="form-label">Passwort *</label>
+          <input type="password" class="form-control" id="bu-pw" placeholder="Mindestens 4 Zeichen"></div>
+        <div class="form-group"><label class="form-label">Passwort wiederholen *</label>
           <input type="password" class="form-control" id="bu-pw2"></div>
       </div>`,
-      [{ label: 'Abbrechen', value: null }, { label: 'Anlegen', cls: 'btn-primary', value: 'ok' }]);
-    if (res !== 'ok') return;
-    const pw = document.getElementById('bu-pw')?.value;
-    const pw2 = document.getElementById('bu-pw2')?.value;
+      [{ label: 'Abbrechen', value: null, cls: 'btn-secondary' }, { label: 'Anlegen', cls: 'btn-primary', value: 'ok' }]);
+    if (!res || res.action !== 'ok') return;
+    const username = mf(res, 'bu-user')?.trim();
+    const pw = mf(res, 'bu-pw');
+    const pw2 = mf(res, 'bu-pw2');
+    if (!username) { toast('Benutzername eingeben', 'err'); return; }
+    if (!pw || pw.length < 4) { toast('Passwort mindestens 4 Zeichen', 'err'); return; }
     if (pw !== pw2) { toast('Passwörter stimmen nicht überein', 'err'); return; }
     try {
-      await api('/kkh/api/web/users', { method: 'POST', body: {
-        username: document.getElementById('bu-user')?.value?.trim(),
-        password: pw,
-      }});
-      toast('Benutzer angelegt');
+      await api('/kkh/api/web/users', { method: 'POST', body: { username, password: pw } });
+      toast(`Benutzer "${username}" erfolgreich angelegt`);
       lade();
     } catch (e) { toast(e.message, 'err'); }
   });
-}
 
-window.loescheBenutzer = async function(id, name) {
-  if (!(await confirm(`Benutzer "${name}" wirklich löschen?`))) return;
-  try {
-    await api(`/kkh/api/web/users/${id}`, { method: 'DELETE' });
-    toast('Benutzer gelöscht');
-    viewBenutzer();
-  } catch (e) { toast(e.message, 'err'); }
-};
+  await lade();
+}

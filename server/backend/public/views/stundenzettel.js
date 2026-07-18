@@ -1,114 +1,144 @@
-/* ── Stundenzettel-Views ─────────────────────────────────────────────── */
+/**
+ * Stundenzettel – KKH TV-Wartung
+ * Fixes: next-nr Feld, Team-Edit Vorbelegung, Prüfungen im Detail, neues DataGrid-API
+ */
+
 async function viewStundenzettel() {
-  const area = document.getElementById('content-area');
-  area.innerHTML = `
-    <div class="page-header">
-      <span class="page-title">Stundenzettel</span>
-      <span class="page-sub" id="sz-count"></span>
-    </div>
-    <div class="toolbar">
-      <input type="search" id="sz-suche" placeholder="Suche Station / Techniker / Auftragsnr.…">
-      <span class="spacer"></span>
-      ${exportBtn('stundenzettel')}
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    ${pageHeader('Stundenzettel', `
+      <a href="/kkh/api/web/export/stundenzettel" target="_blank" class="btn btn-secondary btn-sm">📊 Excel-Export</a>
       <button class="btn btn-primary" id="sz-neu">+ Neu</button>
+    `)}
+    <div class="filter-bar">
+      <div class="filter-group"><label>Von</label>
+        <input type="date" class="form-control form-control-sm" id="sz-von" value="${monatVon()}"></div>
+      <div class="filter-group"><label>Bis</label>
+        <input type="date" class="form-control form-control-sm" id="sz-bis" value="${heute()}"></div>
+      <div class="filter-group"><label>Station</label>
+        <input type="text" class="form-control form-control-sm" id="sz-sta-filter" placeholder="Alle" style="width:100px"></div>
+      <button class="btn btn-primary btn-sm" id="sz-laden">Laden</button>
+      <button class="btn btn-ghost btn-sm" id="sz-alle">Alle laden</button>
     </div>
-    <div class="grid-wrap"><div id="sz-grid"></div></div>`;
+    <div id="sz-container"><div class="loading">Wird geladen…</div></div>
+  `;
 
-  const data = await api('/kkh/api/web/stundenzettel');
-  if (!data) return;
-  let alle = data.zettel || [];
-  document.getElementById('sz-count').textContent = `${alle.length} Stundenzettel`;
+  let alleZettel = [];
 
-  function filtered() {
-    const q = document.getElementById('sz-suche').value.toLowerCase();
-    if (!q) return alle;
-    return alle.filter((z) =>
-      [z.station, z.techniker, z.auftragsnummer].some((v) => String(v || '').toLowerCase().includes(q)));
-  }
+  async function laden(alle = false) {
+    const container = document.getElementById('sz-container');
+    if (!container) return;
+    container.innerHTML = '<div class="loading">Wird geladen…</div>';
+    try {
+      const d = await api('/kkh/api/web/stundenzettel');
+      alleZettel = d?.zettel || [];
+    } catch (e) { container.innerHTML = `<div class="alert alert-err">${escH(e.message)}</div>`; return; }
 
-  let grid;
+    let rows = [...alleZettel];
+    if (!alle) {
+      const von = document.getElementById('sz-von')?.value;
+      const bis = document.getElementById('sz-bis')?.value;
+      const sf = document.getElementById('sz-sta-filter')?.value?.trim().toLowerCase();
+      if (von) rows = rows.filter((z) => z.zeitraum_start >= von);
+      if (bis) rows = rows.filter((z) => z.zeitraum_start <= bis);
+      if (sf) rows = rows.filter((z) => (z.station || '').toLowerCase().includes(sf));
+    }
 
-  function render() {
-    const rows = filtered();
-    grid = new DataGrid('sz-grid', {
+    new DataGrid(container, {
+      data: rows,
+      filterKeys: ['station', 'techniker', 'auftragsnummer'],
       columns: [
-        { key: 'zeitraum_start', label: 'Zeitraum ab', cls: 'mono' },
-        { key: 'station', label: 'Station' },
-        { key: 'auftragsnummer', label: 'Auftragsnr.' },
-        { key: 'techniker', label: 'Techniker' },
-        { key: 'datum', label: 'Datum', cls: 'mono' },
-        { key: 'stunden', label: 'Std. (Kopf)', num: true },
-        { key: 'anfahrt', label: 'Anfahrt (Kopf)', num: true },
-        { key: '_team_anz', label: 'Team', num: true, render: (r) => String(r.team?.anzahl ?? 0) },
-        { key: '_team_std', label: 'Team-Std.', num: true, render: (r) =>
-          r.team?.stunden ? fmt(r.team.stunden, 'num') : '–' },
-        { key: '_pdf', label: 'PDF', render: (r) => {
-          const station = (r.station || '').replace(/[^A-Za-z0-9äöüÄÖÜß_-]/g, '_');
-          return `<a class="pdf-link" href="/kkh/api/web/stundenzettel/pdf?station=${encodeURIComponent(r.station)}&zeitraum=${encodeURIComponent(r.zeitraum_start)}" target="_blank" title="PDF öffnen">📄</a>`;
-        }},
+        { key: 'zeitraum_start', label: 'Zeitraum ab', sort: true, width: '110px',
+          render: (v) => `<span class="mono">${fmtDatum(v)}</span>` },
+        { key: 'station', label: 'Station', sort: true, width: '90px',
+          render: (v) => badge(v || '–', 'teal') },
+        { key: 'auftragsnummer', label: 'Auftragsnr.', sort: true, width: '130px',
+          render: (v) => `<code class="mono">${escH(v || '–')}</code>` },
+        { key: 'techniker', label: 'Techniker', sort: true },
+        { key: 'datum', label: 'Datum', sort: true, width: '100px',
+          render: (v) => fmtDatum(v) },
+        { key: 'stunden', label: 'Std.', sort: true, width: '70px', align: 'right' },
+        { key: 'anfahrt', label: 'Anfahrt', sort: true, width: '70px', align: 'right' },
+        { key: '_teamAnz', label: 'Team', width: '60px', align: 'center',
+          render: (v, row) => `<span class="badge badge-info">${row.team?.anzahl ?? 0}</span>` },
+        { key: '_pdf', label: '', width: '50px', align: 'center',
+          render: (v, row) =>
+            `<a class="btn btn-xs btn-ghost" href="/kkh/api/web/stundenzettel/pdf?station=${encodeURIComponent(row.station)}&zeitraum=${encodeURIComponent(row.zeitraum_start)}" target="_blank" title="PDF öffnen">📄</a>` },
       ],
-      rows,
-      rowClick: (r) => viewStundenzettelDetail(r.station, r.zeitraum_start),
+      onRowClick: (row) => viewStundenzettelDetail(row.station, row.zeitraum_start),
     });
   }
 
-  render();
-  document.getElementById('sz-suche').addEventListener('input', render);
-  document.getElementById('sz-neu').addEventListener('click', () => modalStundenzettelNeu());
+  document.getElementById('sz-laden').addEventListener('click', () => laden(false));
+  document.getElementById('sz-alle').addEventListener('click', () => laden(true));
+  document.getElementById('sz-neu').addEventListener('click', () => modalStundenzettelNeu().then(() => laden(false)));
+
+  await laden(false);
 }
 
 async function viewStundenzettelDetail(station, zeitraumStart) {
-  const area = document.getElementById('content-area');
-  area.innerHTML = `<div class="page-header"><span class="page-title">Stundenzettel wird geladen…</span></div>`;
-  const data = await api(`/kkh/api/web/stundenzettel/detail?station=${encodeURIComponent(station)}&zeitraum=${encodeURIComponent(zeitraumStart)}`);
-  if (!data) return;
+  const el = document.getElementById('content-area');
+  el.innerHTML = '<div class="loading">Stundenzettel wird geladen…</div>';
+
+  let data;
+  try { data = await api(`/kkh/api/web/stundenzettel/detail?station=${encodeURIComponent(station)}&zeitraum=${encodeURIComponent(zeitraumStart)}`); }
+  catch (e) { el.innerHTML = `<div class="alert alert-err">${escH(e.message)}</div>`; return; }
+
   const z = data.zettel;
   const eintraege = data.eintraege || [];
-
+  const inspections = data.inspections || [];
   const pdfUrl = `/kkh/api/web/stundenzettel/pdf?station=${encodeURIComponent(station)}&zeitraum=${encodeURIComponent(zeitraumStart)}`;
 
-  area.innerHTML = `
-    <a class="detail-back" href="#" id="sz-back">← Zurück zu Stundenzettel</a>
-    <div class="page-header">
-      <span class="page-title">${escH(z.station)} · ${escH(z.zeitraum_start)}</span>
-      <span class="page-sub">${escH(z.auftragsnummer || '–')}</span>
+  el.innerHTML = `
+    <div class="detail-header">
+      <button class="detail-back" id="sz-back">← Zurück</button>
+      <span class="detail-title">${escH(z.station)} · ${fmtDatum(z.zeitraum_start)}</span>
+      ${z.auftragsnummer ? `<span class="badge badge-teal">${escH(z.auftragsnummer)}</span>` : ''}
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn btn-secondary btn-sm" href="${pdfUrl}" target="_blank">📄 PDF öffnen</a>
+        <button class="btn btn-primary btn-sm" id="sz-save">💾 Speichern</button>
+        <button class="btn btn-danger btn-sm" id="sz-del">🗑 Löschen</button>
+      </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Kopfdaten
-        <span style="margin-left:auto;display:flex;gap:6px;">
-          <a class="btn btn-secondary btn-sm" href="${pdfUrl}" target="_blank">📄 PDF öffnen</a>
-          <button class="btn btn-primary btn-sm" id="sz-save">💾 Speichern</button>
-          <button class="btn btn-danger btn-sm" id="sz-del">Löschen</button>
-        </span>
-      </div>
+    <div class="settings-section" style="margin-bottom:16px">
+      <h3>Kopfdaten</h3>
       <div class="form-grid">
         <div class="form-group"><label class="form-label">Auftragsnummer</label>
-          <input class="form-control" id="sz-nr" value="${escH(z.auftragsnummer)}"></div>
+          <input class="form-control" id="sz-nr" value="${escH(z.auftragsnummer || '')}"></div>
         <div class="form-group"><label class="form-label">Station</label>
-          <input class="form-control" id="sz-sta" value="${escH(z.station)}"></div>
+          <input class="form-control" id="sz-sta" value="${escH(z.station || '')}"></div>
         <div class="form-group"><label class="form-label">Zeitraum ab</label>
-          <input class="form-control mono" id="sz-zr" value="${escH(z.zeitraum_start)}"></div>
+          <input type="date" class="form-control" id="sz-zr" value="${escH(z.zeitraum_start || '')}"></div>
         <div class="form-group"><label class="form-label">Datum</label>
-          <input class="form-control mono" id="sz-dat" value="${escH(z.datum)}"></div>
+          <input type="date" class="form-control" id="sz-dat" value="${escH(z.datum || '')}"></div>
         <div class="form-group"><label class="form-label">Stunden (Kopf)</label>
-          <input class="form-control" id="sz-std" value="${escH(z.stunden)}"></div>
+          <input class="form-control" id="sz-std" value="${escH(String(z.stunden || ''))}"></div>
         <div class="form-group"><label class="form-label">Anfahrt (Kopf)</label>
-          <input class="form-control" id="sz-anf" value="${escH(z.anfahrt)}"></div>
-        <div class="form-group"><label class="form-label">Techniker</label>
-          <input class="form-control" id="sz-tech" value="${escH(z.techniker)}"></div>
+          <input class="form-control" id="sz-anf" value="${escH(String(z.anfahrt || ''))}"></div>
+        <div class="form-group full"><label class="form-label">Techniker</label>
+          <input class="form-control" id="sz-tech" value="${escH(z.techniker || '')}"></div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Team-Einträge
-        <span style="margin-left:auto"><button class="btn btn-secondary btn-sm" id="sze-add">+ Eintrag</button></span>
-      </div>
-      <div class="grid-wrap"><div id="sze-grid"></div></div>
-    </div>`;
+    <div class="settings-section" style="margin-bottom:16px">
+      <h3 style="display:flex;align-items:center;gap:10px">Team-Einträge
+        <button class="btn btn-secondary btn-sm" id="sze-add" style="margin-left:auto">+ Eintrag</button>
+      </h3>
+      <div id="sze-container"></div>
+    </div>
 
-  document.getElementById('sz-back').addEventListener('click', (e) => { e.preventDefault(); viewStundenzettel(); });
+    ${inspections.length > 0 ? `
+    <div class="settings-section" style="margin-bottom:16px">
+      <h3>Prüfungen in diesem Zeitraum (${inspections.length})</h3>
+      <div id="sz-inspections-container"></div>
+    </div>` : ''}
+  `;
 
+  // Zurück
+  document.getElementById('sz-back').addEventListener('click', () => viewStundenzettel());
+
+  // Speichern
   document.getElementById('sz-save').addEventListener('click', async () => {
     try {
       await api('/kkh/api/web/stundenzettel', { method: 'PUT', body: {
@@ -124,8 +154,9 @@ async function viewStundenzettelDetail(station, zeitraumStart) {
     } catch (e) { toast(e.message, 'err'); }
   });
 
+  // Löschen
   document.getElementById('sz-del').addEventListener('click', async () => {
-    if (!(await confirm(`Stundenzettel ${station} / ${zeitraumStart} wirklich löschen?`))) return;
+    if (!(await confirm(`Stundenzettel ${station} / ${fmtDatum(zeitraumStart)} wirklich löschen?`))) return;
     try {
       await api(`/kkh/api/web/stundenzettel?station=${encodeURIComponent(station)}&zeitraum=${encodeURIComponent(zeitraumStart)}`, { method: 'DELETE' });
       toast('Stundenzettel gelöscht');
@@ -133,101 +164,135 @@ async function viewStundenzettelDetail(station, zeitraumStart) {
     } catch (e) { toast(e.message, 'err'); }
   });
 
+  // Team-Einträge
   function renderEintraege(rows) {
-    new DataGrid('sze-grid', {
+    const container = document.getElementById('sze-container');
+    if (!container) return;
+    if (rows.length === 0) {
+      container.innerHTML = '<p style="color:var(--muted);font-style:italic;padding:8px 0">Noch keine Team-Einträge vorhanden</p>';
+      return;
+    }
+    new DataGrid(container, {
+      data: rows,
+      filterKeys: ['mitarbeiter'],
       columns: [
-        { key: 'mitarbeiter', label: 'Mitarbeiter' },
-        { key: 'stunden', label: 'Stunden', num: true },
-        { key: 'anfahrt', label: 'Anfahrt', num: true },
+        { key: 'mitarbeiter', label: 'Mitarbeiter', sort: true },
+        { key: 'stunden', label: 'Stunden', sort: true, width: '90px', align: 'right' },
+        { key: 'anfahrt', label: 'Anfahrt', sort: true, width: '90px', align: 'right' },
+        { key: '_actions', label: '', width: '130px', align: 'right',
+          render: (v, row) => `
+            <button class="btn btn-xs btn-secondary sze-edit" data-ma="${escH(row.mitarbeiter)}" data-std="${escH(String(row.stunden || ''))}" data-anf="${escH(String(row.anfahrt || ''))}">Bearb.</button>
+            <button class="btn btn-xs btn-danger sze-del" data-ma="${escH(row.mitarbeiter)}">Löschen</button>
+          ` },
       ],
-      rows,
-      actions: (e) => `
-        <button class="btn btn-secondary btn-sm" onclick="bearbeiteZettelEintrag('${escH(station)}','${escH(zeitraumStart)}','${escH(e.mitarbeiter)}',this)">Bearb.</button>
-        <button class="btn btn-danger btn-sm" onclick="loescheZettelEintrag('${escH(station)}','${escH(zeitraumStart)}','${escH(e.mitarbeiter)}')">Löschen</button>`,
     });
   }
   renderEintraege(eintraege);
 
-  document.getElementById('sze-add').addEventListener('click', async () => {
-    const m = await modal('Team-Eintrag hinzufügen', `
-      <div class="form-grid">
-        <div class="form-group"><label class="form-label">Mitarbeiter <span class="req">*</span></label>
-          <input class="form-control" id="ze-ma"></div>
-        <div class="form-group"><label class="form-label">Stunden</label>
-          <input class="form-control" id="ze-std"></div>
-        <div class="form-group"><label class="form-label">Anfahrt</label>
-          <input class="form-control" id="ze-anf"></div>
-      </div>`,
-      [{ label: 'Abbrechen', value: null }, { label: 'Speichern', cls: 'btn-primary', value: 'ok' }]);
-    if (m !== 'ok') return;
-    try {
-      await api('/kkh/api/web/zettel-eintraege', { method: 'PUT', body: {
-        station, zeitraumStart,
-        mitarbeiter: document.getElementById('ze-ma')?.value,
-        stunden: document.getElementById('ze-std')?.value || '',
-        anfahrt: document.getElementById('ze-anf')?.value || '',
-      }});
-      toast('Eintrag gespeichert');
-      viewStundenzettelDetail(station, zeitraumStart);
-    } catch (e) { toast(e.message, 'err'); }
+  // Delegiertes Klick-Handling für Team-Tabelle
+  document.getElementById('sze-container').addEventListener('click', async (e) => {
+    const editBtn = e.target.closest('.sze-edit');
+    const delBtn = e.target.closest('.sze-del');
+    if (editBtn) {
+      const ma = editBtn.dataset.ma;
+      const std = editBtn.dataset.std;
+      const anf = editBtn.dataset.anf;
+      await bearbeiteZettelEintragModal(station, zeitraumStart, ma, std, anf);
+    } else if (delBtn) {
+      const ma = delBtn.dataset.ma;
+      if (!(await confirm(`Eintrag von ${ma} löschen?`))) return;
+      try {
+        await api(`/kkh/api/web/zettel-eintraege?station=${encodeURIComponent(station)}&zeitraum=${encodeURIComponent(zeitraumStart)}&mitarbeiter=${encodeURIComponent(ma)}`, { method: 'DELETE' });
+        toast('Eintrag gelöscht');
+        viewStundenzettelDetail(station, zeitraumStart);
+      } catch (err) { toast(err.message, 'err'); }
+    }
   });
+
+  // + Eintrag
+  document.getElementById('sze-add').addEventListener('click', async () => {
+    await bearbeiteZettelEintragModal(station, zeitraumStart, '', '', '');
+  });
+
+  // Prüfungen
+  const inspCont = document.getElementById('sz-inspections-container');
+  if (inspCont && inspections.length > 0) {
+    new DataGrid(inspCont, {
+      data: inspections,
+      filterKeys: ['station', 'zimmer', 'mitarbeiter'],
+      columns: [
+        { key: 'datum', label: 'Datum', sort: true, width: '100px', render: (v) => fmtDatum(v) },
+        { key: 'station', label: 'Station', sort: true, width: '80px' },
+        { key: 'zimmer', label: 'Zimmer', sort: true, width: '80px' },
+        { key: 'mitarbeiter', label: 'Prüfer', sort: true },
+      ],
+    });
+  }
 }
 
-window.bearbeiteZettelEintrag = async function(station, zeitraum, mitarbeiter) {
-  const m = await modal(`Eintrag: ${mitarbeiter}`, `
+async function bearbeiteZettelEintragModal(station, zeitraumStart, mitarbeiter, stunden, anfahrt) {
+  const istNeu = !mitarbeiter;
+  const res = await modal(istNeu ? 'Team-Eintrag hinzufügen' : `Eintrag: ${mitarbeiter}`, `
     <div class="form-grid">
+      ${istNeu ? `
+        <div class="form-group full"><label class="form-label">Mitarbeiter *</label>
+          <input class="form-control" id="ze-ma" value="${escH(mitarbeiter)}"></div>` : ''}
       <div class="form-group"><label class="form-label">Stunden</label>
-        <input class="form-control" id="ze-std"></div>
-      <div class="form-group"><label class="form-label">Anfahrt</label>
-        <input class="form-control" id="ze-anf"></div>
+        <input class="form-control" id="ze-std" value="${escH(stunden)}" placeholder="z.B. 8,5"></div>
+      <div class="form-group"><label class="form-label">Anfahrt (km)</label>
+        <input class="form-control" id="ze-anf" value="${escH(anfahrt)}" placeholder="z.B. 42"></div>
     </div>`,
-    [{ label: 'Abbrechen', value: null }, { label: 'Speichern', cls: 'btn-primary', value: 'ok' }]);
-  if (m !== 'ok') return;
+    [{ label: 'Abbrechen', value: null, cls: 'btn-secondary' }, { label: 'Speichern', cls: 'btn-primary', value: 'ok' }]);
+  if (!res || res.action !== 'ok') return;
+  const ma = istNeu ? mf(res, 'ze-ma') : mitarbeiter;
+  if (!ma) { toast('Mitarbeitername eingeben', 'err'); return; }
   try {
     await api('/kkh/api/web/zettel-eintraege', { method: 'PUT', body: {
-      station, zeitraumStart: zeitraum, mitarbeiter,
-      stunden: document.getElementById('ze-std')?.value || '',
-      anfahrt: document.getElementById('ze-anf')?.value || '',
+      station, zeitraumStart,
+      mitarbeiter: ma,
+      stunden: mf(res, 'ze-std') || '',
+      anfahrt: mf(res, 'ze-anf') || '',
     }});
     toast('Eintrag gespeichert');
-    viewStundenzettelDetail(station, zeitraum);
+    viewStundenzettelDetail(station, zeitraumStart);
   } catch (e) { toast(e.message, 'err'); }
-};
-
-window.loescheZettelEintrag = async function(station, zeitraum, mitarbeiter) {
-  if (!(await confirm(`Eintrag von ${mitarbeiter} löschen?`))) return;
-  try {
-    await api(`/kkh/api/web/zettel-eintraege?station=${encodeURIComponent(station)}&zeitraum=${encodeURIComponent(zeitraum)}&mitarbeiter=${encodeURIComponent(mitarbeiter)}`, { method: 'DELETE' });
-    toast('Eintrag gelöscht');
-    viewStundenzettelDetail(station, zeitraum);
-  } catch (e) { toast(e.message, 'err'); }
-};
+}
 
 async function modalStundenzettelNeu() {
-  const nrData = await api('/kkh/api/web/stundenzettel/next-nr').catch(() => null);
-  const nr = nrData?.nr || '';
+  let nr = '';
+  try {
+    const nrData = await api('/kkh/api/web/stundenzettel/next-nr');
+    nr = nrData?.auftragsnummer || nrData?.nr || '';
+  } catch {}
+
   const res = await modal('Neuer Stundenzettel', `
     <div class="form-grid">
       <div class="form-group"><label class="form-label">Auftragsnummer</label>
-        <input class="form-control" id="m-nr" value="${escH(nr)}"></div>
-      <div class="form-group"><label class="form-label">Station <span class="req">*</span></label>
-        <input class="form-control" id="m-sta"></div>
-      <div class="form-group"><label class="form-label">Zeitraum ab <span class="req">*</span></label>
+        <input class="form-control" id="m-nr" value="${escH(nr)}" placeholder="Wird automatisch vergeben"></div>
+      <div class="form-group"><label class="form-label">Station *</label>
+        <input class="form-control" id="m-sta" placeholder="z.B. KKH-3B"></div>
+      <div class="form-group"><label class="form-label">Zeitraum ab *</label>
         <input type="date" class="form-control" id="m-zr" value="${heute()}"></div>
       <div class="form-group"><label class="form-label">Techniker</label>
-        <input class="form-control" id="m-tech"></div>
+        <input class="form-control" id="m-tech" placeholder="Name des Technikers"></div>
+      <div class="form-group"><label class="form-label">Datum Einsatz</label>
+        <input type="date" class="form-control" id="m-dat" value="${heute()}"></div>
     </div>`,
-    [{ label: 'Abbrechen', value: null }, { label: 'Anlegen', cls: 'btn-primary', value: 'ok' }]);
-  if (res !== 'ok') return;
+    [{ label: 'Abbrechen', value: null, cls: 'btn-secondary' }, { label: 'Anlegen', cls: 'btn-primary', value: 'ok' }]);
+  if (!res || res.action !== 'ok') return;
+  const sta = mf(res, 'm-sta');
+  const zr = mf(res, 'm-zr');
+  if (!sta || !zr) { toast('Station und Zeitraum sind Pflichtfelder', 'err'); return; }
   try {
     await api('/kkh/api/web/stundenzettel', { method: 'PUT', body: {
-      auftragsnummer: document.getElementById('m-nr')?.value || '',
-      station: document.getElementById('m-sta')?.value || '',
-      zeitraumStart: document.getElementById('m-zr')?.value || '',
-      techniker: document.getElementById('m-tech')?.value || '',
-      datum: '', stunden: '', anfahrt: '',
+      auftragsnummer: mf(res, 'm-nr') || nr,
+      station: sta,
+      zeitraumStart: zr,
+      datum: mf(res, 'm-dat') || '',
+      techniker: mf(res, 'm-tech') || '',
+      stunden: '', anfahrt: '',
     }});
     toast('Stundenzettel angelegt');
-    viewStundenzettel();
+    await viewStundenzettelDetail(sta, zr);
   } catch (e) { toast(e.message, 'err'); }
 }
