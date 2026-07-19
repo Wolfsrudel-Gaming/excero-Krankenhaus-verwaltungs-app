@@ -64,6 +64,17 @@ class SettingsStore(context: Context) {
         prefs.edit().putString("bekannteMitarbeiter", namen.joinToString("\n")).apply()
     }
 
+    /** Vom Server gemeldete knappe Lager-Artikel (Warnungstexte), beim Sync aktualisiert. */
+    private val _lagerWarnungen = MutableStateFlow(
+        prefs.getString("lagerWarnungen", "")!!.split("\n").filter { it.isNotBlank() }
+    )
+    val lagerWarnungen: StateFlow<List<String>> = _lagerWarnungen
+
+    fun setLagerWarnungen(texte: List<String>) {
+        prefs.edit().putString("lagerWarnungen", texte.joinToString("\n")).apply()
+        _lagerWarnungen.value = texte
+    }
+
     fun update(settings: AppSettings) {
         prefs.edit()
             .putString("zeitraum", settings.zeitraum.name)

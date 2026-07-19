@@ -47,6 +47,7 @@ Beide teilen denselben Cookie-basierten Login (`kkh_session`).
 
 | Version | Code | Wichtigste Änderungen |
 |---------|------|-----------------------|
+| 1.9.5   | 20   | Auftragsnummern serverkoordiniert (keine Dubletten bei mehreren Geräten, Offline-Fallback); Nachbestell-Warnung in der Verwaltung aus dem Server-Lager |
 | 1.9.4   | 19   | Datenschutz: Signaturen nicht mehr im Web-Panel sichtbar; Web-Panel vollständig überarbeitet (professionelles CSS, Mobile-Navigation, Bug-Fixes) |
 | 1.9.3   | 18   | Deterministische Signatur-Uploads (`_signaturen/<station>_<zeitraumStart>_<rolle>.png`) für Server-seitige PDF-Generierung |
 | 1.9.x   | –    | Team-Stundenzettel, Mehrbenutzer-Sync, Auto-Update, Freenet-Übersicht, Statistik, Berichtssuche |

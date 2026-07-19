@@ -248,6 +248,22 @@ class SyncManager(
             settingsStore?.setBekannteMitarbeiter(namen)
         }
 
+        // --- 4e) Lager-Warnungen: Artikel unter Mindestbestand (tolerant) ---
+        runCatching {
+            val knapp = httpJson("/api/sync/lager-status", "GET")
+                .optJSONArray("knapp") ?: JSONArray()
+            val texte = buildList {
+                for (i in 0 until knapp.length()) {
+                    val o = knapp.getJSONObject(i)
+                    add(
+                        "${o.optString("bezeichnung")}: nur noch ${o.optString("bestand")} " +
+                            "von mind. ${o.optString("mindestbestand")} ${o.optString("einheit", "Stk.")}"
+                    )
+                }
+            }
+            settingsStore?.setLagerWarnungen(texte)
+        }
+
         // --- 5) Fehlende Dateien hochladen (Fotos + Prüfbericht-PDFs) ---
         val vorhandene = mutableSetOf<String>()
         val dateiListe = httpJson("/api/sync/files", "GET").optJSONArray("files") ?: JSONArray()

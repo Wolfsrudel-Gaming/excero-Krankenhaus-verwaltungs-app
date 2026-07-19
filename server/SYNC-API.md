@@ -92,6 +92,19 @@ Eine Zeile je (station, zeitraumStart, mitarbeiter) mit `stunden`, `anfahrt`,
 LWW über `updatedAt` (Antwort `{ "uebernommen": n }`). So rechnen mehrere
 Mitarbeiter zeitgleich auf einer Station ab — ein Zettel, eine Zeile pro Kopf.
 
+## Koordination & Lager (ab App v1.9.5)
+
+### GET /api/sync/naechste-auftragsnummer
+Antwort: `{ "auftragsnummer": "A-2026-0007" }` — nächste freie Nummer über
+alle Geräte und das Web hinweg. Die App fragt sie beim Anlegen eines neuen
+Stundenzettels ab; ohne Verbindung vergibt sie wie bisher lokal (Fallback).
+
+### GET /api/sync/lager-status
+Antwort: `{ "knapp": [ { bezeichnung, bestand, mindestbestand, einheit } ] }`
+— aktive Lager-Artikel unter Mindestbestand. Die App zeigt sie als
+Nachbestell-Warnung in der Verwaltung. Ältere Server ohne den Endpunkt
+werden toleriert (Warnliste bleibt dann unverändert).
+
 ## App-Verteilung & In-App-Updates (ab v1.9)
 
 - `GET /app/version.json` (öffentlich, ohne Auth):

@@ -77,6 +77,28 @@ fun VerwaltungScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Nachbestell-Warnung aus dem Server-Lager (beim Sync aktualisiert)
+            val lagerWarnungen by viewModel.lagerWarnungen.collectAsState()
+            if (lagerWarnungen.isNotEmpty()) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = WarnAmber.copy(alpha = 0.15f)
+                    )
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "⚠️ Nachbestellen (Server-Lager unter Mindestbestand)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = WarnAmber
+                        )
+                        lagerWarnungen.forEach { w ->
+                            Text("•  $w", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+
             // Materialkatalog & Lagerbestand
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -443,11 +443,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 StundenzettelEntity(
                     station = station,
                     zeitraumStart = start,
-                    auftragsnummer = repository.naechsteAuftragsnummer(),
+                    auftragsnummer = serverAuftragsnummer() ?: repository.naechsteAuftragsnummer(),
                     datum = Dates.todayGerman()
                 )
             )
         }
+
+    /**
+     * Nächste freie Auftragsnummer vom Server – so vergeben mehrere Geräte
+     * keine doppelten Nummern. null bei fehlender Verbindung (lokaler Fallback).
+     */
+    private suspend fun serverAuftragsnummer(): String? = withContext(Dispatchers.IO) {
+        val s = settings.value
+        if (s.serverUrl.isBlank() || s.apiKey.isBlank()) return@withContext null
+        runCatching {
+            val url = java.net.URL(s.serverUrl.trimEnd('/') + "/api/sync/naechste-auftragsnummer")
+            val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                setRequestProperty("X-Api-Key", s.apiKey)
+                connectTimeout = 5_000; readTimeout = 5_000
+            }
+            val text = conn.inputStream.bufferedReader().use { it.readText() }
+            org.json.JSONObject(text).optString("auftragsnummer").ifBlank { null }
+        }.getOrNull()
+    }
+
+    /** Vom Server gemeldete knappe Lager-Artikel (für die Nachbestell-Warnung). */
+    val lagerWarnungen: StateFlow<List<String>> get() = app.settingsStore.lagerWarnungen
 
     /** Gespeicherten Stundenzettel per ID laden (aus der Liste). */
     suspend fun ladeStundenzettelById(id: Long): StundenzettelEntity? =

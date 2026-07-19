@@ -558,7 +558,7 @@ router.get('/api/web/stundenzettel', requireWebAuth, async (req, res) => {
 });
 
 // Nächste freie Auftragsnummer (A-JJJJ-NNNN)
-router.get('/api/web/stundenzettel/next-nr', requireWebAuth, async (req, res) => {
+async function naechsteAuftragsnummer() {
   const jahr = new Date().getFullYear();
   const { rows } = await pool.query(
     `SELECT auftragsnummer FROM stundenzettel
@@ -569,8 +569,33 @@ router.get('/api/web/stundenzettel/next-nr', requireWebAuth, async (req, res) =>
     const m = /A-\d{4}-(\d+)/.exec(rows[0].auftragsnummer || '');
     if (m) nr = Number(m[1]) + 1;
   }
-  const nr_str = `A-${jahr}-${String(nr).padStart(4, '0')}`;
+  return `A-${jahr}-${String(nr).padStart(4, '0')}`;
+}
+
+router.get('/api/web/stundenzettel/next-nr', requireWebAuth, async (req, res) => {
+  const nr_str = await naechsteAuftragsnummer();
   res.json({ auftragsnummer: nr_str, nr: nr_str }); // nr für Kompatibilität
+});
+
+// Auch für die App (koordinierte Nummern über mehrere Geräte, ab App 1.9.5)
+router.get('/api/sync/naechste-auftragsnummer', requireApiKey, async (req, res) => {
+  res.json({ auftragsnummer: await naechsteAuftragsnummer() });
+});
+
+// Lager-Artikel unter Mindestbestand – Nachbestell-Warnung in der App (ab 1.9.5)
+router.get('/api/sync/lager-status', requireApiKey, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT bezeichnung, bestand, mindestbestand, einheit FROM lager_artikel
+     WHERE aktiv AND mindestbestand > 0 AND bestand < mindestbestand
+     ORDER BY bezeichnung`);
+  res.json({
+    knapp: rows.map((r) => ({
+      bezeichnung: r.bezeichnung,
+      bestand: String(Number(r.bestand)),
+      mindestbestand: String(Number(r.mindestbestand)),
+      einheit: r.einheit,
+    })),
+  });
 });
 
 // Detail: Header + Team-Zeilen + Prüfungen der Station im Zeitraum
