@@ -36,6 +36,29 @@ services:
     ports:
       - "127.0.0.1:${KKH_PORT:-8090}:8090"
 
+  # KI-Fotoerkennung: liest Fotos (read-only), schreibt Analysen in die DB.
+  # Nur intern erreichbar (kein Port nach außen), CPU-begrenzt, damit die
+  # anderen Projekte auf dem Server nicht beeinträchtigt werden.
+  ki:
+    build: ./ki
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: kkh
+      PGPASSWORD: ${PGPASSWORD}
+      PGDATABASE: kkh
+      FILES_DIR: /data/files
+      KI_MODEL_DIR: /data/ki-models
+    volumes:
+      - kkh_files:/data/files:ro
+      - kkh_ki_models:/data/ki-models
+    cpus: 4
+    mem_limit: 6g
+
 volumes:
   kkh_pgdata:
   kkh_files:
+  kkh_ki_models:

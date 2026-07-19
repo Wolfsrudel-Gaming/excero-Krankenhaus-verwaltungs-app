@@ -11,3 +11,4 @@ captures/
 .kotlin/
 server/backend/node_modules/
 server/.env
+__pycache__/

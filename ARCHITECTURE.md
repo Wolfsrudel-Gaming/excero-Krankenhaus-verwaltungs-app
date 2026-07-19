@@ -57,9 +57,19 @@ excero-Krankenhaus-verwaltungs-app/
 │   │   │       ├── stundenzettel.js
 │   │   │       ├── lager.js      ← Enthält auch viewAbrechnung + viewMitarbeiter
 │   │   │       ├── benutzer.js
-│   │   │       └── dateien.js
+│   │   │       ├── dateien.js
+│   │   │       └── ki.js         ← KI-Prüfung (Abweichungen bestätigen)
 │   │   └── public-excero/        ← Excero Web-App (separates System)
-│   ├── docker-compose.yml
+│   ├── ki/                       ← KI-Fotoerkennung (Python/FastAPI, eigener Container)
+│   │   ├── main.py               ← FastAPI: /status, /analyse, /train
+│   │   ├── pipeline.py           ← Foto → Klassifikation → OCR → Felder → Abgleich
+│   │   ├── worker.py             ← Warteschlangen-Worker + nächtliches Training (3:30)
+│   │   ├── training.py           ← Training beider Netze aus ki_labels
+│   │   ├── db.py                 ← PostgreSQL-Zugriff (gleiche DB wie Backend)
+│   │   ├── models/klassifikator.py ← Eigenes CNN (Bildtyp + TV-Typ)
+│   │   ├── models/feldnetz.py    ← Eigenes MLP (OCR-Zeile → Feldtyp) + Format-Regeln
+│   │   └── README.md             ← Vollständige KI-Doku (Pipeline, Training, Betrieb)
+│   ├── docker-compose.yml        ← Services: db, backend, ki
 │   └── deploy.sh
 │
 ├── README.md                     ← Benutzer-Dokumentation
@@ -289,6 +299,32 @@ Diese Endpunkte sind für das Web-Panel und werden von der App **nicht** genutzt
 | GET | `/api/web/stundenzettel/pdf` | Stundenzettel als PDF |
 | GET/POST/PATCH/DELETE | `/api/web/users` | Benutzerverwaltung |
 | GET | `/api/web/lager/*` | Lagerverwaltung |
+| GET | `/api/web/ki/analysen` | KI-Foto-Analysen (Filter: `status`, `room`) |
+| POST | `/api/web/ki/analysen/:id/bestaetigen` | Entscheidung speichern (wird Trainingslabel) |
+| POST | `/api/web/ki/analysen/:id/neu` | Foto erneut analysieren |
+| GET | `/api/web/ki/status` | KI-Warteschlange + Modell-Versionen |
+| POST | `/api/web/ki/train` | Training sofort anstoßen |
+
+---
+
+### 3.4 KI-Fotoerkennung (Service `server/ki/`)
+
+Eigener Docker-Container (`ki`, intern `http://ki:8100`), analysiert alle
+Prüfungsfotos automatisch:
+
+1. **Bildklassifikation** (eigenes CNN): CI-Menü / Gerät / Übersichtsfoto + TV-Typ
+2. **OCR** (EasyOCR, de+en, CPU): liest den Bildschirmtext des CI-Menüs
+3. **Feld-Zuordnung** (eigenes MLP + Format-Regeln): Seriennummer, Freenet-ID, Gültig-bis
+4. **Abgleich** mit den Zimmer-Stammdaten → Status `uebereinstimmung` / `abweichung` / `unlesbar`
+
+Ablauf: Foto-Upload (`PUT /api/sync/file`) → Insert in `foto_analysen`
+(Status `wartet`) → KI-Worker analysiert → Ergebnis im Web-Panel unter
+**KI-Prüfung**. Jede Bestätigung im Web wird Trainingslabel (`ki_labels`);
+Training läuft nächtlich um 3:30 Uhr automatisch. Details: `server/ki/README.md`.
+
+**Datenschutz:** `_signaturen`-Pfade werden niemals analysiert oder eingereiht.
+
+Neue Tabellen: `foto_analysen`, `ki_labels`, `ki_modelle` (siehe `schema.sql`).
 
 ---
 
@@ -387,19 +423,30 @@ Gespeichert als Protocol-Buffer Datastore (`settings.pb`):
    - `VerwaltungScreen.kt` → "Echtstart vorbereiten" löscht Testdaten
    - Besser: Nur Daten löschen, die nach einem konfigurierbaren Datum liegen
 
+9. **KI-Unterstützung in der App (Server-KI ist fertig)**
+   - Der Server analysiert alle Fotos automatisch (siehe Abschnitt 3.4)
+   - a) **Dritter Foto-Button „CI-Menü"** in `PhotoSection.kt`: Dateiname mit
+     `_menue_` statt `_nah_` → die Server-KI weiß dann sicher, welches Foto
+     das CI-Menü zeigt (aktuell klassifiziert sie selbst)
+   - b) **KI-Abweichungen beim Sync anzeigen**: `GET /api/web/ki/analysen?status=abweichung`
+     existiert; ein App-tauglicher Sync-Endpunkt (X-Api-Key) müsste im Backend
+     ergänzt werden (ca. 10 Zeilen analog zu den anderen Sync-Endpunkten).
+     Der Monteur sieht dann direkt am Gerät: „KI hat auf deinem Foto SN X
+     gelesen, in den Stammdaten steht Y – bitte prüfen."
+
 ### 🟢 Nice-to-Have
 
-9. **Widgets / Schnellzugriff**
-   - Home-Screen-Widget: "X von Y geprüft heute" mit Tippen → App öffnen
+10. **Widgets / Schnellzugriff**
+    - Home-Screen-Widget: "X von Y geprüft heute" mit Tippen → App öffnen
 
-10. **Prüfbogen-Vorlagen**
+11. **Prüfbogen-Vorlagen**
     - Oft werden dieselben Arbeiten gemacht; Vorlage speichern und laden
 
-11. **NFC-Tag für Zimmer**
+12. **NFC-Tag für Zimmer**
     - NFC-Chip am TV → Zimmer direkt öffnen statt durch Liste scrollen
     - `TvRoom.id` als NFC-NDEF-Inhalt schreiben/lesen
 
-12. **Statistik erweitern**
+13. **Statistik erweitern**
     - Durchschnittliche Prüfzeit pro Zimmer (via `activity_log`)
     - Vergleich Zeiträume (aktuell vs. letzter Zeitraum)
 

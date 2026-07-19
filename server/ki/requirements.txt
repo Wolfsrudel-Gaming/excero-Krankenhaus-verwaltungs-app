@@ -1,0 +1,10 @@
+# KI-Service für die KKH-Fotoerkennung
+# torch/torchvision als CPU-Variante (siehe Dockerfile --index-url)
+torch==2.5.1
+torchvision==0.20.1
+easyocr==1.7.2
+fastapi==0.115.6
+uvicorn==0.34.0
+psycopg2-binary==2.9.10
+pillow==11.0.0
+numpy<2
