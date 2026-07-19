@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.excero.tvwartung.data.Pruefzeitraum
 import de.excero.tvwartung.ui.AppViewModel
+import de.excero.tvwartung.ui.theme.AppTheme
 import de.excero.tvwartung.util.Dates
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -137,6 +138,45 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
                     )
+                }
+            }
+
+            // Darstellung (2.0-Beta)
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Darstellung",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val optionen = listOf(
+                        AppTheme.SYSTEM to "Automatisch (Systemeinstellung)",
+                        AppTheme.HELL to "Hell",
+                        AppTheme.DUNKEL to "Dunkel"
+                    )
+                    optionen.forEach { (theme, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.updateSettings(settings.copy(theme = theme)) }
+                        ) {
+                            RadioButton(
+                                selected = settings.theme == theme,
+                                onClick = { viewModel.updateSettings(settings.copy(theme = theme)) }
+                            )
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Switch(
+                            checked = settings.kompaktZimmerliste,
+                            onCheckedChange = { viewModel.updateSettings(settings.copy(kompaktZimmerliste = it)) }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Kompakte Zimmerliste (mehr Zimmer auf einen Blick)", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
 

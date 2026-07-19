@@ -1,6 +1,7 @@
 package de.excero.tvwartung.data
 
 import android.content.Context
+import de.excero.tvwartung.ui.theme.AppTheme
 import de.excero.tvwartung.util.Dates
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,10 @@ data class AppSettings(
     val apiKey: String = "",                   // Sync-Schlüssel des Servers
     val autoSync: Boolean = false,             // nach jedem Prüfbogen automatisch synchronisieren
     val mitarbeiter: String = "",              // dieses Gerät = dieser Mitarbeiter
-    val lastSync: String = ""                  // Zeitstempel des letzten Abgleichs (Delta-Sync)
+    val lastSync: String = "",                 // Zeitstempel des letzten Abgleichs (Delta-Sync)
+    val theme: AppTheme = AppTheme.SYSTEM,     // 2.0: manueller Hell/Dunkel-Override
+    val kompaktZimmerliste: Boolean = false,   // 2.0: kompaktere Zimmerliste
+    val kiErkennungAktiv: Boolean = true        // 2.0: KI-Fotoerkennung ein-/ausschaltbar
 ) {
     /** Startdatum (ISO) des aktuellen Prüfzeitraums. */
     fun zeitraumStartIso(): String = when (zeitraum) {
@@ -52,7 +56,12 @@ class SettingsStore(context: Context) {
             apiKey = prefs.getString("apiKey", "") ?: "",
             autoSync = prefs.getString("autoSync", "false") == "true",
             mitarbeiter = prefs.getString("mitarbeiter", "") ?: "",
-            lastSync = prefs.getString("lastSync", "") ?: ""
+            lastSync = prefs.getString("lastSync", "") ?: "",
+            theme = runCatching {
+                AppTheme.valueOf(prefs.getString("theme", AppTheme.SYSTEM.name)!!)
+            }.getOrDefault(AppTheme.SYSTEM),
+            kompaktZimmerliste = prefs.getString("kompaktZimmerliste", "false") == "true",
+            kiErkennungAktiv = prefs.getString("kiErkennungAktiv", "true") == "true"
         )
     }
 
@@ -84,6 +93,9 @@ class SettingsStore(context: Context) {
             .putString("autoSync", if (settings.autoSync) "true" else "false")
             .putString("mitarbeiter", settings.mitarbeiter)
             .putString("lastSync", settings.lastSync)
+            .putString("theme", settings.theme.name)
+            .putString("kompaktZimmerliste", if (settings.kompaktZimmerliste) "true" else "false")
+            .putString("kiErkennungAktiv", if (settings.kiErkennungAktiv) "true" else "false")
             .apply()
         _settings.value = settings
     }

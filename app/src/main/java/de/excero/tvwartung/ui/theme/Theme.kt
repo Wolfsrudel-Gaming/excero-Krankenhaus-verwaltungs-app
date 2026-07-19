@@ -7,9 +7,12 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-// Klinik-Grün, angelehnt an die Zimmerausstattung
-val Teal700 = Color(0xFF00695C)
-val Teal500 = Color(0xFF00897B)
+/** Nutzer-Einstellung fürs Erscheinungsbild (2.0: manueller Override möglich). */
+enum class AppTheme { SYSTEM, HELL, DUNKEL }
+
+// 2.0: modernisiertes, etwas frischeres Teal/Türkis
+val Teal700 = Color(0xFF00786B)
+val Teal500 = Color(0xFF12A594)
 val Teal100 = Color(0xFFB2DFDB)
 val TealDark = Color(0xFF003731)
 val WarnAmber = Color(0xFFF9A825)
@@ -31,20 +34,26 @@ private val LightColors = lightColorScheme(
     error = ErrorRed
 )
 
+// 2.0: dunkles Grau statt reinem Schwarz, Statusfarben leicht gedämpft
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF4DB6AC),
+    primary = Color(0xFF4DD0C1),
     onPrimary = Color(0xFF00332D),
-    primaryContainer = Color(0xFF005047),
+    primaryContainer = Color(0xFF00544A),
     onPrimaryContainer = Teal100,
     secondary = Color(0xFF80CBC4),
-    surface = Color(0xFF101413),
-    background = Color(0xFF0C100F),
-    error = Color(0xFFEF9A9A)
+    surface = Color(0xFF181C1B),
+    surfaceVariant = Color(0xFF2A302E),
+    background = Color(0xFF141817),
+    error = Color(0xFFE57373)
 )
 
 @Composable
-fun KKHTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun KKHTheme(theme: AppTheme = AppTheme.SYSTEM, content: @Composable () -> Unit) {
+    val dark = when (theme) {
+        AppTheme.SYSTEM -> isSystemInDarkTheme()
+        AppTheme.HELL -> false
+        AppTheme.DUNKEL -> true
+    }
     MaterialTheme(
         colorScheme = if (dark) DarkColors else LightColors,
         content = content

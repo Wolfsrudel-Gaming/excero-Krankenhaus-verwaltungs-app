@@ -5,20 +5,28 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import de.excero.tvwartung.ui.AppViewModel
+import de.excero.tvwartung.ui.screens.AppDrawerContent
 import de.excero.tvwartung.ui.screens.BerichtScreen
+import de.excero.tvwartung.ui.screens.DashboardScreen
 import de.excero.tvwartung.ui.screens.ExportScreen
 import de.excero.tvwartung.ui.screens.FreenetScreen
 import de.excero.tvwartung.ui.screens.HomeScreen
@@ -32,10 +40,12 @@ import de.excero.tvwartung.ui.screens.StundenzettelListeScreen
 import de.excero.tvwartung.ui.screens.StundenzettelScreen
 import de.excero.tvwartung.ui.screens.VerwaltungScreen
 import de.excero.tvwartung.ui.theme.KKHTheme
+import kotlinx.coroutines.launch
 import java.net.URLDecoder
 import java.net.URLEncoder
 
 object Routes {
+    const val DASHBOARD = "dashboard"
     const val HOME = "home"
     const val EXPORT = "export"
     const val SETTINGS = "settings"
@@ -57,9 +67,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            KKHTheme {
+            val viewModel: AppViewModel = viewModel()
+            val settings by viewModel.settings.collectAsState()
+            KKHTheme(theme = settings.theme) {
                 val navController = rememberNavController()
-                val viewModel: AppViewModel = viewModel()
                 val snackbarHostState = remember { SnackbarHostState() }
                 val message by viewModel.message.collectAsState()
 
@@ -70,14 +81,50 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // 2.0-Beta: einschiebbares Hauptmenü mit gruppierter Navigation
+                val drawerState = rememberDrawerState(DrawerValue.Closed)
+                val scope = rememberCoroutineScope()
+                val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = currentBackStackEntry?.destination?.route
+
+                fun openDrawer() = scope.launch { drawerState.open() }
+                fun navigateFromDrawer(route: String) {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+
+                ModalNavigationDrawer(
+                    drawerState = drawerState,
+                    drawerContent = {
+                        AppDrawerContent(
+                            mitarbeiter = settings.mitarbeiter,
+                            currentRoute = currentRoute,
+                            onNavigate = ::navigateFromDrawer
+                        )
+                    }
+                ) {
                 Scaffold(
                     snackbarHost = { SnackbarHost(snackbarHostState) }
                 ) { padding ->
                     NavHost(
                         navController = navController,
-                        startDestination = Routes.HOME,
+                        startDestination = Routes.DASHBOARD,
                         modifier = Modifier.padding(padding)
                     ) {
+                        composable(Routes.DASHBOARD) {
+                            DashboardScreen(
+                                viewModel = viewModel,
+                                onMenuClick = { openDrawer() },
+                                onRoomClick = { navController.navigate(Routes.room(it)) },
+                                onFreenet = { navigateFromDrawer(Routes.FREENET) },
+                                onArbeitszeit = { navigateFromDrawer(Routes.STUNDENZETTEL_LISTE) },
+                                onVerwaltung = { navigateFromDrawer(Routes.VERWALTUNG) }
+                            )
+                        }
                         composable(Routes.HOME) {
                             HomeScreen(
                                 viewModel = viewModel,
@@ -203,6 +250,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                }
                 }
             }
         }
