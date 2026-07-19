@@ -125,7 +125,8 @@ async function viewZimmerDetail(id) {
   const heuteDt = heute();
 
   const pdfs = (data.files || []).filter((f) => f.path.endsWith('.pdf'));
-  const fotos = (data.files || []).filter((f) => /\.(jpe?g|png)$/i.test(f.path));
+  // Signaturen werden serverseitig für PDFs genutzt, aber NICHT im Web angezeigt
+  const fotos = (data.files || []).filter((f) => /\.(jpe?g|png)$/i.test(f.path) && !f.path.includes('_signaturen'));
   const sperren = data.sperren || [];
 
   el.innerHTML = `

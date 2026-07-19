@@ -1,8 +1,11 @@
 /**
  * Dateien & Fotos – KKH TV-Wartung
- * - Galerie-Ansicht für Fotos (Thumbnails)
- * - Dateiliste für PDFs/Signaturen
+ * - Galerie-Ansicht für Prüfungsfotos (Thumbnails)
+ * - Dateiliste für Prüfbericht-PDFs
  * - ZIP-Download nach Station/Zeitraum
+ *
+ * HINWEIS: Unterschriften/Signaturen werden ausschließlich serverseitig
+ * für die PDF-Generierung verarbeitet und sind im Web-Panel nicht sichtbar.
  */
 
 async function viewDateien() {
@@ -25,9 +28,8 @@ async function viewDateien() {
     </div>
 
     <div class="tab-nav" id="df-tabs">
-      <button class="tab-btn" data-tab="fotos">Fotos</button>
-      <button class="tab-btn" data-tab="pdfs">PDFs</button>
-      <button class="tab-btn" data-tab="signaturen">Signaturen</button>
+      <button class="tab-btn" data-tab="fotos">Prüfungsfotos</button>
+      <button class="tab-btn" data-tab="pdfs">Prüfbericht-PDFs</button>
     </div>
 
     <div data-panel="fotos" id="df-fotos-panel">
@@ -35,9 +37,6 @@ async function viewDateien() {
     </div>
     <div data-panel="pdfs" id="df-pdfs-panel" hidden>
       <div class="loading">PDFs werden geladen…</div>
-    </div>
-    <div data-panel="signaturen" id="df-sig-panel" hidden>
-      <div class="loading">Signaturen werden geladen…</div>
     </div>
   `;
 
@@ -76,32 +75,38 @@ async function viewDateien() {
     }
 
     const allFiles = [];
-    // Lade Dateien für alle Zimmer parallel (batch von max. 20 gleichzeitig)
-    const batchSize = 20;
-    for (let i = 0; i < Math.min(rooms.length, 5); i += batchSize) {
-      const batch = rooms.slice(i, i + batchSize);
-      const results = await Promise.allSettled(batch.map((r) =>
-        api(`/kkh/api/web/rooms/${encodeURIComponent(r.id)}`).catch(() => null)));
-      results.forEach((res, idx) => {
-        if (res.status === 'fulfilled' && res.value?.files) {
-          const room = batch[idx];
-          res.value.files.forEach((f) => allFiles.push({ ...f, station: room.station, zimmer: room.zimmer, roomId: room.id }));
-        }
-      });
-    }
+    // Erste 5 Zimmer laden um die Ansicht nicht zu überladen
+    const sampleRooms = rooms.slice(0, 5);
+    const results = await Promise.allSettled(sampleRooms.map((r) =>
+      api(`/kkh/api/web/rooms/${encodeURIComponent(r.id)}`).catch(() => null)));
+    results.forEach((res, idx) => {
+      if (res.status === 'fulfilled' && res.value?.files) {
+        const room = sampleRooms[idx];
+        // Signaturen werden clientseitig ebenfalls nicht angezeigt
+        res.value.files
+          .filter((f) => !f.path.includes('_signaturen'))
+          .forEach((f) => allFiles.push({ ...f, station: room.station, zimmer: room.zimmer, roomId: room.id }));
+      }
+    });
 
-    // Fotos (JPEG/PNG)
+    // Fotos (JPEG/PNG, ohne Signaturen)
     const fotos = allFiles.filter((f) => /\.(jpe?g|png)$/i.test(f.path));
     const pdfs = allFiles.filter((f) => f.path.endsWith('.pdf'));
-    const sigs = allFiles.filter((f) => f.path.includes('_signaturen'));
 
     // Fotos-Galerie
     const fotoPanel = document.getElementById('df-fotos-panel');
     if (fotoPanel) {
       if (fotos.length === 0) {
-        fotoPanel.innerHTML = '<div class="alert alert-info">Keine Fotos vorhanden. Fotos werden über die App hochgeladen.</div>';
+        fotoPanel.innerHTML = `
+          <div class="alert alert-info">
+            <strong>Keine Prüfungsfotos in der Stichprobe.</strong><br>
+            Fotos werden über die App hochgeladen. Der ZIP-Download oben enthält alle Fotos des gewählten Zeitraums.
+          </div>`;
       } else {
-        fotoPanel.innerHTML = `<p style="font-size:12px;color:var(--muted);margin-bottom:12px">${fotos.length} Foto(s) gefunden</p>
+        fotoPanel.innerHTML = `
+          <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+            ${fotos.length} Foto(s) (Stichprobe – für alle Fotos ZIP-Download nutzen)
+          </p>
           <div class="foto-grid">
             ${fotos.map((f) => `
               <div class="foto-thumb">
@@ -118,7 +123,11 @@ async function viewDateien() {
     const pdfPanel = document.getElementById('df-pdfs-panel');
     if (pdfPanel) {
       if (pdfs.length === 0) {
-        pdfPanel.innerHTML = '<div class="alert alert-info">Keine PDFs vorhanden. Prüfberichte werden servergesteuert erzeugt.</div>';
+        pdfPanel.innerHTML = `
+          <div class="alert alert-info">
+            Keine gespeicherten PDFs in der Stichprobe. Prüfberichte können jederzeit über den
+            <strong>Stundenzettel-View</strong> oder den <strong>Zimmer-Detail</strong> als PDF abgerufen werden.
+          </div>`;
       } else {
         pdfPanel.innerHTML = '';
         new DataGrid(pdfPanel, {
@@ -133,25 +142,6 @@ async function viewDateien() {
               render: (v) => `<a class="btn btn-xs btn-secondary" href="/kkh/api/web/file?path=${encodeURIComponent(v)}" target="_blank">📄 Öffnen</a>` },
           ],
         });
-      }
-    }
-
-    // Signaturen
-    const sigPanel = document.getElementById('df-sig-panel');
-    if (sigPanel) {
-      if (sigs.length === 0) {
-        sigPanel.innerHTML = '<div class="alert alert-info">Keine Signaturen vorhanden. Signaturen werden über die App hochgeladen und für PDF-Generierung verwendet.</div>';
-      } else {
-        sigPanel.innerHTML = `<p style="font-size:12px;color:var(--muted);margin-bottom:12px">${sigs.length} Signatur(en) vorhanden</p>
-          <div class="foto-grid">
-            ${sigs.map((f) => `
-              <div class="foto-thumb">
-                <a href="/kkh/api/web/file?path=${encodeURIComponent(f.path)}" target="_blank">
-                  <img src="/kkh/api/web/thumb?path=${encodeURIComponent(f.path)}" alt="${escH(f.path.split('/').pop())}" loading="lazy" style="object-fit:contain;background:#fff;padding:8px">
-                </a>
-                <div class="foto-name">${escH(f.path.split('/').pop())}</div>
-              </div>`).join('')}
-          </div>`;
       }
     }
   }

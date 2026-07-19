@@ -149,8 +149,11 @@ function listFiles(dir, base) {
     const voll = path.join(dir, eintrag.name);
     if (eintrag.isDirectory()) ergebnis.push(...listFiles(voll, base));
     else {
+      const relPfad = path.relative(base, voll).split(path.sep).join('/');
+      // Signaturen werden NICHT in Dateilisten für die Web-API aufgenommen
+      if (relPfad.includes('_signaturen')) continue;
       const st = fs.statSync(voll);
-      ergebnis.push({ path: path.relative(base, voll).split(path.sep).join('/'), size: st.size });
+      ergebnis.push({ path: relPfad, size: st.size });
     }
   }
   return ergebnis;
@@ -653,7 +656,10 @@ router.delete('/api/web/stundenzettel', requireWebAuth, async (req, res) => {
 });
 
 router.get('/api/web/file', requireWebAuth, (req, res) => {
-  const ziel = safeFilePath(String(req.query.path || ''));
+  const rel = String(req.query.path || '');
+  // Signaturen dürfen NICHT über die Web-API ausgeliefert werden
+  if (rel.includes('_signaturen')) return res.status(403).json({ error: 'Zugriff auf Signaturen nicht erlaubt' });
+  const ziel = safeFilePath(rel);
   if (!ziel || !fs.existsSync(ziel)) return res.status(404).json({ error: 'Datei nicht gefunden' });
   res.sendFile(ziel);
 });
@@ -1421,6 +1427,8 @@ fs.mkdirSync(THUMB_DIR, { recursive: true });
 
 router.get('/api/web/thumb', requireWebAuth, async (req, res) => {
   const rel = String(req.query.path || '');
+  // Signaturen dürfen NICHT über die Web-API ausgeliefert werden
+  if (rel.includes('_signaturen')) return res.status(403).json({ error: 'Zugriff auf Signaturen nicht erlaubt' });
   const quelle = safeFilePath(rel);
   if (!quelle || !fs.existsSync(quelle)) return res.status(404).json({ error: 'Datei nicht gefunden' });
   if (!sharp || !/\.(jpe?g|png)$/i.test(rel)) return res.sendFile(quelle);
