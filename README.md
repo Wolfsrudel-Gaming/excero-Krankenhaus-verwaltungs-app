@@ -144,6 +144,16 @@ Prüfpunkte 1:1 zum Papierbogen:
 - Lieferanten (CRUD)
 - Abrechnung & Auswertung
 
+### KI-Prüfung (automatische Fotoerkennung)
+- Eigener KI-Service (Docker-Container `ki`) analysiert jedes hochgeladene Foto:
+  liest per OCR die Werte aus dem CI-Menü (Seriennummer, Freenet-ID, Gültig-bis)
+  und gleicht sie mit den Zimmer-Stammdaten ab
+- Abweichungen erscheinen mit rotem Badge in der Navigation; per Klick:
+  Foto ansehen, „KI hat recht" / „Stammdaten stimmen" / manuell korrigieren
+- Jede Bestätigung ist ein Trainingsbeispiel – die eigenen neuronalen Netze
+  (Bildklassifikation + Feld-Zuordnung) trainieren nächtlich automatisch neu
+- Details: `server/ki/README.md`
+
 ### Weitere Views
 - Mitarbeiter (aktiv/inaktiv, anlegen)
 - Dateien & Fotos (Galerie, PDFs, ZIP-Download)

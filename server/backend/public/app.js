@@ -10,6 +10,7 @@ const ROUTES = {
   'stundenzettel':        viewStundenzettel,
   'mitarbeiter':          viewMitarbeiter,
   'dateien':              viewDateien,
+  'ki':                   viewKi,
   'lager-artikel':        viewLagerArtikel,
   'lager-buchungen':      viewLagerBuchungen,
   'lager-verbrauch':      viewLagerVerbrauch,
@@ -130,6 +131,12 @@ function ladeNachbestellungsBadge() {
   api('/kkh/api/web/lager/nachbestellung').then((d) => {
     const cnt = (d?.artikel || []).length;
     const el = document.getElementById('nb-badge');
+    if (el) { el.hidden = cnt === 0; el.textContent = cnt > 0 ? cnt : ''; }
+  }).catch(() => {});
+  // KI-Badge: Anzahl unbestätigter Abweichungen
+  api('/kkh/api/web/ki/analysen?status=abweichung').then((d) => {
+    const cnt = (d?.analysen || []).length;
+    const el = document.getElementById('ki-badge');
     if (el) { el.hidden = cnt === 0; el.textContent = cnt > 0 ? cnt : ''; }
   }).catch(() => {});
 }

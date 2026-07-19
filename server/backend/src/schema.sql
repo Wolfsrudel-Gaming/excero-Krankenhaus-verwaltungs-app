@@ -296,3 +296,47 @@ CREATE TABLE IF NOT EXISTS zeiterfassung (
 );
 CREATE INDEX IF NOT EXISTS idx_zeiterfassung_ma ON zeiterfassung(mitarbeiter, datum DESC);
 CREATE INDEX IF NOT EXISTS idx_zeiterfassung_datum ON zeiterfassung(datum DESC);
+
+-- =====================================================================
+-- KI-Fotoerkennung (Service unter server/ki/, gleiche Tabellen dort
+-- ebenfalls idempotent angelegt – Reihenfolge des Starts ist damit egal)
+-- =====================================================================
+
+-- Analyse-Warteschlange + Ergebnisse je Foto
+CREATE TABLE IF NOT EXISTS foto_analysen (
+    id             SERIAL PRIMARY KEY,
+    pfad           TEXT UNIQUE NOT NULL,          -- relativer Pfad im Dateispeicher
+    room_id        TEXT NOT NULL DEFAULT '',
+    bildtyp        TEXT NOT NULL DEFAULT '',      -- menue / geraet / uebersicht
+    felder         JSONB NOT NULL DEFAULT '{}',   -- erkannte Werte + Konfidenz + OCR-Rohtext
+    abgleich       JSONB NOT NULL DEFAULT '{}',   -- erkannt vs. Stammdaten je Feld
+    status         TEXT NOT NULL DEFAULT 'wartet'
+                   CHECK (status IN ('wartet','laeuft','uebereinstimmung','abweichung','unlesbar','fehler')),
+    modell_version TEXT NOT NULL DEFAULT '',
+    fehler         TEXT NOT NULL DEFAULT '',
+    erstellt_am    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    analysiert_am  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_foto_analysen_status ON foto_analysen(status);
+CREATE INDEX IF NOT EXISTS idx_foto_analysen_room ON foto_analysen(room_id);
+
+-- Bestätigte Wahrheit je Foto = Trainingsdaten der eigenen Netze
+CREATE TABLE IF NOT EXISTS ki_labels (
+    id          SERIAL PRIMARY KEY,
+    pfad        TEXT NOT NULL,
+    feld        TEXT NOT NULL,                    -- bildtyp / seriennummer / freenet_id / tv_typ / gueltig_bis
+    wert        TEXT NOT NULL,
+    quelle      TEXT NOT NULL DEFAULT 'web',      -- web (Monteur) / auto (Selbst-Matching)
+    erstellt_am TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (pfad, feld)
+);
+
+-- Modell-Versionen mit Validierungs-Genauigkeit
+CREATE TABLE IF NOT EXISTS ki_modelle (
+    id            SERIAL PRIMARY KEY,
+    name          TEXT NOT NULL,                  -- klassifikator / feldnetz
+    version       TEXT NOT NULL,
+    genauigkeit   REAL,
+    anzahl_labels INTEGER NOT NULL DEFAULT 0,
+    trainiert_am  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

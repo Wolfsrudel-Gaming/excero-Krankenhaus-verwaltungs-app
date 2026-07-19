@@ -261,12 +261,27 @@ router.get('/api/sync/files', requireApiKey, (req, res) => {
 
 router.put('/api/sync/file', requireApiKey,
   express.raw({ type: () => true, limit: '300mb' }), (req, res) => {
-    const ziel = safeFilePath(String(req.query.path || ''));
+    const rel = String(req.query.path || '');
+    const ziel = safeFilePath(rel);
     if (!ziel || !req.query.path) return res.status(400).json({ error: 'Ungültiger Pfad' });
     fs.mkdirSync(path.dirname(ziel), { recursive: true });
     fs.writeFileSync(ziel, req.body);
+    kiFotoEinreihen(rel);
     res.json({ ok: true });
   });
+
+// Neues Foto in die KI-Analyse-Warteschlange stellen (der KI-Worker
+// unter server/ki/ holt sich die Jobs direkt aus der Datenbank).
+// Signaturen werden grundsätzlich NICHT analysiert.
+function kiFotoEinreihen(rel) {
+  if (!/\.(jpe?g|png)$/i.test(rel) || rel.includes('_signaturen')) return;
+  const roomId = rel.startsWith('_') ? '' : rel.split('/')[0];
+  pool.query(
+    `INSERT INTO foto_analysen (pfad, room_id) VALUES ($1, $2)
+     ON CONFLICT (pfad) DO UPDATE SET status='wartet', fehler=''`,
+    [rel, roomId]
+  ).catch((e) => console.error('KI-Einreihung fehlgeschlagen:', e.message));
+}
 
 // ---------- Web-API (Session) ----------
 
@@ -1434,6 +1449,90 @@ router.get('/api/web/export/zeiterfassung.xlsx', requireWebAuth, async (req, res
     columns: headers.map((h, i) => ({ header: h, key: String(i), width: 16 })),
     rows: dataRows,
   }]);
+});
+
+// ---------- KI-Fotoerkennung (Web-API) ----------
+// Der eigentliche KI-Service läuft als eigener Container (server/ki/),
+// nur intern erreichbar unter http://ki:8100.
+const KI_URL = process.env.KI_URL || 'http://ki:8100';
+
+router.get('/api/web/ki/analysen', requireWebAuth, async (req, res) => {
+  const bedingungen = [];
+  const params = [];
+  if (req.query.status) { params.push(String(req.query.status)); bedingungen.push(`status=$${params.length}`); }
+  if (req.query.room) { params.push(String(req.query.room)); bedingungen.push(`room_id=$${params.length}`); }
+  const where = bedingungen.length ? `WHERE ${bedingungen.join(' AND ')}` : '';
+  const { rows } = await pool.query(
+    `SELECT id, pfad, room_id, bildtyp, felder, abgleich, status, modell_version,
+            fehler, erstellt_am, analysiert_am
+     FROM foto_analysen ${where}
+     ORDER BY analysiert_am DESC NULLS LAST, id DESC LIMIT 500`, params);
+  // OCR-Rohtext nicht mitschicken (groß, im Web nicht gebraucht)
+  res.json({
+    analysen: rows.map((r) => {
+      const felder = { ...(r.felder || {}) };
+      delete felder._ocr;
+      return { ...r, felder };
+    }),
+  });
+});
+
+// Monteur/Admin bestätigt oder korrigiert eine Analyse.
+// Body: { entscheidungen: { seriennummer: { wert, stammdatenUebernehmen }, ... } }
+// Jede Entscheidung wird als Trainingslabel gespeichert; auf Wunsch werden
+// die Zimmer-Stammdaten direkt korrigiert.
+router.post('/api/web/ki/analysen/:id/bestaetigen', requireWebAuth, express.json(), async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM foto_analysen WHERE id=$1', [req.params.id]);
+  if (!rows.length) return res.status(404).json({ error: 'Analyse nicht gefunden' });
+  const analyse = rows[0];
+  const entscheidungen = req.body.entscheidungen || {};
+  const spalten = { seriennummer: 'seriennummer', freenet_id: 'freenet_id', gueltig_bis: 'gueltig_bis', tv_typ: 'tv_typ' };
+
+  for (const [feld, e] of Object.entries(entscheidungen)) {
+    const wert = String(e.wert || '').trim();
+    if (!wert && feld !== 'bildtyp') continue;
+    await pool.query(
+      `INSERT INTO ki_labels (pfad, feld, wert, quelle) VALUES ($1,$2,$3,'web')
+       ON CONFLICT (pfad, feld) DO UPDATE SET wert=EXCLUDED.wert, quelle='web', erstellt_am=now()`,
+      [analyse.pfad, feld, wert]);
+    if (e.stammdatenUebernehmen && spalten[feld] && analyse.room_id) {
+      await pool.query(
+        `UPDATE rooms SET ${spalten[feld]}=$1, updated_at=$2 WHERE id=$3`,
+        [wert, new Date().toISOString(), analyse.room_id]);
+    }
+  }
+  // Analyse als erledigt markieren (bestätigt = Übereinstimmung hergestellt)
+  await pool.query(`UPDATE foto_analysen SET status='uebereinstimmung' WHERE id=$1`, [req.params.id]);
+  res.json({ ok: true });
+});
+
+// Foto erneut analysieren lassen (z. B. nach einem Training)
+router.post('/api/web/ki/analysen/:id/neu', requireWebAuth, async (req, res) => {
+  const r = await pool.query(
+    `UPDATE foto_analysen SET status='wartet', fehler='' WHERE id=$1 RETURNING id`,
+    [req.params.id]);
+  if (!r.rowCount) return res.status(404).json({ error: 'Analyse nicht gefunden' });
+  res.json({ ok: true });
+});
+
+// Status des KI-Service (Warteschlange, Modelle) durchreichen
+router.get('/api/web/ki/status', requireWebAuth, async (req, res) => {
+  try {
+    const antwort = await fetch(`${KI_URL}/status`);
+    res.json(await antwort.json());
+  } catch {
+    res.json({ offline: true });
+  }
+});
+
+// Training des KI-Service manuell anstoßen
+router.post('/api/web/ki/train', requireWebAuth, async (req, res) => {
+  try {
+    const antwort = await fetch(`${KI_URL}/train`, { method: 'POST' });
+    res.json(await antwort.json());
+  } catch (e) {
+    res.status(502).json({ error: `KI-Service nicht erreichbar: ${e.message}` });
+  }
 });
 
 // ---------- App-Updater ----------
