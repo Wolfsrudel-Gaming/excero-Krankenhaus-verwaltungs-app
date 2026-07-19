@@ -691,6 +691,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Alle gespeicherten Stundenzettel frisch als PDF in [stundenzettelPdfDir] ablegen
+     * (für den kompletten ZIP-Export) – unabhängig davon, ob sie schon einzeln
+     * exportiert wurden. Gleicher Aufbau wie [exportStundenzettel].
+     */
+    private suspend fun regeneriereAlleStundenzettelPdfs() {
+        repository.getAllStundenzettel().forEach { zettel ->
+            runCatching {
+                val basis = stundenzettelBasis(zettel)
+                if (basis.leistungen.isEmpty()) return@runCatching
+                val eintraege = repository.getEintraege(zettel.station, zettel.zeitraumStart).map { e ->
+                    val rolle = "ma_" + e.mitarbeiter.replace(Regex("[^A-Za-z0-9]"), "_")
+                    StundenzettelPdf.MaZeile(
+                        name = e.mitarbeiter, stunden = e.stunden, anfahrt = e.anfahrt,
+                        signatur = signatureStore.load(zettel.id, rolle)
+                    )
+                }
+                val pdf = StundenzettelPdf.Stundenzettel(
+                    station = basis.station,
+                    zeitraum = basis.zeitraum,
+                    leistungen = basis.leistungen,
+                    material = basis.material,
+                    auftragsnummer = zettel.auftragsnummer,
+                    datum = zettel.datum,
+                    arbeitsstunden = zettel.stunden.trim().let { if (it.isBlank()) "" else "$it Std." },
+                    anfahrt = zettel.anfahrt.trim().let { if (it.isBlank()) "" else "$it Std." },
+                    techniker = zettel.techniker,
+                    eintraege = eintraege,
+                    signaturStation = signatureStore.load(zettel.id, de.excero.tvwartung.files.SignatureStore.ROLLE_STATION),
+                    signaturTechniker = signatureStore.load(zettel.id, de.excero.tvwartung.files.SignatureStore.ROLLE_TECHNIKER),
+                    logo = logo
+                )
+                val stationSicher = zettel.station.replace(Regex("[^A-Za-z0-9äöüÄÖÜß_-]"), "_")
+                java.io.File(
+                    stundenzettelPdfDir(),
+                    "Stundenzettel_${stationSicher}_${zettel.zeitraumStart}.pdf"
+                ).outputStream().use { out -> StundenzettelPdf.write(pdf, out) }
+            }
+        }
+    }
+
     /** Excel-Export in eine vom Nutzer gewählte Datei (SAF-Uri). */
     fun exportExcel(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -709,18 +750,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** ZIP aller Fotos (optional nur des heutigen Tages) in eine SAF-Uri schreiben. */
+    /**
+     * ZIP in eine SAF-Uri schreiben. "Nur heute" enthält ausschließlich die Fotos/
+     * Prüfberichte des heutigen Tages. Der komplette Export (alle Tage) enthält
+     * zusätzlich alle Daten inkl. eines Ordners "Stundenzettel/" mit allen
+     * Leistungsnachweisen im bekannten Format (Stundenzettel_<Station>_<Zeitraum>.pdf).
+     */
     fun exportZip(uri: Uri, onlyToday: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 // Zu jedem geprüften Zimmer das Prüfbericht-PDF in seinen Bilderordner legen,
                 // damit es mit in die ZIP (und später in den HiDrive) wandert.
                 val pdfs = schreibePdfsInZimmerordner(onlyToday)
+                if (!onlyToday) regeneriereAlleStundenzettelPdfs()
                 val files = app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
                     ZipExporter.export(
                         root = photoStore.rootDir(),
                         out = out,
-                        dateFolder = if (onlyToday) Dates.todayFolder() else null
+                        dateFolder = if (onlyToday) Dates.todayFolder() else null,
+                        stundenzettelDir = if (onlyToday) null else stundenzettelPdfDir()
                     )
                 } ?: error("Datei konnte nicht geöffnet werden")
                 files to pdfs

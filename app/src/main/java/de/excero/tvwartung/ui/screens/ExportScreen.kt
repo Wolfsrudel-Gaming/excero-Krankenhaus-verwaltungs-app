@@ -156,6 +156,14 @@ fun ExportScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
+                    if (!onlyToday) {
+                        Text(
+                            "Kompletter Export: enthält zusätzlich den Ordner „Stundenzettel/“ " +
+                                "mit allen Leistungsnachweisen (Stundenzettel_Station_Zeitraum.pdf).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     Button(
                         onClick = {
                             val name = if (onlyToday) "Fotos_Zimmer_${Dates.todayFolder()}.zip"
