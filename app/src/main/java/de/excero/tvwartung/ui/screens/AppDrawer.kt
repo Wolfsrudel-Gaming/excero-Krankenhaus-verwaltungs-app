@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.Inventory2
@@ -49,7 +50,8 @@ val drawerGroups = listOf(
         listOf(
             DrawerItem(Routes.FREENET, "Freenet-Ablauf", Icons.Default.Timer),
             DrawerItem(Routes.STATISTIK, "Statistik", Icons.Default.QueryStats),
-            DrawerItem(Routes.SUCHE, "Berichte & Papierkorb", Icons.Default.FindInPage)
+            DrawerItem(Routes.SUCHE, "Berichte & Papierkorb", Icons.Default.FindInPage),
+            DrawerItem(Routes.KI_PRUEFUNG, "KI-Prüfung", Icons.Default.AutoAwesome)
         )
     ),
     DrawerGroup(

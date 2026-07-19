@@ -30,6 +30,7 @@ import de.excero.tvwartung.ui.screens.DashboardScreen
 import de.excero.tvwartung.ui.screens.ExportScreen
 import de.excero.tvwartung.ui.screens.FreenetScreen
 import de.excero.tvwartung.ui.screens.HomeScreen
+import de.excero.tvwartung.ui.screens.KiPruefungScreen
 import de.excero.tvwartung.ui.screens.StatistikScreen
 import de.excero.tvwartung.ui.screens.SucheScreen
 import de.excero.tvwartung.ui.screens.PruefbogenScreen
@@ -54,6 +55,7 @@ object Routes {
     const val FREENET = "freenet"
     const val STATISTIK = "statistik"
     const val SUCHE = "suche"
+    const val KI_PRUEFUNG = "ki_pruefung"
     fun room(id: String) = "room/${URLEncoder.encode(id, "UTF-8")}"
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
     fun bericht(id: Long) = "bericht/$id"
@@ -122,7 +124,8 @@ class MainActivity : ComponentActivity() {
                                 onRoomClick = { navController.navigate(Routes.room(it)) },
                                 onFreenet = { navigateFromDrawer(Routes.FREENET) },
                                 onArbeitszeit = { navigateFromDrawer(Routes.STUNDENZETTEL_LISTE) },
-                                onVerwaltung = { navigateFromDrawer(Routes.VERWALTUNG) }
+                                onVerwaltung = { navigateFromDrawer(Routes.VERWALTUNG) },
+                                onKiPruefung = { navigateFromDrawer(Routes.KI_PRUEFUNG) }
                             )
                         }
                         composable(Routes.HOME) {
@@ -157,6 +160,12 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() },
                                 onOpen = { navController.navigate(Routes.bericht(it)) }
+                            )
+                        }
+                        composable(Routes.KI_PRUEFUNG) {
+                            KiPruefungScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
                             )
                         }
                         composable("room/{roomId}") { entry ->

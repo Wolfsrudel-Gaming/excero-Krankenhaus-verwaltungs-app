@@ -1480,15 +1480,14 @@ router.get('/api/web/ki/analysen', requireWebAuth, async (req, res) => {
 // Monteur/Admin bestätigt oder korrigiert eine Analyse.
 // Body: { entscheidungen: { seriennummer: { wert, stammdatenUebernehmen }, ... } }
 // Jede Entscheidung wird als Trainingslabel gespeichert; auf Wunsch werden
-// die Zimmer-Stammdaten direkt korrigiert.
-router.post('/api/web/ki/analysen/:id/bestaetigen', requireWebAuth, express.json(), async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM foto_analysen WHERE id=$1', [req.params.id]);
-  if (!rows.length) return res.status(404).json({ error: 'Analyse nicht gefunden' });
+// die Zimmer-Stammdaten direkt korrigiert. Gemeinsame Logik für Web + App.
+async function kiBestaetigen(analyseId, entscheidungen) {
+  const { rows } = await pool.query('SELECT * FROM foto_analysen WHERE id=$1', [analyseId]);
+  if (!rows.length) return { error: 'Analyse nicht gefunden', status: 404 };
   const analyse = rows[0];
-  const entscheidungen = req.body.entscheidungen || {};
   const spalten = { seriennummer: 'seriennummer', freenet_id: 'freenet_id', gueltig_bis: 'gueltig_bis', tv_typ: 'tv_typ' };
 
-  for (const [feld, e] of Object.entries(entscheidungen)) {
+  for (const [feld, e] of Object.entries(entscheidungen || {})) {
     const wert = String(e.wert || '').trim();
     if (!wert && feld !== 'bildtyp') continue;
     await pool.query(
@@ -1502,8 +1501,14 @@ router.post('/api/web/ki/analysen/:id/bestaetigen', requireWebAuth, express.json
     }
   }
   // Analyse als erledigt markieren (bestätigt = Übereinstimmung hergestellt)
-  await pool.query(`UPDATE foto_analysen SET status='uebereinstimmung' WHERE id=$1`, [req.params.id]);
-  res.json({ ok: true });
+  await pool.query(`UPDATE foto_analysen SET status='uebereinstimmung' WHERE id=$1`, [analyseId]);
+  return { ok: true };
+}
+
+router.post('/api/web/ki/analysen/:id/bestaetigen', requireWebAuth, express.json(), async (req, res) => {
+  const ergebnis = await kiBestaetigen(req.params.id, req.body.entscheidungen);
+  if (ergebnis.error) return res.status(ergebnis.status).json({ error: ergebnis.error });
+  res.json(ergebnis);
 });
 
 // Foto erneut analysieren lassen (z. B. nach einem Training)
@@ -1533,6 +1538,68 @@ router.post('/api/web/ki/train', requireWebAuth, async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: `KI-Service nicht erreichbar: ${e.message}` });
   }
+});
+
+// ---------- KI-Fotoerkennung (App-API, ab v2.0-Beta) ----------
+// Gleiche Auswertung + Trainings-Entscheidung wie im Web-Panel, nur per
+// X-Api-Key statt Session – so kann direkt vor Ort auf dem Gerät bestätigt
+// oder korrigiert werden, statt erst am PC im Web-Panel.
+router.get('/api/sync/ki/analysen', requireApiKey, async (req, res) => {
+  const bedingungen = [];
+  const params = [];
+  if (req.query.status) { params.push(String(req.query.status)); bedingungen.push(`status=$${params.length}`); }
+  if (req.query.room) { params.push(String(req.query.room)); bedingungen.push(`room_id=$${params.length}`); }
+  const where = bedingungen.length ? `WHERE ${bedingungen.join(' AND ')}` : '';
+  const { rows } = await pool.query(
+    `SELECT id, pfad, room_id, bildtyp, felder, abgleich, status, modell_version,
+            fehler, erstellt_am, analysiert_am
+     FROM foto_analysen ${where}
+     ORDER BY analysiert_am DESC NULLS LAST, id DESC LIMIT 200`, params);
+  res.json({
+    analysen: rows.map((r) => {
+      const felder = { ...(r.felder || {}) };
+      delete felder._ocr; // OCR-Rohtext ist groß, in der App nicht gebraucht
+      return {
+        id: r.id, pfad: r.pfad, roomId: r.room_id, bildtyp: r.bildtyp,
+        felder, abgleich: r.abgleich || {}, status: r.status,
+        modellVersion: r.modell_version, fehler: r.fehler,
+        erstelltAm: r.erstellt_am, analysiertAm: r.analysiert_am,
+      };
+    }),
+  });
+});
+
+router.post('/api/sync/ki/analysen/:id/bestaetigen', requireApiKey, express.json(), async (req, res) => {
+  const ergebnis = await kiBestaetigen(req.params.id, req.body.entscheidungen);
+  if (ergebnis.error) return res.status(ergebnis.status).json({ error: ergebnis.error });
+  res.json(ergebnis);
+});
+
+router.post('/api/sync/ki/analysen/:id/neu', requireApiKey, async (req, res) => {
+  const r = await pool.query(
+    `UPDATE foto_analysen SET status='wartet', fehler='' WHERE id=$1 RETURNING id`,
+    [req.params.id]);
+  if (!r.rowCount) return res.status(404).json({ error: 'Analyse nicht gefunden' });
+  res.json({ ok: true });
+});
+
+router.get('/api/sync/ki/status', requireApiKey, async (req, res) => {
+  try {
+    const antwort = await fetch(`${KI_URL}/status`);
+    res.json(await antwort.json());
+  } catch {
+    res.json({ offline: true });
+  }
+});
+
+// Einzelnes Foto lesen (für die KI-Prüfung in der App – ausdrücklich nur
+// dieser eine, gezielt abgerufene Pfad, kein Massen-Download aller Fotos).
+router.get('/api/sync/file', requireApiKey, (req, res) => {
+  const rel = String(req.query.path || '');
+  if (rel.includes('_signaturen')) return res.status(403).json({ error: 'Zugriff auf Signaturen nicht erlaubt' });
+  const ziel = safeFilePath(rel);
+  if (!ziel || !fs.existsSync(ziel)) return res.status(404).json({ error: 'Datei nicht gefunden' });
+  res.sendFile(ziel);
 });
 
 // ---------- App-Updater ----------

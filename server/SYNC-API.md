@@ -105,6 +105,40 @@ Antwort: `{ "knapp": [ { bezeichnung, bestand, mindestbestand, einheit } ] }`
 Nachbestell-Warnung in der Verwaltung. Ältere Server ohne den Endpunkt
 werden toleriert (Warnliste bleibt dann unverändert).
 
+## KI-Fotoerkennung (ab App v2.0-Beta)
+
+Der Server analysiert automatisch jedes hochgeladene Foto (eigener Service
+`server/ki/`, OCR + eigene neuronale Netze) und vergleicht erkannte Werte
+(Seriennummer, Freenet-ID, Gültig-bis, TV-Typ) mit den Zimmer-Stammdaten.
+Die App kann diese Auswertung genauso einsehen und bestätigen wie das
+Web-Panel — jede Entscheidung wird ein Trainingsbeispiel für die Netze.
+
+### GET /api/sync/ki/analysen[?status=abweichung|uebereinstimmung|unlesbar|wartet|fehler][&room=<roomId>]
+Antwort: `{ "analysen": [ { id, pfad, roomId, bildtyp, felder, abgleich,
+status, modellVersion, fehler, erstelltAm, analysiertAm } ] }`
+- `felder`: je erkanntem Feld `{ wert, konfidenz }`
+- `abgleich`: je Feld `{ stammdaten, passt: true|false|null }`
+- `bildtyp`: `menue` / `geraet` / `uebersicht`
+
+### POST /api/sync/ki/analysen/:id/bestaetigen
+Body: `{ "entscheidungen": { "<feld>": { "wert": "...", "stammdatenUebernehmen": true|false } } }`
+Felder: `seriennummer`, `freenet_id`, `gueltig_bis`, `tv_typ`. Jede
+Entscheidung wird Trainingslabel; bei `stammdatenUebernehmen: true` werden
+die Zimmer-Stammdaten direkt korrigiert (setzt `updatedAt`, kommt beim
+nächsten Rooms-Sync auf alle Geräte). Antwort `{ "ok": true }`.
+
+### POST /api/sync/ki/analysen/:id/neu
+Foto erneut analysieren lassen (z. B. nach einem Training). Antwort `{ "ok": true }`.
+
+### GET /api/sync/ki/status
+Warteschlange + aktive Modelle des KI-Service durchgereicht (`{ "offline": true }`
+wenn der Service gerade nicht erreichbar ist — Analysen laufen später nach).
+
+### GET /api/sync/file?path=<urlencoded>
+Liest EIN gezielt angefordertes Foto (Rohbytes), z. B. um es in der KI-Prüfung
+anzuzeigen. Bewusst kein Massen-Download-Endpunkt — die App lädt nur genau
+das Foto, das gerade zur Prüfung geöffnet wird. Signaturen sind gesperrt (403).
+
 ## App-Verteilung & In-App-Updates (ab v1.9)
 
 - `GET /app/version.json` (öffentlich, ohne Auth):

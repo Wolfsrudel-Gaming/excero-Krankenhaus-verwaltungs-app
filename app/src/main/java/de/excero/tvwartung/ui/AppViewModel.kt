@@ -156,11 +156,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ).sync()
             }.onSuccess {
                 _syncStatus.value = SyncStatus.OK
+                runCatching { _kiAbweichungen.value = kiClient()?.anzahlAbweichungen() ?: 0 }
             }.onFailure {
                 _syncStatus.value = SyncStatus.FEHLER
                 if (!leise) _message.value = "Sync fehlgeschlagen: ${it.message}"
             }
             syncLaeuft = false
+        }
+    }
+
+    // ----- KI-Fotoerkennung (2.0-Beta) -----
+
+    private val _kiAbweichungen = MutableStateFlow(0)
+    /** Anzahl offener KI-Abweichungen (für die Dashboard-Kachel), beim Sync aktualisiert. */
+    val kiAbweichungen: StateFlow<Int> = _kiAbweichungen
+
+    private fun kiClient(): de.excero.tvwartung.sync.KiClient? {
+        val s = settings.value
+        if (s.serverUrl.isBlank() || s.apiKey.isBlank()) return null
+        return de.excero.tvwartung.sync.KiClient(s.serverUrl, s.apiKey)
+    }
+
+    suspend fun kiAnalysen(status: String?): List<de.excero.tvwartung.sync.KiAnalyse> =
+        withContext(Dispatchers.IO) {
+            runCatching { kiClient()?.analysen(status) ?: emptyList() }.getOrDefault(emptyList())
+        }
+
+    /** Foto für die Detailansicht herunterladen (Cache); null bei Fehler. */
+    suspend fun kiFotoDatei(pfad: String): java.io.File? = withContext(Dispatchers.IO) {
+        runCatching {
+            val ziel = java.io.File(app.cacheDir, "ki_foto_${pfad.hashCode()}.jpg")
+            kiClient()?.ladeFoto(pfad, ziel)
+            ziel.takeIf { it.exists() && it.length() > 0 }
+        }.getOrNull()
+    }
+
+    fun kiBestaetigen(
+        analyseId: Int,
+        entscheidungen: Map<String, de.excero.tvwartung.sync.KiEntscheidung>,
+        onDone: () -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { kiClient()?.bestaetigen(analyseId, entscheidungen) }
+                .onSuccess {
+                    _message.value = "Gespeichert – wird als Trainingsbeispiel genutzt"
+                    if (settings.value.autoSync) syncNow(leise = true)
+                }
+                .onFailure { _message.value = "Speichern fehlgeschlagen: ${it.message}" }
+            withContext(Dispatchers.Main) { onDone() }
+        }
+    }
+
+    fun kiNeuAnalysieren(analyseId: Int, onDone: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { kiClient()?.neuAnalysieren(analyseId) }
+                .onSuccess { _message.value = "Foto wird neu analysiert" }
+                .onFailure { _message.value = "Fehlgeschlagen: ${it.message}" }
+            withContext(Dispatchers.Main) { onDone() }
         }
     }
 

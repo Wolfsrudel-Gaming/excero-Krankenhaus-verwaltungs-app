@@ -53,13 +53,15 @@ fun DashboardScreen(
     onRoomClick: (String) -> Unit,
     onFreenet: () -> Unit,
     onArbeitszeit: () -> Unit,
-    onVerwaltung: () -> Unit
+    onVerwaltung: () -> Unit,
+    onKiPruefung: () -> Unit
 ) {
     val rooms by viewModel.rooms.collectAsState()
     val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val alleStundenzettel by viewModel.alleStundenzettel.collectAsState()
     val lagerWarnungen by viewModel.lagerWarnungen.collectAsState()
+    val kiAbweichungen by viewModel.kiAbweichungen.collectAsState()
 
     var stationFilter by remember { mutableStateOf("") }
     val aktiveRooms = remember(rooms, stationFilter) {
@@ -172,15 +174,28 @@ fun DashboardScreen(
                     )
                 }
             }
-            if (lagerWarnungen.isNotEmpty()) {
+            if (lagerWarnungen.isNotEmpty() || kiAbweichungen > 0) {
                 item {
-                    KpiKachel(
-                        titel = "Lager-Nachbestellungen",
-                        wert = "${lagerWarnungen.size}",
-                        farbe = WarnAmber,
-                        onClick = onVerwaltung,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (lagerWarnungen.isNotEmpty()) {
+                            KpiKachel(
+                                titel = "Lager-Nachbestellungen",
+                                wert = "${lagerWarnungen.size}",
+                                farbe = WarnAmber,
+                                onClick = onVerwaltung,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (kiAbweichungen > 0) {
+                            KpiKachel(
+                                titel = "KI-Abweichungen",
+                                wert = "$kiAbweichungen",
+                                farbe = WarnAmber,
+                                onClick = onKiPruefung,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                 }
             }
 
