@@ -129,6 +129,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ----- Server-Synchronisation -----
 
+    /** Ampel für den Sync-Status in der Kopfzeile statt einer Meldung bei jedem Abgleich. */
+    enum class SyncStatus { NIE, LAEUFT, OK, FEHLER }
+
+    private val _syncStatus = MutableStateFlow(SyncStatus.NIE)
+    val syncStatus: StateFlow<SyncStatus> = _syncStatus
+
     @Volatile
     private var syncLaeuft = false
 
@@ -141,6 +147,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (syncLaeuft) return
         syncLaeuft = true
+        _syncStatus.value = SyncStatus.LAEUFT
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 de.excero.tvwartung.sync.SyncManager(
@@ -148,8 +155,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     s.serverUrl, s.apiKey, stundenzettelPdfDir()
                 ).sync()
             }.onSuccess {
-                _message.value = it.meldung()
+                _syncStatus.value = SyncStatus.OK
             }.onFailure {
+                _syncStatus.value = SyncStatus.FEHLER
                 if (!leise) _message.value = "Sync fehlgeschlagen: ${it.message}"
             }
             syncLaeuft = false

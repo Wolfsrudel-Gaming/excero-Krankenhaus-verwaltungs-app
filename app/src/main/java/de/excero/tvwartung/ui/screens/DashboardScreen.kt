@@ -104,6 +104,7 @@ fun DashboardScreen(
                     Icon(Icons.Default.Menu, contentDescription = "Menü öffnen")
                 }
             },
+            actions = { SyncStatusIndicator(viewModel) },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )

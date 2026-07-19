@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -23,15 +25,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.ui.theme.ErrorRed
 import de.excero.tvwartung.ui.theme.OkGreen
 import de.excero.tvwartung.ui.theme.WarnAmber
@@ -124,6 +129,40 @@ fun DuplicateWarning(text: String) {
         )
         Spacer(Modifier.width(6.dp))
         Text(text, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+/**
+ * Sync-Status als "Sync:" + farbiger Punkt statt einer Meldung bei jedem Abgleich
+ * (grau = nie, gelb = läuft, grün = ok, rot = Fehler). Tippen löst Sync aus.
+ */
+@Composable
+fun SyncStatusIndicator(viewModel: AppViewModel, modifier: Modifier = Modifier) {
+    val status by viewModel.syncStatus.collectAsState()
+    val farbe = when (status) {
+        AppViewModel.SyncStatus.NIE -> MaterialTheme.colorScheme.outline
+        AppViewModel.SyncStatus.LAEUFT -> WarnAmber
+        AppViewModel.SyncStatus.OK -> OkGreen
+        AppViewModel.SyncStatus.FEHLER -> ErrorRed
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clickable { viewModel.syncNow() }
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(
+            "Sync:",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(6.dp))
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(farbe)
+        )
     }
 }
 

@@ -123,6 +123,7 @@ fun HomeScreen(
                 }
             },
             actions = {
+                SyncStatusIndicator(viewModel)
                 IconButton(onClick = onVerwaltung) {
                     Icon(Icons.Default.Inventory2, contentDescription = "Material & Prüfpunkte")
                 }
