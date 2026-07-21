@@ -734,12 +734,58 @@ router.post('/api/sync/sperren', requireApiKey, express.json({ limit: '5mb' }), 
   res.json({ ok: true });
 });
 
+// Material-Bestand ist bidirektional (LWW über updated_at): die App schickt
+// ihren Stand, der Server übernimmt nur neuere Zeilen und spiegelt den Bestand
+// in einen verknüpften Lager-Artikel (app_material_name), damit der Chef ihn im
+// Web-Lager sieht. Der Rückweg (Web → App) läuft über spiegleLagerNachMaterial().
+async function spiegleMaterialNachLager(name, bestand) {
+  // Nur wenn ein aktiver Lager-Artikel verknüpft ist und sich der Bestand ändert
+  const { rows } = await pool.query(
+    `SELECT id, bestand FROM lager_artikel
+     WHERE lower(app_material_name) = lower($1) AND aktiv = TRUE LIMIT 1`, [name]);
+  if (!rows.length) return;
+  if (Number(rows[0].bestand) === Number(bestand)) return;
+  await pool.query('UPDATE lager_artikel SET bestand=$1, updated_at=now() WHERE id=$2',
+    [bestand, rows[0].id]);
+  await pool.query(
+    `INSERT INTO lager_buchungen (artikel_id, typ, menge, grund, benutzer)
+     VALUES ($1,'korrektur',$2,'Abgleich aus der App','App-Sync')`,
+    [rows[0].id, bestand]).catch(() => {});
+}
+
 router.post('/api/sync/material', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
-  await replaceAll('material', ['name', 'bestand', 'bestand_aktiv', 'aktiv', 'sort_index'],
-    (req.body.material || []).map((m) => ({
-      name: m.name, bestand: m.bestand || 0, bestand_aktiv: !!m.bestandAktiv,
-      aktiv: m.aktiv !== false, sort_index: m.sortIndex || 0 })));
-  res.json({ ok: true });
+  let uebernommen = 0;
+  for (const m of req.body.material || []) {
+    if (!m.name) continue;
+    const r = await pool.query(
+      `INSERT INTO material (name, bestand, bestand_aktiv, aktiv, sort_index, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (name) DO UPDATE SET
+         bestand=EXCLUDED.bestand, bestand_aktiv=EXCLUDED.bestand_aktiv,
+         aktiv=EXCLUDED.aktiv, sort_index=EXCLUDED.sort_index, updated_at=EXCLUDED.updated_at
+       WHERE material.updated_at < EXCLUDED.updated_at
+       RETURNING name, bestand`,
+      [m.name, m.bestand || 0, !!m.bestandAktiv, m.aktiv !== false,
+       m.sortIndex || 0, m.updatedAt || '']);
+    if (r.rowCount > 0) {
+      uebernommen++;
+      await spiegleMaterialNachLager(r.rows[0].name, r.rows[0].bestand);
+    }
+  }
+  res.json({ ok: true, uebernommen });
+});
+
+// Material-Stand (mit Bestand) für die App zum Herunterladen – so kommen im
+// Web (oder Lager) geänderte Bestände zurück aufs Gerät.
+router.get('/api/sync/material', requireApiKey, async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT name, bestand, bestand_aktiv, aktiv, sort_index, updated_at FROM material');
+  res.json({
+    material: rows.map((r) => ({
+      name: r.name, bestand: Number(r.bestand), bestandAktiv: r.bestand_aktiv,
+      aktiv: r.aktiv, sortIndex: r.sort_index, updatedAt: r.updated_at || '',
+    })),
+  });
 });
 
 router.post('/api/sync/pruefpunkte', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
@@ -1224,6 +1270,17 @@ router.post('/api/web/lager/buchung', requireWebAuth, express.json(), async (req
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [artikelId, typ, menge, b.ek_preis || null, b.grund || '', b.bezug || '',
        req.username || '']);
+    // Neuen Bestand in den verknüpften App-Materialposten spiegeln (Web → App),
+    // damit die geänderte Menge beim nächsten Sync auf den Geräten ankommt.
+    await client.query(
+      `UPDATE material m
+         SET bestand = a.bestand,
+             updated_at = to_char(now() AT TIME ZONE 'Europe/Berlin', 'YYYY-MM-DD"T"HH24:MI:SS')
+       FROM lager_artikel a
+       WHERE a.id = $1 AND a.app_material_name <> ''
+         AND lower(m.name) = lower(a.app_material_name)
+         AND m.bestand <> a.bestand`,
+      [artikelId]);
     await client.query('COMMIT');
     res.json({ ok: true, buchung: rows[0] });
   } catch (e) {

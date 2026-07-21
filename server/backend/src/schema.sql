@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS material (
     bestand       NUMERIC(14,2) NOT NULL DEFAULT 0,
     bestand_aktiv BOOLEAN NOT NULL DEFAULT FALSE,
     aktiv         BOOLEAN NOT NULL DEFAULT TRUE,
-    sort_index    INTEGER NOT NULL DEFAULT 0
+    sort_index    INTEGER NOT NULL DEFAULT 0,
+    updated_at    TEXT NOT NULL DEFAULT ''   -- ISO-Datum+Zeit (LWW, bidirektionaler Bestand-Sync)
 );
 CREATE TABLE IF NOT EXISTS app_pruefpunkte (
     titel      TEXT PRIMARY KEY,
@@ -80,6 +81,9 @@ CREATE TABLE IF NOT EXISTS app_aktivitaet (
 ALTER TABLE inspections ADD COLUMN IF NOT EXISTS mitarbeiter TEXT NOT NULL DEFAULT '';
 ALTER TABLE inspections ADD COLUMN IF NOT EXISTS geloescht BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_inspections_created ON inspections(created_at);
+
+-- v2.0: bidirektionaler Material-/Bestand-Sync (App ⇄ Web-Lager)
+ALTER TABLE material ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS mitarbeiter (
     name  TEXT PRIMARY KEY,

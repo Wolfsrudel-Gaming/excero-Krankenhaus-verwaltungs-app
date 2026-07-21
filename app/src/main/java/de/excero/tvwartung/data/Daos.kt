@@ -168,6 +168,9 @@ interface MaterialDao {
     @Query("SELECT * FROM materialien")
     suspend fun getAll(): List<Material>
 
+    @Query("SELECT * FROM materialien WHERE name = :name LIMIT 1")
+    suspend fun byName(name: String): Material?
+
     @Query("SELECT COUNT(*) FROM materialien")
     suspend fun count(): Int
 
@@ -177,8 +180,8 @@ interface MaterialDao {
     @Update
     suspend fun update(material: Material)
 
-    @Query("UPDATE materialien SET bestand = bestand - 1 WHERE name = :name AND bestandAktiv = 1")
-    suspend fun verbrauche(name: String)
+    @Query("UPDATE materialien SET bestand = bestand - 1, updatedAt = :zeitpunkt WHERE name = :name AND bestandAktiv = 1")
+    suspend fun verbrauche(name: String, zeitpunkt: String)
 }
 
 @Dao

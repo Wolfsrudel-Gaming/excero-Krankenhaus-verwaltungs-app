@@ -138,11 +138,43 @@ class Repository(private val db: AppDatabase) {
     suspend fun addMaterial(name: String, bestandAktiv: Boolean) {
         val maxSort = db.materialDao().getAll().maxOfOrNull { it.sortIndex } ?: 0
         db.materialDao().insert(
-            Material(name = name.trim(), bestandAktiv = bestandAktiv, sortIndex = maxSort + 1)
+            Material(
+                name = name.trim(), bestandAktiv = bestandAktiv, sortIndex = maxSort + 1,
+                updatedAt = Dates.nowIsoDateTime()
+            )
         )
     }
 
-    suspend fun updateMaterial(material: Material) = db.materialDao().update(material)
+    suspend fun updateMaterial(material: Material) =
+        db.materialDao().update(material.copy(updatedAt = Dates.nowIsoDateTime()))
+
+    /**
+     * Materialposten vom Server übernehmen (LWW über updatedAt): so kommen im
+     * Web-Lager geänderte Bestände aufs Gerät. Abgleich über den Namen.
+     * @return Anzahl der tatsächlich aktualisierten/neu angelegten Posten.
+     */
+    suspend fun applyMaterialFromServer(vomServer: List<Material>): Int {
+        var geaendert = 0
+        vomServer.forEach { server ->
+            val lokal = db.materialDao().byName(server.name)
+            if (lokal == null) {
+                db.materialDao().insert(server.copy(id = 0))
+                geaendert++
+            } else if (server.updatedAt > lokal.updatedAt) {
+                db.materialDao().update(
+                    lokal.copy(
+                        bestand = server.bestand,
+                        bestandAktiv = server.bestandAktiv,
+                        aktiv = server.aktiv,
+                        sortIndex = server.sortIndex,
+                        updatedAt = server.updatedAt
+                    )
+                )
+                geaendert++
+            }
+        }
+        return geaendert
+    }
 
     // ----- Eigene Prüfpunkte -----
 
@@ -306,8 +338,9 @@ class Repository(private val db: AppDatabase) {
                     updatedAt = Dates.nowIsoDateTime()
                 )
             )
-            // Lagerbestand: verbrauchtes Material automatisch abziehen
-            inspection.arbeitenListe().forEach { db.materialDao().verbrauche(it) }
+            // Lagerbestand: verbrauchtes Material automatisch abziehen (mit LWW-Zeitstempel)
+            val jetzt = Dates.nowIsoDateTime()
+            inspection.arbeitenListe().forEach { db.materialDao().verbrauche(it, jetzt) }
             logAction(inspection.roomId, "Prüfbogen gespeichert")
         }
     }

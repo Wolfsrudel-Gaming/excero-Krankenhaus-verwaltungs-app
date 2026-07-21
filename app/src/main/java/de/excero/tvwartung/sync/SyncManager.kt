@@ -327,15 +327,37 @@ class SyncManager(
             }
             httpJson("/api/sync/sperren", "POST", JSONObject().put("sperren", sperrenJson))
 
+            // Material-Bestand bidirektional (LWW): erst hochladen, dann Server-Stand
+            // (inkl. im Web-Lager geänderter Bestände) übernehmen.
             val materialJson = JSONArray()
             repository.getAllMaterial().forEach { m ->
                 materialJson.put(JSONObject().apply {
                     put("name", m.name); put("bestand", m.bestand)
                     put("bestandAktiv", m.bestandAktiv); put("aktiv", m.aktiv)
-                    put("sortIndex", m.sortIndex)
+                    put("sortIndex", m.sortIndex); put("updatedAt", m.updatedAt)
                 })
             }
             httpJson("/api/sync/material", "POST", JSONObject().put("material", materialJson))
+            runCatching {
+                val serverMaterial = httpJson("/api/sync/material", "GET")
+                    .optJSONArray("material") ?: JSONArray()
+                val liste = buildList {
+                    for (i in 0 until serverMaterial.length()) {
+                        val o = serverMaterial.getJSONObject(i)
+                        add(
+                            de.excero.tvwartung.data.Material(
+                                name = o.optString("name"),
+                                bestand = o.optInt("bestand"),
+                                bestandAktiv = o.optBoolean("bestandAktiv"),
+                                aktiv = o.optBoolean("aktiv", true),
+                                sortIndex = o.optInt("sortIndex"),
+                                updatedAt = o.optString("updatedAt")
+                            )
+                        )
+                    }
+                }
+                if (liste.isNotEmpty()) repository.applyMaterialFromServer(liste)
+            }
 
             val punkteJson = JSONArray()
             repository.getAllPruefpunkte().forEach { pp ->

@@ -57,15 +57,35 @@ Antwort: `{ "ok": true }`. Pfade sind gegen `..`-Ausbruch abzusichern.
 ## Voll-Synchronisation (ab App v1.8.1) – Replace-All, Handy → Server
 
 - `POST /api/sync/sperren`     Body `{ "sperren": [ { roomId, gesperrtAm, grund } ] }`
-- `POST /api/sync/material`    Body `{ "material": [ { name, bestand, bestandAktiv, aktiv, sortIndex } ] }`
 - `POST /api/sync/pruefpunkte` Body `{ "punkte": [ { titel, aktiv, sortIndex } ] }`
 - `POST /api/sync/aktivitaet`  Body `{ "eintraege": [ { roomId, zeitpunkt, aktion } ] }`
 
 Semantik: Server ersetzt den Tabelleninhalt komplett durch den App-Stand
 (Antwort `{ "ok": true }`). Unterschriften-PNGs kommen über den normalen
 Datei-Upload unter dem Pfadpräfix `_signaturen/`. Lesend fürs Web:
-GET /api/web/material, /api/web/sperren, /api/web/aktivitaet.
+GET /api/web/sperren, /api/web/aktivitaet.
 Die App toleriert Server ohne diese Endpunkte (Hinweis in der Sync-Meldung).
+
+## Material-Bestand bidirektional (ab App v2.0-Beta) – LWW
+
+`material` ist NICHT mehr Replace-All, sondern bidirektional (last-write-wins
+über `updatedAt`, gleiche Semantik wie `rooms`). So sieht der Chef im Web-Lager,
+wie viel z. B. an Antennen im Bestand ist, und umgekehrt landen im Web
+geänderte Bestände zurück auf den Geräten.
+
+- `POST /api/sync/material` Body `{ "material": [ { name, bestand, bestandAktiv,
+  aktiv, sortIndex, updatedAt } ] }` — Upsert je `name`, nur wenn `updatedAt`
+  neuer ist. Antwort `{ "ok": true, "uebernommen": n }`.
+- `GET /api/sync/material` Antwort `{ "material": [ { name, bestand, bestandAktiv,
+  aktiv, sortIndex, updatedAt } ] }` — die App merged LWW über `updatedAt`.
+
+Brücke zum Web-Lager: Ist ein `lager_artikel` über `app_material_name` mit dem
+Material-Namen verknüpft, spiegelt der Server den Bestand in beide Richtungen
+(App-Änderung → `lager_artikel.bestand` + Korrektur-Buchung „App-Sync“;
+Lager-Buchung → `material.bestand` + neuer `updated_at`). Gespiegelt wird nur
+bei echter Wertänderung, daher kein Ping-Pong. `updatedAt` ist wie bei `rooms`
+lokale naive ISO-Zeit (`YYYY-MM-DDTHH:MM:SS`); die Web-Seite erzeugt den
+Zeitstempel in `Europe/Berlin`, damit der String-Vergleich zur App passt.
 
 ## Mehrbenutzer-Betrieb (ab App v1.9)
 

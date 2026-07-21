@@ -134,7 +134,9 @@ data class Material(
     val bestand: Int = 0,
     val bestandAktiv: Boolean = false,   // true = Verbrauch wird vom Bestand abgezogen
     val aktiv: Boolean = true,           // false = erscheint nicht mehr im Prüfbogen
-    val sortIndex: Int = 0
+    val sortIndex: Int = 0,
+    @ColumnInfo(defaultValue = "")
+    val updatedAt: String = ""           // letzte Bestandsänderung (LWW, bidirektionaler Sync mit dem Web-Lager)
 )
 
 /** Selbst angelegte, zusätzliche Prüfpunkte für den Prüfbogen. */
