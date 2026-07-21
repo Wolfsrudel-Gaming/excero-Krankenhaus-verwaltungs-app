@@ -253,32 +253,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Neue APK herunterladen und den Android-Installationsdialog öffnen. */
+    /**
+     * Neue Version herunterladen: öffnet den APK-Download im Browser. Der Nutzer
+     * tippt danach die heruntergeladene Datei zum Installieren an. Bewusst KEIN
+     * Selbst-Installer mehr (die Berechtigung REQUEST_INSTALL_PACKAGES wurde
+     * entfernt, weil Google Play Protect selbst-installierende Apps als unsicher
+     * einstuft).
+     */
     fun installiereUpdate() {
         val s = settings.value
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                _message.value = "Update wird heruntergeladen …"
-                val url = java.net.URL(s.serverUrl.trimEnd('/') + "/app/kkh-tv-wartung.apk")
-                val ziel = java.io.File(app.cacheDir, "update.apk")
-                (url.openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 15_000; readTimeout = 300_000
-                }.inputStream.use { input ->
-                    ziel.outputStream().use { input.copyTo(it) }
-                }
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    app, "${app.packageName}.fileprovider", ziel
-                )
-                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, "application/vnd.android.package-archive")
-                    addFlags(
-                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                }
-                app.startActivity(intent)
-            }.onFailure { _message.value = "Update fehlgeschlagen: ${it.message}" }
-        }
+        val url = s.serverUrl.trimEnd('/') + "/app/kkh-tv-wartung.apk"
+        runCatching {
+            val intent = android.content.Intent(
+                android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)
+            ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+            app.startActivity(intent)
+            _message.value = "Download gestartet – danach die heruntergeladene Datei zum Installieren antippen"
+        }.onFailure { _message.value = "Download konnte nicht geöffnet werden: ${it.message}" }
     }
 
     fun consumeMessage() {

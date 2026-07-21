@@ -13,28 +13,33 @@ android {
         applicationId = "de.excero.tvwartung"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
-        versionName = "2.0-beta5"
+        versionCode = 26
+        versionName = "2.0-beta6"
     }
 
-    // Fester Schlüssel im Repo, damit jede neue APK als Update über die
-    // bestehende Installation installiert werden kann (gleiche Signatur).
+    // Privater EXCERO-Release-Schlüssel (fest im Repo, damit jede neue APK als
+    // Update über die bestehende Installation läuft – gleiche Signatur). Ersetzt
+    // das frühere Android-Debug-Zertifikat, das Google Play Protect als unsicher
+    // eingestuft hat. Beide Build-Varianten nutzen denselben Schlüssel.
     signingConfigs {
-        getByName("debug") {
-            storeFile = rootProject.file("keystore/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        create("excero") {
+            storeFile = rootProject.file("keystore/kkh-release.jks")
+            storePassword = "excero-kkh-2026"
+            keyAlias = "kkh"
+            keyPassword = "excero-kkh-2026"
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("excero")
         }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("excero")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

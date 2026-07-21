@@ -156,7 +156,7 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "🔄 Update auf Version $versionName verfügbar – tippen zum Installieren",
+                        "🔄 Update auf Version $versionName verfügbar – tippen zum Herunterladen",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
