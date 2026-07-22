@@ -16,8 +16,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -172,10 +174,12 @@ fun SucheScreen(
                 }
                 if (treffer.isEmpty()) {
                     item {
-                        Text(
-                            "Keine Berichte gefunden.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        EmptyState(
+                            icon = Icons.Default.SearchOff,
+                            titel = if (query.isBlank() && stationFilter.isBlank() &&
+                                mitarbeiterFilter.isBlank() && !nurNio
+                            ) "Noch keine Berichte" else "Keine Treffer",
+                            hinweis = "Suchbegriff anpassen oder Filter zurücksetzen."
                         )
                     }
                 }
@@ -227,11 +231,11 @@ fun SucheScreen(
                 }
                 if (geloescht.isEmpty()) {
                     item {
-                        Text(
-                            "Der Papierkorb ist leer. Berichte lassen sich in der " +
-                                "Berichtsansicht über das Papierkorb-Symbol löschen.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        EmptyState(
+                            icon = Icons.Default.DeleteOutline,
+                            titel = "Papierkorb ist leer",
+                            hinweis = "Berichte lassen sich in der Berichtsansicht über das " +
+                                "Papierkorb-Symbol löschen und hier wiederherstellen."
                         )
                     }
                 }

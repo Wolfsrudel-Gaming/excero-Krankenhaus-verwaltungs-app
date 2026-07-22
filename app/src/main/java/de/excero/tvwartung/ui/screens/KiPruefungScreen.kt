@@ -18,6 +18,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -146,14 +147,12 @@ fun KiPruefungScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 CircularProgressIndicator()
             }
         } else if (analysen.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "Keine Analysen in dieser Ansicht.\nEntweder ist der KI-Service " +
-                        "gerade nicht erreichbar, oder es liegt (noch) nichts zur Prüfung an.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            EmptyState(
+                icon = Icons.Default.AutoAwesome,
+                titel = "Keine Analysen",
+                hinweis = "Entweder ist der KI-Service gerade nicht erreichbar, oder es " +
+                    "liegt (noch) nichts zur Prüfung an."
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),

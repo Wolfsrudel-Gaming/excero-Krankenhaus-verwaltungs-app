@@ -398,11 +398,11 @@ private fun StammdatenCard(
                 }
             } else {
                 InfoRow("TV-Typ", room.tvTyp)
-                InfoRow("TV Seriennummer", room.seriennummer)
+                InfoRow("TV Seriennummer", room.seriennummer, mono = true)
                 if (serialDups.isNotEmpty()) {
                     DuplicateWarning("Seriennummer auch hinterlegt bei: ${serialDups.joinToString()}")
                 }
-                InfoRow("Freenet TV-ID", room.freenetId)
+                InfoRow("Freenet TV-ID", room.freenetId, mono = true)
                 if (freenetDups.isNotEmpty()) {
                     DuplicateWarning("Freenet-ID auch registriert bei: ${freenetDups.joinToString()}")
                 }
@@ -455,7 +455,7 @@ private fun FreenetCard(room: TvRoom) {
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun InfoRow(label: String, value: String, mono: Boolean = false) {
     Row {
         Text(
             label,
@@ -463,11 +463,15 @@ private fun InfoRow(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f)
         )
-        Text(
-            value.ifBlank { "–" },
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium
-        )
+        if (mono) {
+            MonoText(value.ifBlank { "–" })
+        } else {
+            Text(
+                value.ifBlank { "–" },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }
 

@@ -6,13 +6,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
@@ -49,6 +50,7 @@ import java.io.File
  * für ein Zimmer an einem bestimmten Tag. Wird in Zimmerdetails, Prüfbogen und
  * Prüfbericht eingebunden, sodass Fotos ohne Screenwechsel entstehen.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PhotoSection(
     viewModel: AppViewModel,
@@ -123,16 +125,22 @@ fun PhotoSection(
                 Text("Aus Galerie hinzufügen")
             }
             if (photos.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(photos.size) { index ->
-                        val file = photos[index]
+                // Raster (wrappt in mehrere Reihen) statt seitlichem Scrollen –
+                // mehr Fotos auf einen Blick. FlowRow, damit es in scrollbaren
+                // Screens (Prüfbogen/Bericht) nicht mit verschachteltem Scrollen kollidiert.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    photos.forEach { file ->
                         Box {
                             AsyncImage(
                                 model = file,
                                 contentDescription = file.name,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .size(110.dp)
+                                    .size(104.dp)
                                     .clip(RoundedCornerShape(10.dp))
                             )
                             IconButton(

@@ -5,10 +5,13 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,8 +37,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.ui.theme.ErrorRed
 import de.excero.tvwartung.ui.theme.OkGreen
@@ -87,6 +93,66 @@ enum class FreenetStatus(val label: String, val color: Color) {
             }
         }
     }
+}
+
+/**
+ * Einheitlicher Leer-Zustand für leere Listen (großes Icon + Titel + Hinweis),
+ * damit alle Screens gleich aufgeräumt wirken statt „einfach leer".
+ */
+@Composable
+fun EmptyState(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    titel: String,
+    hinweis: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(56.dp)
+        )
+        Text(
+            titel,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        if (hinweis != null) {
+            Text(
+                hinweis,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/** Technische Werte (Seriennummer, Freenet-ID) in Monospace – erleichtert das Ablesen. */
+@Composable
+fun MonoText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontSize: androidx.compose.ui.unit.TextUnit = 14.sp
+) {
+    Text(
+        text = text,
+        modifier = modifier,
+        fontFamily = FontFamily.Monospace,
+        fontSize = fontSize,
+        color = color,
+        style = MaterialTheme.typography.bodyMedium
+    )
 }
 
 @Composable

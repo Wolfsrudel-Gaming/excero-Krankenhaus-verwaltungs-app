@@ -58,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import de.excero.tvwartung.data.TvRoom
 import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.ui.theme.OkGreen
@@ -259,6 +260,7 @@ fun HomeScreen(
                         checkedToday = stationRooms[index].id in checkedInPeriod,
                         blocked = stationRooms[index].id in gesperrt,
                         pruefer = prueferProZimmer[stationRooms[index].id] ?: "",
+                        kompakt = settings.kompaktZimmerliste,
                         onClick = { onRoomClick(stationRooms[index].id) }
                     )
                 }
@@ -397,6 +399,7 @@ private fun RoomCard(
     checkedToday: Boolean,
     blocked: Boolean,
     pruefer: String = "",
+    kompakt: Boolean = false,
     onClick: () -> Unit
 ) {
     Card(
@@ -414,7 +417,7 @@ private fun RoomCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = if (kompakt) 8.dp else 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -422,14 +425,15 @@ private fun RoomCard(
                 contentDescription = null,
                 tint = if (blocked) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(if (kompakt) 22.dp else 28.dp)
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "Zimmer ${room.zimmer}",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = if (kompakt) MaterialTheme.typography.bodyLarge
+                        else MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = if (blocked) MaterialTheme.colorScheme.onErrorContainer
                         else MaterialTheme.colorScheme.onSurface
@@ -450,17 +454,28 @@ private fun RoomCard(
                             StatusBadge(pruefer, OkGreen)
                         }
                     }
+                    // Kompakt: Freenet-Ampel kompakt rechts in die Titelzeile
+                    if (kompakt) {
+                        Spacer(Modifier.weight(1f))
+                        GueltigBisBadge(room.gueltigBis)
+                    }
                 }
-                Text(
-                    listOf(
-                        room.tvTyp.ifBlank { "TV-Typ unbekannt" },
-                        "SN ${room.seriennummer.ifBlank { "–" }}"
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(4.dp))
-                GueltigBisBadge(room.gueltigBis)
+                if (!kompakt) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            room.tvTyp.ifBlank { "TV-Typ unbekannt" } + " · SN ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        MonoText(
+                            room.seriennummer.ifBlank { "–" },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    GueltigBisBadge(room.gueltigBis)
+                }
             }
             Icon(
                 Icons.Default.ChevronRight,

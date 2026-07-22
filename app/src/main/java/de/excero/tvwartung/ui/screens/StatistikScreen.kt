@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -177,10 +178,10 @@ fun StatistikScreen(
             }
 
             if (berichte.isEmpty()) {
-                Text(
-                    "Noch keine Prüfberichte vorhanden.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                EmptyState(
+                    icon = Icons.Default.QueryStats,
+                    titel = "Noch keine Daten",
+                    hinweis = "Sobald Prüfberichte erfasst sind, erscheinen hier Kennzahlen und Diagramme."
                 )
             }
             Spacer(Modifier.height(16.dp))
