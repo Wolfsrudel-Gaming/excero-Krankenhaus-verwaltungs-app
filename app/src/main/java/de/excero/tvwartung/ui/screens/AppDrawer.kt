@@ -6,15 +6,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Assignment
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.FindInPage
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.MeetingRoom
-import androidx.compose.material.icons.filled.QueryStats
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.FindInPage
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.MeetingRoom
+import androidx.compose.material.icons.outlined.QueryStats
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,35 +41,35 @@ val drawerGroups = listOf(
     DrawerGroup(
         "Zimmer & Stationen",
         listOf(
-            DrawerItem(Routes.DASHBOARD, "Dashboard", Icons.Default.Dashboard),
-            DrawerItem(Routes.HOME, "Zimmerliste", Icons.Default.MeetingRoom)
+            DrawerItem(Routes.DASHBOARD, "Dashboard", Icons.Outlined.Dashboard),
+            DrawerItem(Routes.HOME, "Zimmerliste", Icons.Outlined.MeetingRoom)
         )
     ),
     DrawerGroup(
         "Berichte & Auswertung",
         listOf(
-            DrawerItem(Routes.FREENET, "Freenet-Ablauf", Icons.Default.Timer),
-            DrawerItem(Routes.STATISTIK, "Statistik", Icons.Default.QueryStats),
-            DrawerItem(Routes.SUCHE, "Berichte & Papierkorb", Icons.Default.FindInPage),
-            DrawerItem(Routes.KI_PRUEFUNG, "KI-Prüfung", Icons.Default.AutoAwesome)
+            DrawerItem(Routes.FREENET, "Freenet-Ablauf", Icons.Outlined.Timer),
+            DrawerItem(Routes.STATISTIK, "Statistik", Icons.Outlined.QueryStats),
+            DrawerItem(Routes.SUCHE, "Berichte & Papierkorb", Icons.Outlined.FindInPage),
+            DrawerItem(Routes.KI_PRUEFUNG, "KI-Prüfung", Icons.Outlined.AutoAwesome)
         )
     ),
     DrawerGroup(
         "Arbeitszeit",
         listOf(
-            DrawerItem(Routes.STUNDENZETTEL_LISTE, "Stundenzettel", Icons.AutoMirrored.Filled.Assignment)
+            DrawerItem(Routes.STUNDENZETTEL_LISTE, "Stundenzettel", Icons.AutoMirrored.Outlined.Assignment)
         )
     ),
     DrawerGroup(
         "Verwaltung",
         listOf(
-            DrawerItem(Routes.VERWALTUNG, "Material & Prüfpunkte", Icons.Default.Inventory2)
+            DrawerItem(Routes.VERWALTUNG, "Material & Prüfpunkte", Icons.Outlined.Inventory2)
         )
     ),
     DrawerGroup(
         "Einstellungen",
         listOf(
-            DrawerItem(Routes.SETTINGS, "Einstellungen", Icons.Default.Settings)
+            DrawerItem(Routes.SETTINGS, "Einstellungen", Icons.Outlined.Settings)
         )
     )
 )

@@ -16,8 +16,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,7 +69,7 @@ fun StatistikScreen(
             },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Zurück")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -179,7 +179,7 @@ fun StatistikScreen(
 
             if (berichte.isEmpty()) {
                 EmptyState(
-                    icon = Icons.Default.QueryStats,
+                    icon = Icons.Outlined.QueryStats,
                     titel = "Noch keine Daten",
                     hinweis = "Sobald Prüfberichte erfasst sind, erscheinen hier Kennzahlen und Diagramme."
                 )

@@ -23,8 +23,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -236,7 +236,7 @@ fun DuplicateWarning(text: String) {
             .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
         Icon(
-            Icons.Default.Warning,
+            Icons.Outlined.Warning,
             contentDescription = null,
             tint = WarnAmber,
             modifier = Modifier.size(18.dp)
@@ -298,7 +298,7 @@ fun TvTypAuswahl(
             singleLine = true,
             trailingIcon = {
                 IconButton(onClick = { expanded = true }) {
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Marke auswählen")
+                    Icon(Icons.Outlined.ArrowDropDown, contentDescription = "Marke auswählen")
                 }
             },
             modifier = Modifier.fillMaxWidth()

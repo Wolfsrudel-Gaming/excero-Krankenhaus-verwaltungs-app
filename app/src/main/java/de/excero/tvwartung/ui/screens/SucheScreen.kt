@@ -14,12 +14,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.RestoreFromTrash
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.RestoreFromTrash
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -105,7 +104,7 @@ fun SucheScreen(
             },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Zurück")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -130,7 +129,7 @@ fun SucheScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("Zimmer, Bemerkung, Arbeit, Mitarbeiter …") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 singleLine = true
             )
 
@@ -175,7 +174,7 @@ fun SucheScreen(
                 if (treffer.isEmpty()) {
                     item {
                         EmptyState(
-                            icon = Icons.Default.SearchOff,
+                            icon = Icons.Outlined.SearchOff,
                             titel = if (query.isBlank() && stationFilter.isBlank() &&
                                 mitarbeiterFilter.isBlank() && !nurNio
                             ) "Noch keine Berichte" else "Keine Treffer",
@@ -219,7 +218,7 @@ fun SucheScreen(
                             }
                             TextButton(onClick = { viewModel.stelleBerichtWieder(insp.id) }) {
                                 Icon(
-                                    Icons.Default.RestoreFromTrash,
+                                    Icons.Outlined.RestoreFromTrash,
                                     contentDescription = null,
                                     modifier = Modifier.width(18.dp)
                                 )
@@ -232,7 +231,7 @@ fun SucheScreen(
                 if (geloescht.isEmpty()) {
                     item {
                         EmptyState(
-                            icon = Icons.Default.DeleteOutline,
+                            icon = Icons.Outlined.Delete,
                             titel = "Papierkorb ist leer",
                             hinweis = "Berichte lassen sich in der Berichtsansicht über das " +
                                 "Papierkorb-Symbol löschen und hier wiederherstellen."

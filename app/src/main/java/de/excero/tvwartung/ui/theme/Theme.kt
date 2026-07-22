@@ -1,11 +1,14 @@
 package de.excero.tvwartung.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 /** Nutzer-Einstellung fürs Erscheinungsbild (2.0: manueller Override möglich). */
 enum class AppTheme { SYSTEM, HELL, DUNKEL }
@@ -56,6 +59,20 @@ fun KKHTheme(theme: AppTheme = AppTheme.SYSTEM, content: @Composable () -> Unit)
     }
     MaterialTheme(
         colorScheme = if (dark) DarkColors else LightColors,
+        shapes = AppShapes,
         content = content
     )
 }
+
+/**
+ * Etwas großzügiger gerundete Formen als die Material3-Standardwerte – wirkt
+ * moderner/weicher, ohne die „mittlere" Rundung zu übertreiben. Gilt zentral
+ * für Karten, Dialoge, Textfelder und Buttons.
+ */
+private val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp)
+)

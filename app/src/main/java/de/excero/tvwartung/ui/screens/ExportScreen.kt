@@ -15,15 +15,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Assignment
-import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.FolderZip
-import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.SettingsBackupRestore
-import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.PictureAsPdf
+import androidx.compose.material.icons.outlined.SettingsBackupRestore
+import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -110,7 +110,7 @@ fun ExportScreen(
             title = { Text("Export & Import", fontWeight = FontWeight.Bold) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Zurück")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -129,7 +129,7 @@ fun ExportScreen(
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Default.FolderZip,
+                            Icons.Outlined.FolderZip,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -174,7 +174,7 @@ fun ExportScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                     ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("ZIP erstellen")
                     }
@@ -185,7 +185,7 @@ fun ExportScreen(
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.AutoMirrored.Filled.Assignment,
+                            Icons.AutoMirrored.Outlined.Assignment,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -208,7 +208,7 @@ fun ExportScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Icon(Icons.AutoMirrored.Outlined.Assignment, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Gespeicherte Stundenzettel")
                     }
@@ -219,7 +219,7 @@ fun ExportScreen(
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Default.PictureAsPdf,
+                            Icons.Outlined.PictureAsPdf,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -244,7 +244,7 @@ fun ExportScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                     ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Tages-PDF erstellen")
                     }
@@ -255,7 +255,7 @@ fun ExportScreen(
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Default.TableChart,
+                            Icons.Outlined.TableChart,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -278,7 +278,7 @@ fun ExportScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                     ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Excel exportieren")
                     }
@@ -295,7 +295,7 @@ fun ExportScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                     ) {
-                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.FileUpload, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("KKH-Übersicht importieren (.xlsx)")
                     }
@@ -313,7 +313,7 @@ fun ExportScreen(
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Default.Backup,
+                            Icons.Outlined.Backup,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -338,7 +338,7 @@ fun ExportScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                     ) {
-                        Icon(Icons.Default.Backup, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.Backup, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Backup erstellen (verschlüsselt)")
                     }
@@ -348,7 +348,7 @@ fun ExportScreen(
                             .fillMaxWidth()
                             .height(48.dp)
                     ) {
-                        Icon(Icons.Default.SettingsBackupRestore, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.SettingsBackupRestore, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Backup einspielen (.kkhbak)")
                     }

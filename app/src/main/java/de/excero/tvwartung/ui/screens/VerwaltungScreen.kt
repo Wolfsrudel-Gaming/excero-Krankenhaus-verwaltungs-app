@@ -12,9 +12,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -62,7 +62,7 @@ fun VerwaltungScreen(
             title = { Text("Material & Prüfpunkte", fontWeight = FontWeight.Bold) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Zurück")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -208,7 +208,7 @@ private fun MaterialRow(material: Material, viewModel: AppViewModel) {
             FilledTonalIconButton(
                 onClick = { viewModel.updateMaterial(material.copy(bestand = material.bestand - 1)) },
                 modifier = Modifier.size(32.dp)
-            ) { Icon(Icons.Default.Remove, contentDescription = "Bestand verringern") }
+            ) { Icon(Icons.Outlined.Remove, contentDescription = "Bestand verringern") }
             Text(
                 "${material.bestand}",
                 style = MaterialTheme.typography.titleMedium,
@@ -223,7 +223,7 @@ private fun MaterialRow(material: Material, viewModel: AppViewModel) {
             FilledTonalIconButton(
                 onClick = { viewModel.updateMaterial(material.copy(bestand = material.bestand + 1)) },
                 modifier = Modifier.size(32.dp)
-            ) { Icon(Icons.Default.Add, contentDescription = "Bestand erhöhen") }
+            ) { Icon(Icons.Outlined.Add, contentDescription = "Bestand erhöhen") }
         }
     }
 }

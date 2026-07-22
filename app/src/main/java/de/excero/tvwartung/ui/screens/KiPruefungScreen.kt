@@ -16,8 +16,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -116,7 +116,7 @@ fun KiPruefungScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Zurück")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -144,7 +144,7 @@ fun KiPruefungScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             SkeletonList(anzahl = 7)
         } else if (analysen.isEmpty()) {
             EmptyState(
-                icon = Icons.Default.AutoAwesome,
+                icon = Icons.Outlined.AutoAwesome,
                 titel = "Keine Analysen",
                 hinweis = "Entweder ist der KI-Service gerade nicht erreichbar, oder es " +
                     "liegt (noch) nichts zur Prüfung an."
@@ -228,7 +228,7 @@ private fun KiDetailDialog(
                     title = { Text(analyse.roomId.ifBlank { "KI-Analyse" }, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = onDismiss) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Schließen")
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Schließen")
                         }
                     }
                 )

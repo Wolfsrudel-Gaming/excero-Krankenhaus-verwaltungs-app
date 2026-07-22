@@ -15,10 +15,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -171,7 +171,7 @@ fun PruefbogenScreen(
             },
             navigationIcon = {
                 IconButton(onClick = onDone) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Zurück")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -254,7 +254,7 @@ fun PruefbogenScreen(
                                     FreenetLinks.open(context, FreenetLinks.VERLAENGERN)
                                 }) {
                                     Icon(
-                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                        Icons.AutoMirrored.Outlined.OpenInNew,
                                         contentDescription = null,
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -265,7 +265,7 @@ fun PruefbogenScreen(
                                     FreenetLinks.open(context, FreenetLinks.AKTIVIEREN)
                                 }) {
                                     Icon(
-                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                        Icons.AutoMirrored.Outlined.OpenInNew,
                                         contentDescription = null,
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -325,7 +325,7 @@ fun PruefbogenScreen(
                                     )
                                 },
                                 leadingIcon = if (selected) {
-                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    { Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
                                 } else null
                             )
                         }
@@ -438,7 +438,7 @@ fun PruefbogenScreen(
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                Icon(Icons.Default.Save, contentDescription = null)
+                Icon(Icons.Outlined.Save, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Prüfbogen speichern", style = MaterialTheme.typography.titleMedium)
             }

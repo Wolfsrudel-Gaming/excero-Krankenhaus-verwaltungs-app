@@ -19,20 +19,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Assignment
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.FindInPage
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.MeetingRoom
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.FindInPage
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.MeetingRoom
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.Tv
+import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -126,13 +126,13 @@ fun HomeScreen(
             actions = {
                 SyncStatusIndicator(viewModel)
                 IconButton(onClick = onVerwaltung) {
-                    Icon(Icons.Default.Inventory2, contentDescription = "Material & Prüfpunkte")
+                    Icon(Icons.Outlined.Inventory2, contentDescription = "Material & Prüfpunkte")
                 }
                 IconButton(onClick = onExportClick) {
-                    Icon(Icons.Default.Upload, contentDescription = "Export")
+                    Icon(Icons.Outlined.Upload, contentDescription = "Export")
                 }
                 IconButton(onClick = onSettingsClick) {
-                    Icon(Icons.Default.Settings, contentDescription = "Einstellungen")
+                    Icon(Icons.Outlined.Settings, contentDescription = "Einstellungen")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -172,7 +172,7 @@ fun HomeScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             placeholder = { Text("Zimmer, Station, Seriennummer …") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
             singleLine = true
         )
 
@@ -187,21 +187,21 @@ fun HomeScreen(
                 onClick = onFreenet,
                 label = { Text("Freenet-Ablauf") },
                 leadingIcon = {
-                    Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
             )
             AssistChip(
                 onClick = onSuche,
                 label = { Text("Berichte & Papierkorb") },
                 leadingIcon = {
-                    Icon(Icons.Default.FindInPage, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.FindInPage, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
             )
             AssistChip(
                 onClick = onStatistik,
                 label = { Text("Statistik") },
                 leadingIcon = {
-                    Icon(Icons.Default.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
             )
         }
@@ -239,7 +239,7 @@ fun HomeScreen(
                         )
                         IconButton(onClick = { sperrDialogStation = station }) {
                             Icon(
-                                Icons.Default.MeetingRoom,
+                                Icons.Outlined.MeetingRoom,
                                 contentDescription = "Zutritt für Station $station festlegen",
                                 tint = if (gesperrtCount > 0) MaterialTheme.colorScheme.error
                                 else MaterialTheme.colorScheme.onSurfaceVariant
@@ -247,7 +247,7 @@ fun HomeScreen(
                         }
                         IconButton(onClick = { onStundenzettel(station) }) {
                             Icon(
-                                Icons.AutoMirrored.Filled.Assignment,
+                                Icons.AutoMirrored.Outlined.Assignment,
                                 contentDescription = "Stundenzettel für Station $station",
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -315,7 +315,7 @@ fun HomeScreen(
             .align(Alignment.BottomEnd)
             .padding(20.dp)
     ) {
-        Icon(Icons.Default.Add, contentDescription = "Neues Zimmer anlegen")
+        Icon(Icons.Outlined.Add, contentDescription = "Neues Zimmer anlegen")
     }
     }
 
@@ -421,7 +421,7 @@ private fun RoomCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = if (blocked) Icons.Default.Block else Icons.Default.Tv,
+                imageVector = if (blocked) Icons.Outlined.Block else Icons.Outlined.Tv,
                 contentDescription = null,
                 tint = if (blocked) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.primary,
@@ -444,7 +444,7 @@ private fun RoomCard(
                     } else if (checkedToday) {
                         Spacer(Modifier.width(6.dp))
                         Icon(
-                            Icons.Default.CheckCircle,
+                            Icons.Outlined.CheckCircle,
                             contentDescription = "Geprüft",
                             tint = OkGreen,
                             modifier = Modifier.size(18.dp)
@@ -478,7 +478,7 @@ private fun RoomCard(
                 }
             }
             Icon(
-                Icons.Default.ChevronRight,
+                Icons.Outlined.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
