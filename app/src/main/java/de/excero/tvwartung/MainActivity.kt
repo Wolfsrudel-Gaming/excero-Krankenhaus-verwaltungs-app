@@ -29,6 +29,7 @@ import de.excero.tvwartung.ui.screens.BerichtScreen
 import de.excero.tvwartung.ui.screens.DashboardScreen
 import de.excero.tvwartung.ui.screens.ExportScreen
 import de.excero.tvwartung.ui.screens.FreenetScreen
+import de.excero.tvwartung.ui.screens.GlobalSearchScreen
 import de.excero.tvwartung.ui.screens.HomeScreen
 import de.excero.tvwartung.ui.screens.KiPruefungScreen
 import de.excero.tvwartung.ui.screens.StatistikScreen
@@ -55,6 +56,7 @@ object Routes {
     const val FREENET = "freenet"
     const val STATISTIK = "statistik"
     const val SUCHE = "suche"
+    const val SUCHE_GLOBAL = "suche_global"
     const val KI_PRUEFUNG = "ki_pruefung"
     fun room(id: String) = "room/${URLEncoder.encode(id, "UTF-8")}"
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
@@ -125,7 +127,8 @@ class MainActivity : ComponentActivity() {
                                 onFreenet = { navigateFromDrawer(Routes.FREENET) },
                                 onArbeitszeit = { navigateFromDrawer(Routes.STUNDENZETTEL_LISTE) },
                                 onVerwaltung = { navigateFromDrawer(Routes.VERWALTUNG) },
-                                onKiPruefung = { navigateFromDrawer(Routes.KI_PRUEFUNG) }
+                                onKiPruefung = { navigateFromDrawer(Routes.KI_PRUEFUNG) },
+                                onSuche = { navController.navigate(Routes.SUCHE_GLOBAL) }
                             )
                         }
                         composable(Routes.HOME) {
@@ -139,7 +142,8 @@ class MainActivity : ComponentActivity() {
                                 onNeuesZimmer = { navController.navigate(Routes.ZIMMER_NEU) },
                                 onFreenet = { navController.navigate(Routes.FREENET) },
                                 onStatistik = { navController.navigate(Routes.STATISTIK) },
-                                onSuche = { navController.navigate(Routes.SUCHE) }
+                                onSuche = { navController.navigate(Routes.SUCHE) },
+                                onGlobalSuche = { navController.navigate(Routes.SUCHE_GLOBAL) }
                             )
                         }
                         composable(Routes.FREENET) {
@@ -166,6 +170,16 @@ class MainActivity : ComponentActivity() {
                             KiPruefungScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Routes.SUCHE_GLOBAL) {
+                            GlobalSearchScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onRoom = { navController.navigate(Routes.room(it)) },
+                                onBericht = { navController.navigate(Routes.bericht(it)) },
+                                onStundenzettel = { navController.navigate(Routes.stundenzettelEdit(it)) },
+                                onVerwaltung = { navController.navigate(Routes.VERWALTUNG) }
                             )
                         }
                         composable("room/{roomId}") { entry ->

@@ -311,6 +311,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Vom Server gepflegte Mitarbeiterliste (für die Geräteeinrichtung). */
     fun bekannteMitarbeiter(): List<String> = app.settingsStore.bekannteMitarbeiter()
 
+    // ----- Globale Suche -----
+
+    fun letzteSuchen(): List<String> = app.settingsStore.letzteSuchen()
+    fun merkeSuche(begriff: String) = app.settingsStore.merkeSuche(begriff)
+
+    /** Erstes Foto eines Berichts (für Vorschaubilder in der Suche); null falls keins. */
+    fun erstesFotoFuer(inspection: Inspection): java.io.File? =
+        photoStore.photosFor(inspection.roomId, Dates.isoToFolder(inspection.datum)).firstOrNull()
+
     /** Alle bekannten TV-Marken (für die Schnellauswahl). */
     fun bekannteTvTypen(): List<String> =
         rooms.value.map { it.tvTyp.trim() }.filter { it.isNotBlank() }.distinct().sorted()

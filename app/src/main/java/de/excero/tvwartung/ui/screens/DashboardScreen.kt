@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,7 +55,8 @@ fun DashboardScreen(
     onFreenet: () -> Unit,
     onArbeitszeit: () -> Unit,
     onVerwaltung: () -> Unit,
-    onKiPruefung: () -> Unit
+    onKiPruefung: () -> Unit,
+    onSuche: () -> Unit
 ) {
     val rooms by viewModel.rooms.collectAsState()
     val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
@@ -106,7 +108,12 @@ fun DashboardScreen(
                     Icon(Icons.Outlined.Menu, contentDescription = "Menü öffnen")
                 }
             },
-            actions = { SyncStatusIndicator(viewModel) },
+            actions = {
+                IconButton(onClick = onSuche) {
+                    Icon(Icons.Outlined.Search, contentDescription = "Suchen")
+                }
+                SyncStatusIndicator(viewModel)
+            },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )

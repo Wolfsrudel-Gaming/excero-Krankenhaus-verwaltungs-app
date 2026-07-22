@@ -76,7 +76,8 @@ fun HomeScreen(
     onNeuesZimmer: () -> Unit,
     onFreenet: () -> Unit,
     onStatistik: () -> Unit,
-    onSuche: () -> Unit
+    onSuche: () -> Unit,
+    onGlobalSuche: () -> Unit
 ) {
     val rooms by viewModel.rooms.collectAsState()
     val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
@@ -125,6 +126,9 @@ fun HomeScreen(
             },
             actions = {
                 SyncStatusIndicator(viewModel)
+                IconButton(onClick = onGlobalSuche) {
+                    Icon(Icons.Outlined.Search, contentDescription = "Suchen")
+                }
                 IconButton(onClick = onVerwaltung) {
                     Icon(Icons.Outlined.Inventory2, contentDescription = "Material & Prüfpunkte")
                 }

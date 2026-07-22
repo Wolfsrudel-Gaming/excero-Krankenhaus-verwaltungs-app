@@ -65,6 +65,17 @@ class SettingsStore(context: Context) {
         )
     }
 
+    /** Zuletzt verwendete Suchbegriffe (neueste zuerst, max. 8) für die globale Suche. */
+    fun letzteSuchen(): List<String> =
+        prefs.getString("letzteSuchen", "")!!.split("\n").filter { it.isNotBlank() }
+
+    fun merkeSuche(begriff: String) {
+        val t = begriff.trim()
+        if (t.isBlank()) return
+        val neu = (listOf(t) + letzteSuchen().filter { !it.equals(t, ignoreCase = true) }).take(8)
+        prefs.edit().putString("letzteSuchen", neu.joinToString("\n")).apply()
+    }
+
     /** Vom Server bekannte (aktive) Mitarbeiter für die Geräteeinrichtung. */
     fun bekannteMitarbeiter(): List<String> =
         prefs.getString("bekannteMitarbeiter", "")!!.split("\n").filter { it.isNotBlank() }
