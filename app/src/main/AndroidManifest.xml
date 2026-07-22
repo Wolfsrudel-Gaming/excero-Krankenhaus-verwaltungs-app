@@ -7,6 +7,8 @@
 
     <!-- Für die Synchronisation mit dem KKH-Server -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- In-App-Updates: heruntergeladene APK installieren -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".App"
