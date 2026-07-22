@@ -2,7 +2,6 @@ package de.excero.tvwartung.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -22,7 +21,6 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -143,9 +141,7 @@ fun KiPruefungScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         }
 
         if (laedt) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            SkeletonList(anzahl = 7)
         } else if (analysen.isEmpty()) {
             EmptyState(
                 icon = Icons.Default.AutoAwesome,
@@ -253,12 +249,12 @@ private fun KiDetailDialog(
                                 .height(220.dp)
                         )
                     } else {
-                        Box(
+                        SkeletonBox(
                             Modifier
                                 .fillMaxWidth()
-                                .height(120.dp),
-                            contentAlignment = Alignment.Center
-                        ) { CircularProgressIndicator() }
+                                .height(220.dp),
+                            corner = 12
+                        )
                     }
 
                     Text(

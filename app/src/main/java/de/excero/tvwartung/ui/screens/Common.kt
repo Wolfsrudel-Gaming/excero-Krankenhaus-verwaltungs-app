@@ -3,6 +3,11 @@ package de.excero.tvwartung.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -132,6 +137,49 @@ fun EmptyState(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,
                 textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/**
+ * Skeleton-Platzhalter mit sanftem Pulsieren – statt eines Spinners, während
+ * Daten geladen werden (wirkt ruhiger und moderner).
+ */
+@Composable
+fun SkeletonBox(modifier: Modifier = Modifier, corner: Int = 8) {
+    val transition = rememberInfiniteTransition(label = "skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(750),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "skeletonAlpha"
+    )
+    Box(
+        modifier
+            .clip(RoundedCornerShape(corner.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha))
+    )
+}
+
+/** Mehrere Skeleton-Kartenzeilen als Ladeanzeige für Listen. */
+@Composable
+fun SkeletonList(anzahl: Int = 6, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        repeat(anzahl) {
+            SkeletonBox(
+                Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+                corner = 12
             )
         }
     }
