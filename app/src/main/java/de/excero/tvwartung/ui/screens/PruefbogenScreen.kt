@@ -17,7 +17,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -37,11 +39,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,10 +54,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.excero.tvwartung.data.Arbeiten
 import de.excero.tvwartung.data.Inspection
+import de.excero.tvwartung.data.TvRoom
+import de.excero.tvwartung.sync.KiAnalyse
 import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.ui.theme.ErrorRed
 import de.excero.tvwartung.ui.theme.OkGreen
+import de.excero.tvwartung.ui.theme.WarnAmber
 import de.excero.tvwartung.util.Dates
+import kotlinx.coroutines.launch
 
 /** Zustand eines Prüfpunkts: null = offen, true = i.O., false = n.i.O. */
 private class PruefpunktState(
@@ -113,6 +121,20 @@ fun PruefbogenScreen(
     var eintragManuell by remember(current.id) { mutableStateOf<String?>(null) }
     val ausgewaehlteArbeiten = remember(current.id) { mutableStateListOf<String>() }
     var arbeitSonstige by remember(current.id) { mutableStateOf("") }
+
+    // KI-Fotoerkennung: neueste Auswertung für dieses Zimmer laden (falls aktiv)
+    val scope = rememberCoroutineScope()
+    var kiAnalyse by remember(current.id) { mutableStateOf<KiAnalyse?>(null) }
+    var kiLaedt by remember(current.id) { mutableStateOf(false) }
+    fun kiLaden() {
+        if (!viewModel.kiVerfuegbar()) return
+        scope.launch {
+            kiLaedt = true
+            kiAnalyse = viewModel.kiAnalyseFuerZimmer(current.id)
+            kiLaedt = false
+        }
+    }
+    LaunchedEffect(current.id) { kiLaden() }
 
     // Eigene Prüfpunkte aus der Verwaltung (nach den Standardpunkten)
     val extraStates = remember(current.id, customPunkte) {
@@ -207,6 +229,35 @@ fun PruefbogenScreen(
 
             // Fotos direkt hier aufnehmen – ohne den Prüfbogen zu verlassen
             PhotoSection(viewModel = viewModel, roomId = current.id)
+
+            // KI-Vorschläge aus den Fotos (nur wenn KI aktiv + Server hinterlegt)
+            if (viewModel.kiVerfuegbar()) {
+                KiVorschlagCard(
+                    analyse = kiAnalyse,
+                    laedt = kiLaedt,
+                    room = current,
+                    onAktualisieren = { kiLaden() },
+                    onSeriennummer = { wert ->
+                        if (wert.equals(current.seriennummer.trim(), ignoreCase = true)) {
+                            punkte[1].ergebnis = true
+                        } else {
+                            punkte[1].ergebnis = false
+                            punkte[1].bemerkung = wert
+                            serienUebernehmen = true
+                        }
+                    },
+                    onFreenetId = { wert ->
+                        if (wert.equals(current.freenetId.trim(), ignoreCase = true)) {
+                            punkte[2].ergebnis = true
+                        } else {
+                            punkte[2].ergebnis = false
+                            punkte[2].bemerkung = wert
+                            freenetIdUebernehmen = true
+                        }
+                    },
+                    onTvTyp = { wert -> tvTyp = wert }
+                )
+            }
 
             punkte.forEachIndexed { index, punkt ->
                 PruefpunktCard(punkt) {
@@ -443,6 +494,152 @@ fun PruefbogenScreen(
                 Text("Prüfbogen speichern", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * KI-Vorschläge aus den Fotos: erkannte Werte mit Konfidenz und „Übernehmen"-
+ * Knopf, der das jeweilige Feld im Prüfbogen füllt. Nur Vorschlag – der Prüfer
+ * bestätigt bewusst. Bei niedriger Sicherheit / unlesbarem Bild ein Warnhinweis.
+ */
+@Composable
+private fun KiVorschlagCard(
+    analyse: KiAnalyse?,
+    laedt: Boolean,
+    room: TvRoom,
+    onAktualisieren: () -> Unit,
+    onSeriennummer: (String) -> Unit,
+    onFreenetId: (String) -> Unit,
+    onTvTyp: (String) -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "KI-Fotoerkennung",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onAktualisieren) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = "Aktualisieren")
+                }
+            }
+
+            when {
+                laedt -> SkeletonBox(Modifier.fillMaxWidth().height(48.dp), corner = 10)
+                analyse == null -> Text(
+                    "Noch keine Auswertung. Foto aufnehmen, synchronisieren und hier " +
+                        "aktualisieren – die KI liest Seriennummer, Freenet-ID und TV-Typ vom Bild.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                else -> {
+                    if (analyse.status == "unlesbar" || analyse.fehler.isNotBlank()) {
+                        DuplicateWarning(
+                            "Bild schwer lesbar – bitte Werte genau prüfen" +
+                                (if (analyse.fehler.isNotBlank()) " (${analyse.fehler})" else "") + "."
+                        )
+                    }
+                    var etwas = false
+                    analyse.felder["seriennummer"]?.let { f ->
+                        etwas = true
+                        KiFeldZeile(
+                            label = "Seriennummer",
+                            wert = f.wert,
+                            konfidenz = f.konfidenz,
+                            mono = true,
+                            passt = analyse.abgleich["seriennummer"]?.passt,
+                            onUebernehmen = { onSeriennummer(f.wert) }
+                        )
+                    }
+                    analyse.felder["freenet_id"]?.let { f ->
+                        etwas = true
+                        KiFeldZeile(
+                            label = "Freenet-ID",
+                            wert = f.wert,
+                            konfidenz = f.konfidenz,
+                            mono = true,
+                            passt = analyse.abgleich["freenet_id"]?.passt,
+                            onUebernehmen = { onFreenetId(f.wert) }
+                        )
+                    }
+                    analyse.felder["tv_typ"]?.let { f ->
+                        etwas = true
+                        KiFeldZeile(
+                            label = "TV-Typ",
+                            wert = f.wert,
+                            konfidenz = f.konfidenz,
+                            mono = false,
+                            passt = analyse.abgleich["tv_typ"]?.passt,
+                            onUebernehmen = { onTvTyp(f.wert) }
+                        )
+                    }
+                    if (!etwas) {
+                        Text(
+                            "Keine verwertbaren Werte erkannt.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        "Nur Vorschlag – bitte am Gerät gegenprüfen.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KiFeldZeile(
+    label: String,
+    wert: String,
+    konfidenz: Double?,
+    mono: Boolean,
+    passt: Boolean?,
+    onUebernehmen: () -> Unit
+) {
+    val unsicher = konfidenz != null && konfidenz < 0.7
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("$label: ", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                if (mono) MonoText(wert) else Text(wert, style = MaterialTheme.typography.bodyMedium)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (konfidenz != null) {
+                    Text(
+                        "${(konfidenz * 100).toInt()}% sicher",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (unsicher) WarnAmber else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
+                when (passt) {
+                    true -> StatusBadge("passt", OkGreen)
+                    false -> StatusBadge("abweichend", ErrorRed)
+                    null -> {}
+                }
+            }
+        }
+        TextButton(onClick = onUebernehmen) {
+            Text(if (passt == true) "Bestätigen" else "Übernehmen")
         }
     }
 }

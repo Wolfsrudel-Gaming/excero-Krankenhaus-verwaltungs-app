@@ -182,6 +182,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { kiClient()?.analysen(status) ?: emptyList() }.getOrDefault(emptyList())
         }
 
+    /** Ob die KI-Fotoerkennung aktiv ist UND ein Server hinterlegt ist. */
+    fun kiVerfuegbar(): Boolean =
+        settings.value.kiErkennungAktiv &&
+            settings.value.serverUrl.isNotBlank() && settings.value.apiKey.isNotBlank()
+
+    /**
+     * Neueste KI-Analyse mit erkannten Werten für ein Zimmer (für den Prüfbogen).
+     * null, wenn nichts vorliegt oder der Server nicht erreichbar ist.
+     */
+    suspend fun kiAnalyseFuerZimmer(roomId: String): de.excero.tvwartung.sync.KiAnalyse? =
+        withContext(Dispatchers.IO) {
+            if (!kiVerfuegbar()) return@withContext null
+            runCatching {
+                kiClient()?.analysen(room = roomId)?.firstOrNull { it.felder.isNotEmpty() }
+            }.getOrNull()
+        }
+
     /** Foto für die Detailansicht herunterladen (Cache); null bei Fehler. */
     suspend fun kiFotoDatei(pfad: String): java.io.File? = withContext(Dispatchers.IO) {
         runCatching {

@@ -73,9 +73,13 @@ class KiClient(private val serverUrl: String, private val apiKey: String) {
         return if (text.isBlank()) JSONObject() else JSONObject(text)
     }
 
-    /** Analysen laden, optional gefiltert nach Status ("abweichung", "unlesbar", …). */
-    fun analysen(status: String? = null): List<KiAnalyse> {
-        val pfad = "/api/sync/ki/analysen" + (status?.let { "?status=$it" } ?: "")
+    /** Analysen laden, optional gefiltert nach Status ("abweichung", …) und/oder Zimmer. */
+    fun analysen(status: String? = null, room: String? = null): List<KiAnalyse> {
+        val query = buildList {
+            if (!status.isNullOrBlank()) add("status=$status")
+            if (!room.isNullOrBlank()) add("room=" + java.net.URLEncoder.encode(room, "UTF-8"))
+        }.joinToString("&")
+        val pfad = "/api/sync/ki/analysen" + (if (query.isNotEmpty()) "?$query" else "")
         val arr = httpJson(pfad, "GET").optJSONArray("analysen") ?: org.json.JSONArray()
         return buildList {
             for (i in 0 until arr.length()) {

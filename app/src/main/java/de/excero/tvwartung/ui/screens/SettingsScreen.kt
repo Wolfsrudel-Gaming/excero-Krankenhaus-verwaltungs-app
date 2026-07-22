@@ -261,6 +261,35 @@ fun SettingsScreen(
                 }
             }
 
+            // KI-Fotoerkennung
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "KI-Fotoerkennung",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Liest im Prüfbogen Seriennummer, Freenet-ID und TV-Typ aus den " +
+                            "Fotos und schlägt sie zum Übernehmen vor. Läuft über den Server.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Switch(
+                            checked = settings.kiErkennungAktiv,
+                            onCheckedChange = { viewModel.updateSettings(settings.copy(kiErkennungAktiv = it)) }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (settings.kiErkennungAktiv) "KI-Vorschläge im Prüfbogen anzeigen"
+                            else "KI-Vorschläge ausgeblendet",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
