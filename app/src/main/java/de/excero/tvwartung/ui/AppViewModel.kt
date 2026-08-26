@@ -322,6 +322,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun letzteSuchen(): List<String> = app.settingsStore.letzteSuchen()
     fun merkeSuche(begriff: String) = app.settingsStore.merkeSuche(begriff)
 
+    // ----- Arbeits-Vorlagen (Prüfbogen) -----
+
+    val arbeitsVorlagen: StateFlow<List<de.excero.tvwartung.data.Arbeitsvorlage>> =
+        app.settingsStore.arbeitsVorlagen
+    fun addArbeitsvorlage(name: String, arbeiten: List<String>) =
+        app.settingsStore.addVorlage(name, arbeiten)
+    fun deleteArbeitsvorlage(name: String) = app.settingsStore.deleteVorlage(name)
+
     // ----- Menü: angepinnte Seiten + „Was ist neu" -----
 
     val gepinnteMenue: StateFlow<List<String>> = app.settingsStore.gepinnteMenue

@@ -18,10 +18,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -135,6 +140,10 @@ fun PruefbogenScreen(
         }
     }
     LaunchedEffect(current.id) { kiLaden() }
+
+    // Arbeits-Vorlagen
+    val vorlagen by viewModel.arbeitsVorlagen.collectAsState()
+    var zeigeVorlageDialog by remember { mutableStateOf(false) }
 
     // Eigene Prüfpunkte aus der Verwaltung (nach den Standardpunkten)
     val extraStates = remember(current.id, customPunkte) {
@@ -381,6 +390,47 @@ fun PruefbogenScreen(
                             )
                         }
                     }
+
+                    // Vorlagen: häufige Arbeiten mit einem Tipp anwenden / neue speichern
+                    if (vorlagen.isNotEmpty()) {
+                        Text(
+                            "Vorlagen",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            vorlagen.forEach { vorlage ->
+                                InputChip(
+                                    selected = false,
+                                    onClick = {
+                                        vorlage.arbeiten
+                                            .filter { name -> materialKatalog.any { it.name == name } }
+                                            .forEach { if (it !in ausgewaehlteArbeiten) ausgewaehlteArbeiten.add(it) }
+                                    },
+                                    label = { Text(vorlage.name) },
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Outlined.Close,
+                                            contentDescription = "Vorlage löschen",
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .clickable { viewModel.deleteArbeitsvorlage(vorlage.name) }
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    TextButton(
+                        onClick = { if (ausgewaehlteArbeiten.isNotEmpty()) zeigeVorlageDialog = true },
+                        enabled = ausgewaehlteArbeiten.isNotEmpty()
+                    ) {
+                        Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Auswahl als Vorlage speichern")
+                    }
+
                     if (freenetVerlaengert) {
                         Text(
                             "„${Arbeiten.FREENET_VERLAENGERT}“ wird automatisch aus dem Prüfpunkt übernommen.",
@@ -505,6 +555,44 @@ fun PruefbogenScreen(
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (zeigeVorlageDialog) {
+        var name by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { zeigeVorlageDialog = false },
+            title = { Text("Als Vorlage speichern") },
+            text = {
+                Column {
+                    Text(
+                        "Speichert die ${ausgewaehlteArbeiten.size} angekreuzten Arbeiten unter " +
+                            "einem Namen – später mit einem Tipp wieder anwendbar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Name der Vorlage") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.addArbeitsvorlage(name, ausgewaehlteArbeiten.toList())
+                        zeigeVorlageDialog = false
+                    },
+                    enabled = name.isNotBlank()
+                ) { Text("Speichern") }
+            },
+            dismissButton = {
+                TextButton(onClick = { zeigeVorlageDialog = false }) { Text("Abbrechen") }
+            }
+        )
     }
 }
 

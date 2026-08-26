@@ -99,6 +99,50 @@ fun VerwaltungScreen(
                 }
             }
 
+            // Live-Vorschau: so wirkt sich der Katalog auf den Prüfbogen aus
+            val aktivesMaterial = materialien.filter { it.aktiv }
+            val aktivePruefpunkte = pruefpunkte.filter { it.aktiv }
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Vorschau Prüfbogen",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "So wirken sich Änderungen unten direkt auf den Prüfbogen aus.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Arbeiten / Material (${aktivesMaterial.size})",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (aktivesMaterial.isEmpty()) "– keine aktiven Einträge –"
+                        else aktivesMaterial.joinToString("  ·  ") { it.name },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        "Zusätzliche Prüfpunkte (${aktivePruefpunkte.size})",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (aktivePruefpunkte.isEmpty()) {
+                        Text("– nur die Standardpunkte –", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        aktivePruefpunkte.forEach {
+                            Text("•  ${it.titel}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+
             // Materialkatalog & Lagerbestand
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

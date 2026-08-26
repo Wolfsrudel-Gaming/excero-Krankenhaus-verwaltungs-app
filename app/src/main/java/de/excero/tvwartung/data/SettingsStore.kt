@@ -6,6 +6,9 @@ import de.excero.tvwartung.util.Dates
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+/** Benannte Vorlage häufiger Arbeiten (für den Prüfbogen). */
+data class Arbeitsvorlage(val name: String, val arbeiten: List<String>)
+
 /** Zeitraum, der als "eine Anfahrt" zählt (bestimmt die Prüf-Haken in der Übersicht). */
 enum class Pruefzeitraum(val label: String) {
     TAG("Nur heute"),
@@ -63,6 +66,44 @@ class SettingsStore(context: Context) {
             kompaktZimmerliste = prefs.getString("kompaktZimmerliste", "false") == "true",
             kiErkennungAktiv = prefs.getString("kiErkennungAktiv", "true") == "true"
         )
+    }
+
+    /** Gespeicherte Arbeits-Vorlagen (häufige Arbeiten), reaktiv für den Prüfbogen. */
+    private val _vorlagen = MutableStateFlow(ladeVorlagen())
+    val arbeitsVorlagen: StateFlow<List<Arbeitsvorlage>> = _vorlagen
+
+    private fun ladeVorlagen(): List<Arbeitsvorlage> {
+        val raw = prefs.getString("arbeitsVorlagen", "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            val arr = org.json.JSONArray(raw)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                val a = o.getJSONArray("arbeiten")
+                Arbeitsvorlage(o.getString("name"), (0 until a.length()).map { a.getString(it) })
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun speichereVorlagen(list: List<Arbeitsvorlage>) {
+        val arr = org.json.JSONArray()
+        list.forEach { v ->
+            arr.put(org.json.JSONObject().apply {
+                put("name", v.name); put("arbeiten", org.json.JSONArray(v.arbeiten))
+            })
+        }
+        prefs.edit().putString("arbeitsVorlagen", arr.toString()).apply()
+        _vorlagen.value = list
+    }
+
+    fun addVorlage(name: String, arbeiten: List<String>) {
+        if (name.isBlank() || arbeiten.isEmpty()) return
+        val ohneAlt = _vorlagen.value.filterNot { it.name.equals(name.trim(), ignoreCase = true) }
+        speichereVorlagen(ohneAlt + Arbeitsvorlage(name.trim(), arbeiten))
+    }
+
+    fun deleteVorlage(name: String) {
+        speichereVorlagen(_vorlagen.value.filterNot { it.name == name })
     }
 
     /** Zuletzt verwendete Suchbegriffe (neueste zuerst, max. 8) für die globale Suche. */
