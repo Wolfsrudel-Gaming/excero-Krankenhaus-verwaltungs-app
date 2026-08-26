@@ -627,6 +627,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun laufenderEinsatz() = repository.laufenderEinsatz(settings.value.mitarbeiter)
 
+    /** Alle Einsätze (für die Wochenübersicht). */
+    val alleEinsaetze: StateFlow<List<de.excero.tvwartung.data.Einsatz>> =
+        repository.alleEinsaetze.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun starteEinsatz(station: String) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.starteEinsatz(station, settings.value.mitarbeiter.ifBlank { "Unbenannt" })

@@ -117,6 +117,9 @@ interface EinsatzDao {
     @Query("SELECT * FROM einsaetze ORDER BY start DESC")
     suspend fun getAll(): List<Einsatz>
 
+    @Query("SELECT * FROM einsaetze ORDER BY start DESC")
+    fun observeAll(): Flow<List<Einsatz>>
+
     @Insert
     suspend fun insert(einsatz: Einsatz): Long
 

@@ -238,6 +238,8 @@ class Repository(private val db: AppDatabase) {
 
     suspend fun getAllEinsaetze(): List<Einsatz> = db.einsatzDao().getAll()
 
+    val alleEinsaetze: Flow<List<Einsatz>> = db.einsatzDao().observeAll()
+
     // ----- Papierkorb -----
 
     fun geloeschteInspections(): Flow<List<Inspection>> =
