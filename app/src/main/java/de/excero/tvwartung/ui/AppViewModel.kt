@@ -316,6 +316,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun letzteSuchen(): List<String> = app.settingsStore.letzteSuchen()
     fun merkeSuche(begriff: String) = app.settingsStore.merkeSuche(begriff)
 
+    // ----- Menü: angepinnte Seiten + „Was ist neu" -----
+
+    val gepinnteMenue: StateFlow<List<String>> = app.settingsStore.gepinnteMenue
+    fun toggleMenuePin(route: String) = app.settingsStore.toggleMenuePin(route)
+
+    /** true = für diese App-Version wurde der „Was ist neu"-Hinweis noch nicht gezeigt. */
+    fun wasIstNeuFaellig(version: String): Boolean =
+        app.settingsStore.wasIstNeuGesehen() != version
+    fun wasIstNeuGesehen(version: String) = app.settingsStore.setWasIstNeuGesehen(version)
+
     /** Erstes Foto eines Berichts (für Vorschaubilder in der Suche); null falls keins. */
     fun erstesFotoFuer(inspection: Inspection): java.io.File? =
         photoStore.photosFor(inspection.roomId, Dates.isoToFolder(inspection.datum)).firstOrNull()

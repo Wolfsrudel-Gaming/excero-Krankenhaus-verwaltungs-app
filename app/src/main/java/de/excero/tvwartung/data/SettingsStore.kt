@@ -95,6 +95,25 @@ class SettingsStore(context: Context) {
         _lagerWarnungen.value = texte
     }
 
+    /** Im Menü angepinnte Seiten (Routen), reaktiv fürs Drawer-Menü. */
+    private val _gepinnt = MutableStateFlow(
+        prefs.getString("gepinnteMenue", "")!!.split("\n").filter { it.isNotBlank() }
+    )
+    val gepinnteMenue: StateFlow<List<String>> = _gepinnt
+
+    fun toggleMenuePin(route: String) {
+        val aktuell = _gepinnt.value
+        val neu = if (route in aktuell) aktuell - route else aktuell + route
+        prefs.edit().putString("gepinnteMenue", neu.joinToString("\n")).apply()
+        _gepinnt.value = neu
+    }
+
+    /** Zuletzt gesehene Version im „Was ist neu"-Hinweis. */
+    fun wasIstNeuGesehen(): String = prefs.getString("wasIstNeuVersion", "") ?: ""
+    fun setWasIstNeuGesehen(version: String) {
+        prefs.edit().putString("wasIstNeuVersion", version).apply()
+    }
+
     fun update(settings: AppSettings) {
         prefs.edit()
             .putString("zeitraum", settings.zeitraum.name)

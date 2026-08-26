@@ -11,12 +11,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -91,6 +98,30 @@ class MainActivity : ComponentActivity() {
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = currentBackStackEntry?.destination?.route
 
+                // Zähler-Badges fürs Menü
+                val rooms by viewModel.rooms.collectAsState()
+                val kiAbweichungen by viewModel.kiAbweichungen.collectAsState()
+                val alleZettel by viewModel.alleStundenzettel.collectAsState()
+                val gepinnt by viewModel.gepinnteMenue.collectAsState()
+                val badges = remember(rooms, kiAbweichungen, alleZettel) {
+                    buildMap {
+                        val freenetKritisch = rooms.count {
+                            !it.inaktiv &&
+                                de.excero.tvwartung.ui.screens.FreenetStatus.of(it.gueltigBis) ==
+                                de.excero.tvwartung.ui.screens.FreenetStatus.ABGELAUFEN
+                        }
+                        if (freenetKritisch > 0) put(Routes.FREENET, freenetKritisch)
+                        if (kiAbweichungen > 0) put(Routes.KI_PRUEFUNG, kiAbweichungen)
+                        val offeneZettel = alleZettel.count { it.stunden.isBlank() }
+                        if (offeneZettel > 0) put(Routes.STUNDENZETTEL_LISTE, offeneZettel)
+                    }
+                }
+
+                // „Was ist neu"-Hinweis einmal pro Version
+                var zeigeWasIstNeu by remember {
+                    mutableStateOf(viewModel.wasIstNeuFaellig(BuildConfig.VERSION_NAME))
+                }
+
                 fun openDrawer() = scope.launch { drawerState.open() }
                 fun navigateFromDrawer(route: String) {
                     scope.launch { drawerState.close() }
@@ -107,7 +138,10 @@ class MainActivity : ComponentActivity() {
                         AppDrawerContent(
                             mitarbeiter = settings.mitarbeiter,
                             currentRoute = currentRoute,
-                            onNavigate = ::navigateFromDrawer
+                            badges = badges,
+                            gepinnt = gepinnt,
+                            onNavigate = ::navigateFromDrawer,
+                            onTogglePin = { viewModel.toggleMenuePin(it) }
                         )
                     }
                 ) {
@@ -275,7 +309,36 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 }
+
+                if (zeigeWasIstNeu) {
+                    WasIstNeuDialog(onDismiss = {
+                        viewModel.wasIstNeuGesehen(BuildConfig.VERSION_NAME)
+                        zeigeWasIstNeu = false
+                    })
+                }
             }
         }
     }
+}
+
+@Composable
+private fun WasIstNeuDialog(onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Verstanden") }
+        },
+        title = { Text("Neu in Version 2.0") },
+        text = {
+            Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    "Neues Menü links (Symbol oben links oder von der Kante wischen)",
+                    "Dashboard als Startseite mit Kennzahlen",
+                    "Globale Suche über die Lupe oben",
+                    "KI-Vorschläge direkt im Prüfbogen",
+                    "Menüpunkte lange drücken zum Anpinnen"
+                ).forEach { Text("•  $it", style = MaterialTheme.typography.bodyMedium) }
+            }
+        }
+    )
 }
