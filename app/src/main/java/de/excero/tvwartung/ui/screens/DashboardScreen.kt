@@ -56,7 +56,8 @@ fun DashboardScreen(
     onArbeitszeit: () -> Unit,
     onVerwaltung: () -> Unit,
     onKiPruefung: () -> Unit,
-    onSuche: () -> Unit
+    onSuche: () -> Unit,
+    onOffeneZimmer: () -> Unit
 ) {
     val rooms by viewModel.rooms.collectAsState()
     val inspectionsInPeriod by viewModel.inspectionsInPeriod.collectAsState()
@@ -147,6 +148,7 @@ fun DashboardScreen(
             }
 
             item {
+                val offeneZimmer = aktiveRooms.size - geprueft.size
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     KpiKachel(
                         titel = "Geprüft",
@@ -155,13 +157,22 @@ fun DashboardScreen(
                         modifier = Modifier.weight(1f)
                     )
                     KpiKachel(
-                        titel = "Offene Zettel",
-                        wert = "$offeneZettel",
-                        farbe = MaterialTheme.colorScheme.primary,
-                        onClick = onArbeitszeit,
+                        titel = "Offene Zimmer",
+                        wert = "$offeneZimmer",
+                        farbe = if (offeneZimmer > 0) WarnAmber else OkGreen,
+                        onClick = onOffeneZimmer,
                         modifier = Modifier.weight(1f)
                     )
                 }
+            }
+            item {
+                KpiKachel(
+                    titel = "Offene Zettel",
+                    wert = "$offeneZettel",
+                    farbe = MaterialTheme.colorScheme.primary,
+                    onClick = onArbeitszeit,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

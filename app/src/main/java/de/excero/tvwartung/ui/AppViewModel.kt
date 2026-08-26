@@ -321,6 +321,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val gepinnteMenue: StateFlow<List<String>> = app.settingsStore.gepinnteMenue
     fun toggleMenuePin(route: String) = app.settingsStore.toggleMenuePin(route)
 
+    /** Zimmerliste auf noch nicht geprüfte Zimmer beschränken (von der Dashboard-Kachel gesetzt). */
+    private val _zimmerNurOffen = MutableStateFlow(false)
+    val zimmerNurOffen: StateFlow<Boolean> = _zimmerNurOffen
+    fun setZimmerNurOffen(nurOffen: Boolean) { _zimmerNurOffen.value = nurOffen }
+
     /** true = für diese App-Version wurde der „Was ist neu"-Hinweis noch nicht gezeigt. */
     fun wasIstNeuFaellig(version: String): Boolean =
         app.settingsStore.wasIstNeuGesehen() != version
@@ -354,6 +359,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logAction(roomId: String, aktion: String) {
         viewModelScope.launch { repository.logAction(roomId, aktion) }
+    }
+
+    /**
+     * Neu aufgenommenes Kamerafoto verarbeiten: Wasserzeichen (Station/Zimmer +
+     * Zeitstempel) einbrennen, protokollieren, Prüfbericht-PDF aktualisieren.
+     */
+    fun verarbeiteNeuesFoto(roomId: String, datei: java.io.File, dateFolder: String, onDone: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val room = repository.getRoom(roomId)
+            val ort = if (room != null) "${room.station} · Zimmer ${room.zimmer}" else roomId
+            val zeit = Dates.nowStempel()
+            photoStore.applyWatermark(datei, listOf(ort, zeit))
+            repository.logAction(roomId, "Foto aufgenommen")
+            aktualisiereBerichtPdfIntern(roomId, dateFolder)
+            withContext(Dispatchers.Main) { onDone() }
+        }
     }
 
     fun saveInspection(

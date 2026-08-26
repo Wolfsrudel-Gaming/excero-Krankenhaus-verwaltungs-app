@@ -400,11 +400,21 @@ fun PruefbogenScreen(
 
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Bemerkungen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Bemerkungen",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        DiktierButton(onText = { gesagt ->
+                            bemerkungen = if (bemerkungen.isBlank()) gesagt else "$bemerkungen $gesagt"
+                        })
+                    }
                     OutlinedTextField(
                         value = bemerkungen,
                         onValueChange = { bemerkungen = it },
-                        placeholder = { Text("Freitext, z. B. besondere Vorkommnisse") },
+                        placeholder = { Text("Freitext, z. B. besondere Vorkommnisse – oder Mikrofon antippen") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2
                     )

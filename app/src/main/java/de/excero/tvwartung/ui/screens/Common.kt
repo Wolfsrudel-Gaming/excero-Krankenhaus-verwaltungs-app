@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -182,6 +183,39 @@ fun SkeletonList(anzahl: Int = 6, modifier: Modifier = Modifier) {
                 corner = 12
             )
         }
+    }
+}
+
+/**
+ * Mikrofon-Knopf für Spracheingabe (Diktierfunktion): öffnet die Android-
+ * Spracherkennung (deutsch) und gibt den erkannten Text zurück. Tut nichts,
+ * wenn kein Spracherkenner verfügbar ist.
+ */
+@Composable
+fun DiktierButton(onText: (String) -> Unit, modifier: Modifier = Modifier) {
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val text = result.data
+            ?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+        if (!text.isNullOrBlank()) onText(text)
+    }
+    IconButton(
+        onClick = {
+            val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "de-DE")
+                putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Bemerkung diktieren …")
+            }
+            runCatching { launcher.launch(intent) }
+        },
+        modifier = modifier
+    ) {
+        Icon(Icons.Outlined.Mic, contentDescription = "Diktieren")
     }
 }
 

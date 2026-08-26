@@ -162,7 +162,11 @@ class MainActivity : ComponentActivity() {
                                 onArbeitszeit = { navigateFromDrawer(Routes.STUNDENZETTEL_LISTE) },
                                 onVerwaltung = { navigateFromDrawer(Routes.VERWALTUNG) },
                                 onKiPruefung = { navigateFromDrawer(Routes.KI_PRUEFUNG) },
-                                onSuche = { navController.navigate(Routes.SUCHE_GLOBAL) }
+                                onSuche = { navController.navigate(Routes.SUCHE_GLOBAL) },
+                                onOffeneZimmer = {
+                                    viewModel.setZimmerNurOffen(true)
+                                    navigateFromDrawer(Routes.HOME)
+                                }
                             )
                         }
                         composable(Routes.HOME) {

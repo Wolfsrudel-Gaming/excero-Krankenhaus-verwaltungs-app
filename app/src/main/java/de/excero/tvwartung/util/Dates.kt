@@ -37,6 +37,9 @@ object Dates {
 
     fun todayGerman(): String = LocalDate.now().format(german)
 
+    /** Aktueller Zeitstempel „TT.MM.JJJJ HH:MM" (für Foto-Wasserzeichen). */
+    fun nowStempel(): String = java.time.LocalDateTime.now().format(germanDateTime)
+
     /** Ordnername im Format JJJJMMTT, z. B. 20260714. */
     fun todayFolder(): String = LocalDate.now().format(folder)
 

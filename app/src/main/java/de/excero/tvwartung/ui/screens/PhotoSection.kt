@@ -67,16 +67,16 @@ fun PhotoSection(
     val takePicture = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
-        pendingPhoto?.let { (file, label) ->
+        pendingPhoto?.let { (file, _) ->
             if (success) {
-                viewModel.logAction(roomId, "Foto aufgenommen ($label)")
-                viewModel.aktualisiereBerichtPdf(roomId, dateFolder)
+                // Wasserzeichen (Station/Zimmer + Zeitstempel) einbrennen, dann aktualisieren
+                viewModel.verarbeiteNeuesFoto(roomId, file, dateFolder) { refresh++ }
             } else {
                 file.delete()
+                refresh++
             }
         }
         pendingPhoto = null
-        refresh++
     }
 
     val pickFromGallery = rememberLauncherForActivityResult(

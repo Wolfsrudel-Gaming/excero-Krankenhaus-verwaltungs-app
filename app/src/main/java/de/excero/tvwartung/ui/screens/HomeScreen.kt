@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -49,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -97,14 +99,23 @@ fun HomeScreen(
     val update by viewModel.updateVerfuegbar.collectAsState()
     val aktiveRooms = remember(rooms) { rooms.filter { !it.inaktiv } }
     val inaktiveRooms = remember(rooms) { rooms.filter { it.inaktiv } }
-    val filtered = remember(aktiveRooms, query) {
-        if (query.isBlank()) aktiveRooms
-        else aktiveRooms.filter {
-            it.id.contains(query, true) ||
-                it.station.contains(query, true) ||
-                it.zimmer.contains(query, true) ||
-                it.seriennummer.contains(query, true) ||
-                it.freenetId.contains(query, true)
+
+    // „Nur ungeprüfte" – kann von der Dashboard-Kachel „Offene Zimmer" gesetzt werden
+    val nurOffenGlobal by viewModel.zimmerNurOffen.collectAsState()
+    var nurOffen by remember { mutableStateOf(false) }
+    LaunchedEffect(nurOffenGlobal) {
+        if (nurOffenGlobal) { nurOffen = true; viewModel.setZimmerNurOffen(false) }
+    }
+
+    val filtered = remember(aktiveRooms, query, nurOffen, checkedInPeriod) {
+        aktiveRooms.filter { room ->
+            val passtSuche = query.isBlank() ||
+                room.id.contains(query, true) ||
+                room.station.contains(query, true) ||
+                room.zimmer.contains(query, true) ||
+                room.seriennummer.contains(query, true) ||
+                room.freenetId.contains(query, true)
+            passtSuche && (!nurOffen || room.id !in checkedInPeriod)
         }
     }
     val grouped = remember(filtered) {
@@ -187,6 +198,11 @@ fun HomeScreen(
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            FilterChip(
+                selected = nurOffen,
+                onClick = { nurOffen = !nurOffen },
+                label = { Text("Nur ungeprüfte") }
+            )
             AssistChip(
                 onClick = onFreenet,
                 label = { Text("Freenet-Ablauf") },

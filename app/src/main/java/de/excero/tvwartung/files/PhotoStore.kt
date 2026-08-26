@@ -1,10 +1,18 @@
 package de.excero.tvwartung.files
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.media.ExifInterface
 import android.net.Uri
 import androidx.core.content.FileProvider
 import de.excero.tvwartung.util.Dates
 import java.io.File
+import java.io.FileOutputStream
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -76,6 +84,55 @@ class PhotoStore(private val context: Context) {
      */
     fun pdfFileFor(roomId: String, dateFolder: String): File =
         File(dirFor(roomId, dateFolder), "Pruefbericht_${roomId}_$dateFolder.pdf")
+
+    /**
+     * Brennt ein Wasserzeichen (mehrere Zeilen, z. B. Station/Zimmer + Zeitstempel)
+     * unten ins Foto ein – als Nachweis, wann und wo es aufgenommen wurde. Die
+     * EXIF-Ausrichtung wird vorher angewandt, damit die Schrift richtig herum steht.
+     */
+    fun applyWatermark(file: File, zeilen: List<String>) {
+        runCatching {
+            val orientation = ExifInterface(file.absolutePath)
+                .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: return
+            val aufrecht = nachExif(decoded, orientation)
+            val bmp = if (aufrecht.isMutable) aufrecht else aufrecht.copy(Bitmap.Config.ARGB_8888, true)
+            val canvas = Canvas(bmp)
+            val w = bmp.width.toFloat()
+            val h = bmp.height.toFloat()
+            val textSize = (w * 0.030f).coerceIn(26f, 90f)
+            val pad = textSize * 0.5f
+            val zeilenHoehe = textSize * 1.3f
+            val bandHoehe = pad * 2 + zeilenHoehe * zeilen.size
+
+            val hintergrund = Paint().apply { color = Color.argb(115, 0, 0, 0) }
+            canvas.drawRect(0f, h - bandHoehe, w, h, hintergrund)
+
+            val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                this.textSize = textSize
+                setShadowLayer(textSize * 0.12f, 0f, 0f, Color.BLACK)
+                isFakeBoldText = true
+            }
+            var y = h - bandHoehe + pad + textSize
+            zeilen.forEach { zeile ->
+                canvas.drawText(zeile, pad, y, text)
+                y += zeilenHoehe
+            }
+            FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        }
+    }
+
+    private fun nachExif(bmp: Bitmap, orientation: Int): Bitmap {
+        val m = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+            else -> return bmp
+        }
+        return Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+    }
 
     fun delete(file: File) {
         file.delete()
