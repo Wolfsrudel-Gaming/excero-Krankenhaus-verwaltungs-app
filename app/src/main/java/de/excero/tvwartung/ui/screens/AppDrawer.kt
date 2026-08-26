@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.FindInPage
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.MeetingRoom
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Settings
@@ -64,6 +65,7 @@ val drawerGroups = listOf(
         listOf(
             DrawerItem(Routes.FREENET, "Freenet-Ablauf", Icons.Outlined.Timer),
             DrawerItem(Routes.STATISTIK, "Statistik", Icons.Outlined.QueryStats),
+            DrawerItem(Routes.PROFIL, "Mein Profil", Icons.Outlined.Person),
             DrawerItem(Routes.SUCHE, "Berichte & Papierkorb", Icons.Outlined.FindInPage),
             DrawerItem(Routes.KI_PRUEFUNG, "KI-Prüfung", Icons.Outlined.AutoAwesome)
         )

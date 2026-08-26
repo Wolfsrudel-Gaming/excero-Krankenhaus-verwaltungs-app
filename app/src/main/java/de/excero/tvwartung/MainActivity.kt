@@ -39,6 +39,7 @@ import de.excero.tvwartung.ui.screens.FreenetScreen
 import de.excero.tvwartung.ui.screens.GlobalSearchScreen
 import de.excero.tvwartung.ui.screens.HomeScreen
 import de.excero.tvwartung.ui.screens.KiPruefungScreen
+import de.excero.tvwartung.ui.screens.ProfileScreen
 import de.excero.tvwartung.ui.screens.StatistikScreen
 import de.excero.tvwartung.ui.screens.SucheScreen
 import de.excero.tvwartung.ui.screens.PruefbogenScreen
@@ -65,6 +66,7 @@ object Routes {
     const val SUCHE = "suche"
     const val SUCHE_GLOBAL = "suche_global"
     const val KI_PRUEFUNG = "ki_pruefung"
+    const val PROFIL = "profil"
     fun room(id: String) = "room/${URLEncoder.encode(id, "UTF-8")}"
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
     fun bericht(id: Long) = "bericht/$id"
@@ -206,6 +208,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(Routes.KI_PRUEFUNG) {
                             KiPruefungScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Routes.PROFIL) {
+                            ProfileScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() }
                             )

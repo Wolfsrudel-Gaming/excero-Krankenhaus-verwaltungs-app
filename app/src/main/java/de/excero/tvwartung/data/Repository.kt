@@ -200,6 +200,9 @@ class Repository(private val db: AppDatabase) {
     suspend fun getAllEintraege(): List<StundenzettelEintrag> =
         db.stundenzettelEintragDao().getAll()
 
+    val alleEintraege: Flow<List<StundenzettelEintrag>> =
+        db.stundenzettelEintragDao().observeAll()
+
     suspend fun upsertEintrag(eintrag: StundenzettelEintrag) =
         db.stundenzettelEintragDao().upsert(eintrag.copy(updatedAt = Dates.nowIsoDateTime()))
 

@@ -93,6 +93,9 @@ interface StundenzettelEintragDao {
     @Query("SELECT * FROM stundenzettel_eintraege")
     suspend fun getAll(): List<StundenzettelEintrag>
 
+    @Query("SELECT * FROM stundenzettel_eintraege")
+    fun observeAll(): Flow<List<StundenzettelEintrag>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(eintrag: StundenzettelEintrag)
 

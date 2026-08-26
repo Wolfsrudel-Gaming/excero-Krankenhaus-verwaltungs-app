@@ -1,6 +1,7 @@
 package de.excero.tvwartung.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,7 +34,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,8 +58,20 @@ fun StatistikScreen(
     viewModel: AppViewModel,
     onBack: () -> Unit
 ) {
-    val berichte by viewModel.alleBerichte.collectAsState()
+    val alleB by viewModel.alleBerichte.collectAsState()
     val rooms by viewModel.rooms.collectAsState()
+
+    var zeitraum by remember { mutableStateOf(StatZeitraum.GESAMT) }
+    val berichte = remember(alleB, zeitraum) {
+        val heute = java.time.LocalDate.now()
+        val cutoff = when (zeitraum) {
+            StatZeitraum.GESAMT -> null
+            StatZeitraum.TAGE30 -> heute.minusDays(30).toString()
+            StatZeitraum.MONATE12 -> heute.minusDays(365).toString()
+            StatZeitraum.JAHR -> "${heute.year}-01-01"
+        }
+        if (cutoff == null) alleB else alleB.filter { it.datum >= cutoff }
+    }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -84,6 +101,20 @@ fun StatistikScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Zeitraum-Auswahl
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatZeitraum.entries.forEach { z ->
+                    FilterChip(
+                        selected = zeitraum == z,
+                        onClick = { zeitraum = z },
+                        label = { Text(z.label) }
+                    )
+                }
+            }
+
             // Kennzahlen oben
             val zimmerGeprueft = remember(berichte) { berichte.map { it.roomId }.toSet().size }
             val verlaengert = remember(berichte) { berichte.count { it.freenetVerlaengert == true } }
@@ -91,6 +122,22 @@ fun StatistikScreen(
                 KennzahlCard("Prüfungen", "${berichte.size}", Modifier.weight(1f))
                 KennzahlCard("Zimmer geprüft", "$zimmerGeprueft / ${rooms.count { !it.inaktiv }}", Modifier.weight(1f))
                 KennzahlCard("Verlängert", "$verlaengert", Modifier.weight(1f))
+            }
+
+            // Kreisdiagramm: i.O. vs. n.i.O. über alle Prüfpunkte
+            val ioNio = remember(berichte) {
+                var io = 0; var nio = 0
+                berichte.forEach { insp ->
+                    insp.punkte().forEach { (_, e, _) ->
+                        if (e == true) io++ else if (e == false) nio++
+                    }
+                }
+                io to nio
+            }
+            if (ioNio.first + ioNio.second > 0) {
+                StatCard("i.O. / n.i.O. (alle Prüfpunkte)") {
+                    IoNioDonut(io = ioNio.first, nio = ioNio.second)
+                }
             }
 
             // Prüfungen pro Monat (letzte 12 Monate mit Prüfungen)
@@ -284,5 +331,44 @@ private fun BalkenZeile(
                     .background(farbe, RoundedCornerShape(4.dp))
             )
         }
+    }
+}
+
+enum class StatZeitraum(val label: String) {
+    GESAMT("Gesamt"),
+    TAGE30("Letzte 30 Tage"),
+    JAHR("Dieses Jahr"),
+    MONATE12("Letzte 12 Monate")
+}
+
+/** Ringdiagramm i.O. (grün) vs. n.i.O. (rot) mit Legende. */
+@Composable
+private fun IoNioDonut(io: Int, nio: Int) {
+    val total = (io + nio).coerceAtLeast(1)
+    val ioAnteil = io.toFloat() / total
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        androidx.compose.foundation.Canvas(Modifier.size(120.dp)) {
+            val stroke = 26.dp.toPx()
+            val inset = stroke / 2
+            val bogen = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+            val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
+            // Voller Ring in n.i.O.-Farbe, dann i.O.-Anteil grün darüber
+            drawArc(ErrorRed, -90f, 360f, false, topLeft = topLeft, size = bogen,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+            drawArc(OkGreen, -90f, ioAnteil * 360f, false, topLeft = topLeft, size = bogen,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            DonutLegende(OkGreen, "i.O.", io, "${(ioAnteil * 100).toInt()} %")
+            DonutLegende(ErrorRed, "n.i.O.", nio, "${(100 - (ioAnteil * 100).toInt())} %")
+        }
+    }
+}
+
+@Composable
+private fun DonutLegende(farbe: androidx.compose.ui.graphics.Color, label: String, wert: Int, prozent: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(farbe))
+        Text("$label: $wert  ($prozent)", style = MaterialTheme.typography.bodyMedium)
     }
 }

@@ -559,6 +559,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val signatureStore get() = app.signatureStore
 
+    val alleEintraege: StateFlow<List<de.excero.tvwartung.data.StundenzettelEintrag>> =
+        repository.alleEintraege.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val alleStundenzettel: StateFlow<List<StundenzettelEntity>> = repository.stundenzettel
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
