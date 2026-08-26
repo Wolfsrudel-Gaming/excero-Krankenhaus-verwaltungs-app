@@ -79,6 +79,11 @@ geänderte Bestände zurück auf den Geräten.
 - `GET /api/sync/material` Antwort `{ "material": [ { name, bestand, bestandAktiv,
   aktiv, sortIndex, updatedAt } ] }` — die App merged LWW über `updatedAt`.
 
+### GET /api/sync/lieferanten (ab App v2.0-Beta) – nur lesen
+Antwort `{ "lieferanten": [ { name, kontakt, telefon, email, kundennummer,
+notiz } ] }` – aktive Lieferanten aus dem Web-Lager, damit die App sie
+anzeigen kann (keine Bearbeitung in der App).
+
 Brücke zum Web-Lager: Ist ein `lager_artikel` über `app_material_name` mit dem
 Material-Namen verknüpft, spiegelt der Server den Bestand in beide Richtungen
 (App-Änderung → `lager_artikel.bestand` + Korrektur-Buchung „App-Sync“;

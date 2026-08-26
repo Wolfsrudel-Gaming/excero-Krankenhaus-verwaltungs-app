@@ -330,6 +330,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         app.settingsStore.addVorlage(name, arbeiten)
     fun deleteArbeitsvorlage(name: String) = app.settingsStore.deleteVorlage(name)
 
+    // ----- Lager: Lieferanten (nur lesen) -----
+
+    /** Lieferanten vom Server laden (read-only). Leere Liste, wenn nicht erreichbar. */
+    suspend fun ladeLieferanten(): List<de.excero.tvwartung.sync.Lieferant> =
+        withContext(Dispatchers.IO) {
+            val s = settings.value
+            if (s.serverUrl.isBlank() || s.apiKey.isBlank()) return@withContext emptyList()
+            runCatching {
+                de.excero.tvwartung.sync.LagerClient(s.serverUrl, s.apiKey).lieferanten()
+            }.getOrDefault(emptyList())
+        }
+
     // ----- Menü: angepinnte Seiten + „Was ist neu" -----
 
     val gepinnteMenue: StateFlow<List<String>> = app.settingsStore.gepinnteMenue

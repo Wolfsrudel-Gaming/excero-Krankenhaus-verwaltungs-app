@@ -31,10 +31,17 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -211,12 +218,78 @@ fun VerwaltungScreen(
                     NeuerPruefpunktEingabe(viewModel)
                 }
             }
+
+            // Lieferanten (nur lesen, aus dem Web-Lager)
+            LieferantenCard(viewModel)
+        }
+    }
+}
+
+@Composable
+private fun LieferantenCard(viewModel: AppViewModel) {
+    var lieferanten by remember { mutableStateOf<List<de.excero.tvwartung.sync.Lieferant>?>(null) }
+    var laedt by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    fun laden() {
+        scope.launch {
+            laedt = true
+            lieferanten = viewModel.ladeLieferanten()
+            laedt = false
+        }
+    }
+    LaunchedEffect(Unit) { laden() }
+
+    Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Lieferanten",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { laden() }, enabled = !laedt) { Text("Aktualisieren") }
+            }
+            Text(
+                "Nur lesend – gepflegt im Web-Lager.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            HorizontalDivider()
+            val liste = lieferanten
+            when {
+                laedt && liste == null -> SkeletonBox(Modifier.fillMaxWidth().height(48.dp), corner = 10)
+                liste.isNullOrEmpty() -> Text(
+                    "Keine Lieferanten geladen (Server nicht erreichbar oder keine hinterlegt).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                else -> liste.forEach { l ->
+                    Column(Modifier.padding(vertical = 2.dp)) {
+                        Text(l.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        val details = listOfNotNull(
+                            l.kontakt.ifBlank { null },
+                            l.telefon.ifBlank { null },
+                            l.email.ifBlank { null },
+                            l.kundennummer.ifBlank { null }?.let { "Kd-Nr. $it" }
+                        )
+                        if (details.isNotEmpty()) {
+                            Text(
+                                details.joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun MaterialRow(material: Material, viewModel: AppViewModel) {
+    var zeigeBuchung by remember { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
@@ -241,6 +314,9 @@ private fun MaterialRow(material: Material, viewModel: AppViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.width(8.dp))
+                if (material.bestandAktiv) {
+                    TextButton(onClick = { zeigeBuchung = true }) { Text("Buchen…") }
+                }
                 TextButton(onClick = {
                     viewModel.updateMaterial(material.copy(aktiv = !material.aktiv))
                 }) {
@@ -270,6 +346,72 @@ private fun MaterialRow(material: Material, viewModel: AppViewModel) {
             ) { Icon(Icons.Outlined.Add, contentDescription = "Bestand erhöhen") }
         }
     }
+
+    if (zeigeBuchung) {
+        MaterialBuchungDialog(
+            material = material,
+            onBuchen = { neuerBestand ->
+                viewModel.updateMaterial(material.copy(bestand = neuerBestand))
+                zeigeBuchung = false
+            },
+            onDismiss = { zeigeBuchung = false }
+        )
+    }
+}
+
+/** Manuelle Bestandsbuchung: Eingang (+), Ausgang (–) oder Korrektur (=). */
+@Composable
+private fun MaterialBuchungDialog(
+    material: Material,
+    onBuchen: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var typ by remember { mutableStateOf("ausgang") }
+    var mengeText by remember { mutableStateOf("") }
+    val menge = mengeText.toIntOrNull()
+    val neuerBestand = when (typ) {
+        "eingang" -> material.bestand + (menge ?: 0)
+        "ausgang" -> material.bestand - (menge ?: 0)
+        else -> menge ?: material.bestand
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Buchen: ${material.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Aktueller Bestand: ${material.bestand}", style = MaterialTheme.typography.bodySmall)
+                listOf("eingang" to "Eingang (+)", "ausgang" to "Ausgang (–)", "korrektur" to "Korrektur (= setzen)")
+                    .forEach { (wert, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { typ = wert }
+                        ) {
+                            RadioButton(selected = typ == wert, onClick = { typ = wert })
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                OutlinedTextField(
+                    value = mengeText,
+                    onValueChange = { mengeText = it.filter { c -> c.isDigit() } },
+                    label = { Text(if (typ == "korrektur") "Neuer Bestand" else "Menge") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (menge != null) {
+                    Text(
+                        "Neuer Bestand: $neuerBestand",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (neuerBestand < 0) ErrorRed else MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onBuchen(neuerBestand) }, enabled = menge != null) { Text("Buchen") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
+    )
 }
 
 @Composable

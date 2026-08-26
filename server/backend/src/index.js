@@ -789,6 +789,14 @@ router.get('/api/sync/material', requireApiKey, async (req, res) => {
   });
 });
 
+// Lieferanten für die App (nur lesen) – aus dem im Web gepflegten Lager.
+router.get('/api/sync/lieferanten', requireApiKey, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT name, kontakt, telefon, email, kundennummer, notiz
+     FROM lieferanten WHERE aktiv = TRUE ORDER BY name`);
+  res.json({ lieferanten: rows });
+});
+
 router.post('/api/sync/pruefpunkte', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
   await replaceAll('app_pruefpunkte', ['titel', 'aktiv', 'sort_index'],
     (req.body.punkte || []).map((p) => ({
