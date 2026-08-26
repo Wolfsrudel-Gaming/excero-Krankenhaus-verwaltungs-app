@@ -120,8 +120,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             sperren.filter { it.gesperrtAm >= start }.map { it.roomId }.toSet()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
-    fun setKeinZutritt(roomId: String, gesperrt: Boolean, grund: String = "") {
-        viewModelScope.launch { repository.setKeinZutritt(roomId, gesperrt, grund) }
+    /** Alle Kein-Zutritt-Vermerke (inkl. Grund + Wiedervorlage). */
+    val sperren: StateFlow<List<de.excero.tvwartung.data.RoomSperre>> =
+        repository.sperren.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setKeinZutritt(
+        roomId: String, gesperrt: Boolean, grund: String = "", wiedervorlage: String = ""
+    ) {
+        viewModelScope.launch { repository.setKeinZutritt(roomId, gesperrt, grund, wiedervorlage) }
     }
 
     private val _message = MutableStateFlow<String?>(null)

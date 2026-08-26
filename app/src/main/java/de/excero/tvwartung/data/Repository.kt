@@ -35,14 +35,16 @@ class Repository(private val db: AppDatabase) {
      * Vermerk mit aktuellem Datum (und optionalem Grund) in den Lebenslauf
      * geschrieben; beim Aufheben wird der heutige Vermerk wieder entfernt.
      */
-    suspend fun setKeinZutritt(roomId: String, gesperrt: Boolean, grund: String = "") {
+    suspend fun setKeinZutritt(
+        roomId: String, gesperrt: Boolean, grund: String = "", wiedervorlage: String = ""
+    ) {
         val basis = "${Dates.todayGerman()}: Zimmer konnte nicht betreten werden"
         val vermerk = if (grund.isBlank()) basis else "$basis ($grund)"
         fun istHeutigerVermerk(zeile: String) = zeile.trim().startsWith(basis)
         db.withTransaction {
             val room = db.tvRoomDao().getById(roomId)
             if (gesperrt) {
-                db.roomSperreDao().upsert(RoomSperre(roomId, Dates.todayIso(), grund.trim()))
+                db.roomSperreDao().upsert(RoomSperre(roomId, Dates.todayIso(), grund.trim(), wiedervorlage.trim()))
                 if (room != null) {
                     // Bereits vorhandenen heutigen Vermerk ersetzen (z. B. Grund nachgetragen)
                     val zeilen = room.lebenslauf.lines().filterNot { istHeutigerVermerk(it) }

@@ -345,7 +345,9 @@ fun HomeScreen(
             station = station,
             zimmer = stationRooms.map { it.id to it.zimmer },
             gesperrt = gesperrt,
-            onToggle = { roomId, blocked, grund -> viewModel.setKeinZutritt(roomId, blocked, grund) },
+            onToggle = { roomId, blocked, grund, wiedervorlage ->
+                viewModel.setKeinZutritt(roomId, blocked, grund, wiedervorlage)
+            },
             onDismiss = { sperrDialogStation = null }
         )
     }
@@ -360,10 +362,11 @@ private fun SperrDialog(
     station: String,
     zimmer: List<Pair<String, String>>,   // (roomId, Zimmerbezeichnung)
     gesperrt: Set<String>,
-    onToggle: (String, Boolean, String) -> Unit,
+    onToggle: (String, Boolean, String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var grund by remember { mutableStateOf("") }
+    var wiedervorlage by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Station $station – Zutritt") },
@@ -371,8 +374,7 @@ private fun SperrDialog(
             Column {
                 Text(
                     "Zimmer ankreuzen, die laut Station nicht betreten werden dürfen. " +
-                        "Die Markierung gilt für den aktuellen Prüfzeitraum und wird mit " +
-                        "Datum im Lebenslauf vermerkt.",
+                        "Grund und Wiedervorlage gelten für die jetzt angekreuzten Zimmer.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -381,6 +383,14 @@ private fun SperrDialog(
                     value = grund,
                     onValueChange = { grund = it },
                     label = { Text("Grund (optional, z. B. Isolation)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = wiedervorlage,
+                    onValueChange = { wiedervorlage = it },
+                    label = { Text("Wiedervorlage am (TT.MM.JJJJ, optional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -394,7 +404,10 @@ private fun SperrDialog(
                         ) {
                             Checkbox(
                                 checked = blocked,
-                                onCheckedChange = { onToggle(roomId, it, grund) }
+                                onCheckedChange = {
+                                    val iso = if (it) Dates.germanToIso(wiedervorlage) ?: "" else ""
+                                    onToggle(roomId, it, grund, iso)
+                                }
                             )
                             Text(
                                 "Zimmer $bezeichnung",

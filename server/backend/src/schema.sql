@@ -53,9 +53,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (lower(usern
 
 -- Voll-Synchronisation: Spiegel der App-Daten (Anzeige im Web optional)
 CREATE TABLE IF NOT EXISTS sperren (
-    room_id     TEXT PRIMARY KEY,
-    gesperrt_am TEXT NOT NULL,
-    grund       TEXT NOT NULL DEFAULT ''
+    room_id       TEXT PRIMARY KEY,
+    gesperrt_am   TEXT NOT NULL,
+    grund         TEXT NOT NULL DEFAULT '',
+    wiedervorlage TEXT NOT NULL DEFAULT ''   -- optionales „nochmal versuchen am"-Datum
 );
 CREATE TABLE IF NOT EXISTS material (
     name          TEXT PRIMARY KEY,
@@ -84,6 +85,8 @@ CREATE INDEX IF NOT EXISTS idx_inspections_created ON inspections(created_at);
 
 -- v2.0: bidirektionaler Material-/Bestand-Sync (App ⇄ Web-Lager)
 ALTER TABLE material ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT '';
+-- v2.0: Kein-Zutritt mit optionalem Wiedervorlage-Datum
+ALTER TABLE sperren ADD COLUMN IF NOT EXISTS wiedervorlage TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS mitarbeiter (
     name  TEXT PRIMARY KEY,

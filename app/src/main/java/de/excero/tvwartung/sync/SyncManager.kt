@@ -323,6 +323,7 @@ class SyncManager(
             repository.getAllSperren().forEach { sp ->
                 sperrenJson.put(JSONObject().apply {
                     put("roomId", sp.roomId); put("gesperrtAm", sp.gesperrtAm); put("grund", sp.grund)
+                    put("wiedervorlage", sp.wiedervorlage)
                 })
             }
             httpJson("/api/sync/sperren", "POST", JSONObject().put("sperren", sperrenJson))

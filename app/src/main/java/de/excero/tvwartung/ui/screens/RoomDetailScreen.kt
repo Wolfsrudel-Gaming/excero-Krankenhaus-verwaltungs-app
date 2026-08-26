@@ -81,8 +81,10 @@ fun RoomDetailScreen(
     val activity by viewModel.activityFor(roomId).collectAsState(initial = emptyList())
     val berichte by viewModel.inspectionsFor(roomId).collectAsState(initial = emptyList())
     val gesperrt by viewModel.gesperrteZimmer.collectAsState()
+    val sperren by viewModel.sperren.collectAsState()
     val current = room ?: return
     val blocked = roomId in gesperrt
+    val sperre = sperren.firstOrNull { it.roomId == roomId }
     var zeigeSperrDialog by remember { mutableStateOf(false) }
     var zeigeArchivDialog by remember { mutableStateOf(false) }
 
@@ -158,10 +160,21 @@ fun RoomDetailScreen(
                             )
                         }
                         Text(
-                            "Dieses Zimmer wurde von der Station für die aktuelle Anfahrt gesperrt.",
+                            "Dieses Zimmer wurde von der Station für die aktuelle Anfahrt gesperrt." +
+                                (sperre?.grund?.takeIf { it.isNotBlank() }?.let { " Grund: $it." } ?: ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
+                        sperre?.wiedervorlage?.takeIf { it.isNotBlank() }?.let { wv ->
+                            val faellig = wv <= Dates.todayIso()
+                            Text(
+                                (if (faellig) "⏰ Wiedervorlage fällig – heute erneut versuchen (seit "
+                                else "Wiedervorlage am ") + Dates.isoToGerman(wv) + (if (faellig) ")" else ""),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
                         TextButton(onClick = { viewModel.setKeinZutritt(roomId, false) }) {
                             Text("Zutritt wieder möglich – Sperre aufheben")
                         }
@@ -237,6 +250,7 @@ fun RoomDetailScreen(
 
     if (zeigeSperrDialog) {
         var grund by remember { mutableStateOf("") }
+        var wiedervorlage by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { zeigeSperrDialog = false },
             title = { Text("Kein Zutritt vermerken") },
@@ -256,11 +270,19 @@ fun RoomDetailScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = wiedervorlage,
+                        onValueChange = { wiedervorlage = it },
+                        label = { Text("Wiedervorlage am (TT.MM.JJJJ, optional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.setKeinZutritt(roomId, true, grund)
+                    viewModel.setKeinZutritt(roomId, true, grund, Dates.germanToIso(wiedervorlage) ?: "")
                     zeigeSperrDialog = false
                 }) { Text("Vermerken") }
             },

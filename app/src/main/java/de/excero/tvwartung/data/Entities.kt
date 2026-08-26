@@ -119,7 +119,9 @@ data class RoomSperre(
     @PrimaryKey val roomId: String,
     val gesperrtAm: String,              // ISO-Datum der Meldung
     @ColumnInfo(defaultValue = "")
-    val grund: String = ""               // optional, z. B. "Isolation"
+    val grund: String = "",              // optional, z. B. "Isolation"
+    @ColumnInfo(defaultValue = "")
+    val wiedervorlage: String = ""       // optional ISO-Datum: „nochmal versuchen am"
 )
 
 /**

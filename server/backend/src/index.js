@@ -728,9 +728,10 @@ async function replaceAll(tabelle, spalten, zeilen) {
 }
 
 router.post('/api/sync/sperren', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
-  await replaceAll('sperren', ['room_id', 'gesperrt_am', 'grund'],
+  await replaceAll('sperren', ['room_id', 'gesperrt_am', 'grund', 'wiedervorlage'],
     (req.body.sperren || []).map((s) => ({
-      room_id: s.roomId, gesperrt_am: s.gesperrtAm || '', grund: s.grund || '' })));
+      room_id: s.roomId, gesperrt_am: s.gesperrtAm || '', grund: s.grund || '',
+      wiedervorlage: s.wiedervorlage || '' })));
   res.json({ ok: true });
 });
 
