@@ -26,7 +26,7 @@ async function viewDashboard() {
 
   el.innerHTML = `
     ${pageHeader('Dashboard', `
-      <a href="/kkh/api/web/export/zimmer" target="_blank" class="btn btn-secondary btn-sm">📊 Export Zimmer</a>
+      <a href="/kkh/api/web/export/zimmer.xlsx" target="_blank" class="btn btn-secondary btn-sm">📊 Export Zimmer</a>
     `)}
 
     ${warnungen.length ? `

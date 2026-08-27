@@ -7,7 +7,7 @@ async function viewStundenzettel() {
   const el = document.getElementById('content-area');
   el.innerHTML = `
     ${pageHeader('Stundenzettel', `
-      <a href="/kkh/api/web/export/stundenzettel" target="_blank" class="btn btn-secondary btn-sm">📊 Excel-Export</a>
+      <a href="/kkh/api/web/export/stundenzettel.xlsx" target="_blank" class="btn btn-secondary btn-sm">📊 Excel-Export</a>
       <button class="btn btn-primary" id="sz-neu">+ Neu</button>
     `)}
     <div class="filter-bar">

@@ -10,7 +10,7 @@ async function viewZimmer() {
   const el = document.getElementById('content-area');
   el.innerHTML = `
     ${pageHeader('Zimmer & Stationen', `
-      <a href="/kkh/api/web/export/zimmer" target="_blank" class="btn btn-secondary btn-sm">📊 Excel-Export</a>
+      <a href="/kkh/api/web/export/zimmer.xlsx" target="_blank" class="btn btn-secondary btn-sm">📊 Excel-Export</a>
       <button class="btn btn-primary" id="z-neu">+ Zimmer</button>
     `)}
     <div class="filter-bar">

@@ -20,7 +20,7 @@ async function viewLagerArtikel() {
   const el = document.getElementById('content-area');
   el.innerHTML = `
     ${pageHeader('Lager · Artikel', `
-      <a href="/kkh/api/web/export/lager-artikel" target="_blank" class="btn btn-secondary btn-sm">📊 Export</a>
+      <a href="/kkh/api/web/export/lager-artikel.xlsx" target="_blank" class="btn btn-secondary btn-sm">📊 Export</a>
       <button class="btn btn-primary" id="art-neu">+ Artikel</button>
     `)}
     <div class="filter-bar">
@@ -290,7 +290,7 @@ async function viewLagerBuchungen() {
     const bis = document.getElementById('buch-bis').value;
     const typ = document.getElementById('buch-typ').value;
     const exportBtn = document.getElementById('buch-export-btn');
-    if (exportBtn) exportBtn.innerHTML = `<a href="/kkh/api/web/export/buchungen?von=${von}&bis=${bis}" target="_blank" class="btn btn-secondary btn-sm">📊 Export</a>`;
+    if (exportBtn) exportBtn.innerHTML = `<a href="/kkh/api/web/export/buchungen.xlsx?von=${von}&bis=${bis}" target="_blank" class="btn btn-secondary btn-sm">📊 Export</a>`;
 
     const container = document.getElementById('buch-container');
     if (!container) return;
@@ -354,7 +354,7 @@ async function viewLagerVerbrauch() {
     const bis = document.getElementById('vb-bis').value;
     const sta = document.getElementById('vb-sta').value;
     const exportEl = document.getElementById('vb-export');
-    if (exportEl) exportEl.innerHTML = `<a href="/kkh/api/web/export/pruefungen?von=${von}&bis=${bis}" target="_blank" class="btn btn-secondary btn-sm">📊 Export</a>`;
+    if (exportEl) exportEl.innerHTML = `<a href="/kkh/api/web/export/pruefungen.xlsx?von=${von}&bis=${bis}" target="_blank" class="btn btn-secondary btn-sm">📊 Export</a>`;
 
     const container = document.getElementById('vb-container');
     if (!container) return;
@@ -405,7 +405,7 @@ async function viewLagerNachbestellung() {
   const el = document.getElementById('content-area');
   el.innerHTML = `
     ${pageHeader('Lager · Nachbestellung', `
-      <a href="/kkh/api/web/export/lager-artikel?nachbestellung=1" target="_blank" class="btn btn-secondary btn-sm">📊 Export</a>
+      <a href="/kkh/api/web/export/lager-artikel.xlsx?nachbestellung=1" target="_blank" class="btn btn-secondary btn-sm">📊 Export</a>
     `)}
     <div id="nb-container"><div class="loading">Wird geladen…</div></div>
   `;
@@ -600,7 +600,7 @@ async function viewAbrechnung() {
     const bis = document.getElementById('ab-bis').value;
     const sta = document.getElementById('ab-sta').value;
     const exportEl = document.getElementById('ab-export');
-    if (exportEl) exportEl.innerHTML = `<a href="/kkh/api/web/export/abrechnung?von=${von}&bis=${bis}" target="_blank" class="btn btn-secondary btn-sm">📊 XLSX-Export</a>`;
+    if (exportEl) exportEl.innerHTML = `<a href="/kkh/api/web/export/abrechnung.xlsx?von=${von}&bis=${bis}" target="_blank" class="btn btn-secondary btn-sm">📊 XLSX-Export</a>`;
 
     const container = document.getElementById('ab-container');
     if (!container) return;
