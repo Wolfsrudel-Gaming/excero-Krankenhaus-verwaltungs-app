@@ -100,20 +100,22 @@ async function viewLagerArtikel() {
           ` },
       ],
     });
-
-    container.addEventListener('click', async (e) => {
-      const editBtn = e.target.closest('.art-edit');
-      const buchenBtn = e.target.closest('.art-buchen');
-      const delBtn = e.target.closest('.art-del');
-      if (editBtn) await modalArtikelBearbeiten(Number(editBtn.dataset.id), lade);
-      else if (buchenBtn) await modalBuchungNeu(Number(buchenBtn.dataset.id), buchenBtn.dataset.name, buchenBtn.dataset.einh, lade);
-      else if (delBtn) {
-        if (!(await confirm('Artikel wirklich deaktivieren?'))) return;
-        try { await api(`/kkh/api/web/lager/artikel/${delBtn.dataset.id}`, { method: 'DELETE' }); toast('Deaktiviert'); lade(); }
-        catch (err) { toast(err.message, 'err'); }
-      }
-    });
   }
+
+  // Aktionen einmalig als Delegation registrieren (nicht in lade(), sonst
+  // stapeln sich bei jedem Neuladen die Listener → mehrfach geöffnete Dialoge).
+  document.getElementById('art-container').addEventListener('click', async (e) => {
+    const editBtn = e.target.closest('.art-edit');
+    const buchenBtn = e.target.closest('.art-buchen');
+    const delBtn = e.target.closest('.art-del');
+    if (editBtn) await modalArtikelBearbeiten(Number(editBtn.dataset.id), lade);
+    else if (buchenBtn) await modalBuchungNeu(Number(buchenBtn.dataset.id), buchenBtn.dataset.name, buchenBtn.dataset.einh, lade);
+    else if (delBtn) {
+      if (!(await confirm('Artikel wirklich deaktivieren?'))) return;
+      try { await api(`/kkh/api/web/lager/artikel/${delBtn.dataset.id}`, { method: 'DELETE' }); toast('Deaktiviert'); lade(); }
+      catch (err) { toast(err.message, 'err'); }
+    }
+  });
 
   document.getElementById('art-neu').addEventListener('click', () => modalArtikelNeu(lade));
   document.getElementById('art-kat').addEventListener('change', lade);
@@ -487,19 +489,20 @@ async function viewLieferanten() {
           ` },
       ],
     });
-
-    container.addEventListener('click', async (e) => {
-      const editBtn = e.target.closest('.lf-edit');
-      const delBtn = e.target.closest('.lf-del');
-      if (editBtn) await modalLieferantBearbeiten(Number(editBtn.dataset.id), lade);
-      else if (delBtn) {
-        const id = delBtn.dataset.id;
-        if (!(await confirm('Lieferant wirklich deaktivieren/aktivieren?'))) return;
-        try { await api(`/kkh/api/web/lieferanten/${id}`, { method: 'DELETE' }); toast('Gespeichert'); lade(); }
-        catch (err) { toast(err.message, 'err'); }
-      }
-    });
   }
+
+  // Aktionen einmalig als Delegation (nicht in lade() – sonst doppelte Dialoge)
+  document.getElementById('lf-container').addEventListener('click', async (e) => {
+    const editBtn = e.target.closest('.lf-edit');
+    const delBtn = e.target.closest('.lf-del');
+    if (editBtn) await modalLieferantBearbeiten(Number(editBtn.dataset.id), lade);
+    else if (delBtn) {
+      const id = delBtn.dataset.id;
+      if (!(await confirm('Lieferant wirklich deaktivieren/aktivieren?'))) return;
+      try { await api(`/kkh/api/web/lieferanten/${id}`, { method: 'DELETE' }); toast('Gespeichert'); lade(); }
+      catch (err) { toast(err.message, 'err'); }
+    }
+  });
 
   document.getElementById('lf-neu').addEventListener('click', () => modalLieferantNeu(lade));
   await lade();
@@ -669,20 +672,21 @@ async function viewMitarbeiter() {
           render: (v, row) => `<button class="btn btn-xs btn-${row.aktiv ? 'danger' : 'secondary'} ma-toggle" data-name="${escH(row.name)}" data-aktiv="${!row.aktiv}">${row.aktiv ? '⛔ Deaktivieren' : '✅ Aktivieren'}</button>` },
       ],
     });
-
-    container.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.ma-toggle');
-      if (btn) {
-        try {
-          await api(`/kkh/api/web/mitarbeiter/${encodeURIComponent(btn.dataset.name)}`, {
-            method: 'PATCH', body: { aktiv: btn.dataset.aktiv === 'true' },
-          });
-          toast('Gespeichert');
-          lade();
-        } catch (err) { toast(err.message, 'err'); }
-      }
-    });
   }
+
+  // Aktionen einmalig als Delegation (nicht in lade() – sonst mehrfach ausgelöst)
+  document.getElementById('ma-container').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.ma-toggle');
+    if (btn) {
+      try {
+        await api(`/kkh/api/web/mitarbeiter/${encodeURIComponent(btn.dataset.name)}`, {
+          method: 'PATCH', body: { aktiv: btn.dataset.aktiv === 'true' },
+        });
+        toast('Gespeichert');
+        lade();
+      } catch (err) { toast(err.message, 'err'); }
+    }
+  });
 
   document.getElementById('ma-neu').addEventListener('click', async () => {
     const res = await modal('Mitarbeiter anlegen', `

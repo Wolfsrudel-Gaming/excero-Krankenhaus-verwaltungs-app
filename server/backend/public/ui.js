@@ -36,8 +36,21 @@ function toast(msg, typ = 'ok') {
    WICHTIG: Formularwerte werden VOR dem Schließen des Modals gesammelt
    und als Objekt an den Resolver übergeben. So kein DOM-nach-remove-Bug.
 */
+// Schutz vor mehrfach geöffneten Dialogen: Wird derselbe Öffnen-Vorgang durch
+// versehentlich doppelte Klick-Listener mehrfach ausgelöst, würden sich Dialoge
+// stapeln. Ein Dialog, der innerhalb desselben „Ticks" nach einem anderen
+// geöffnet wird, wird ignoriert.
+let _letzterModalTick = 0;
+function _dialogGestapelt() {
+  const jetzt = Date.now();
+  if (document.querySelector('.modal-bg') && jetzt - _letzterModalTick < 250) return true;
+  _letzterModalTick = jetzt;
+  return false;
+}
+
 function modal(title, body, buttons = [{ label: 'OK', cls: 'btn-primary', value: 'ok' }]) {
   return new Promise((resolve) => {
+    if (_dialogGestapelt()) { resolve(null); return; }
     const bg = document.createElement('div');
     bg.className = 'modal-bg';
     bg.innerHTML = `
@@ -95,6 +108,7 @@ function mf(result, id) {
 /* ── Bestätigung ─────────────────────────────────────────────────────── */
 function confirm(text) {
   return new Promise((resolve) => {
+    if (_dialogGestapelt()) { resolve(false); return; }
     const bg = document.createElement('div');
     bg.className = 'modal-bg';
     bg.innerHTML = `
