@@ -11,11 +11,52 @@ async function viewBenutzer() {
     ${pageHeader('Benutzer & Zugänge', `
       <button class="btn btn-primary" id="bu-neu">+ Benutzer anlegen</button>
     `)}
+    <div class="settings-section" style="margin-bottom:20px">
+      <h3>🔑 App-Zugang (API-Schlüssel)</h3>
+      <p class="form-hint">Diesen Schlüssel tragen die Handys unter <em>Einstellungen → Server-Synchronisation → API-Schlüssel</em> ein (zusammen mit der Server-URL). Nur für angemeldete Admins sichtbar.</p>
+      <div style="display:flex;gap:8px;align-items:center;max-width:640px;flex-wrap:wrap">
+        <input class="form-control" id="apikey-field" type="password" value="" readonly
+               style="font-family:monospace;flex:1;min-width:240px" placeholder="…">
+        <button class="btn btn-secondary btn-sm" id="apikey-toggle">Anzeigen</button>
+        <button class="btn btn-primary btn-sm" id="apikey-copy">Kopieren</button>
+      </div>
+    </div>
     <div class="alert alert-info" style="margin-bottom:16px">
       <strong>Hinweis:</strong> Passwörter werden sicher als bcrypt-Hash gespeichert. Vergessene Passwörter können hier zurückgesetzt werden.
     </div>
     <div id="bu-container"><div class="loading">Wird geladen…</div></div>
   `;
+
+  // API-Schlüssel laden + Anzeigen/Kopieren
+  (async () => {
+    const f = document.getElementById('apikey-field');
+    const toggle = document.getElementById('apikey-toggle');
+    const copy = document.getElementById('apikey-copy');
+    if (!f) return;
+    try {
+      const k = await api('/kkh/api/web/apikey');
+      f.value = k.apiKey || '';
+    } catch (e) {
+      f.value = '';
+      f.placeholder = 'Konnte nicht geladen werden';
+    }
+    toggle?.addEventListener('click', () => {
+      const zeigen = f.type === 'password';
+      f.type = zeigen ? 'text' : 'password';
+      toggle.textContent = zeigen ? 'Verbergen' : 'Anzeigen';
+    });
+    copy?.addEventListener('click', async () => {
+      if (!f.value) return;
+      try {
+        await navigator.clipboard.writeText(f.value);
+        toast('API-Schlüssel kopiert');
+      } catch {
+        const alt = f.type; f.type = 'text'; f.select();
+        try { document.execCommand('copy'); toast('API-Schlüssel kopiert'); } catch { toast('Kopieren nicht möglich', 'warn'); }
+        f.type = alt;
+      }
+    });
+  })();
 
   async function lade() {
     const container = document.getElementById('bu-container');

@@ -307,6 +307,10 @@ router.post('/api/logout', (req, res) => {
 
 router.get('/api/web/me', requireWebAuth, (req, res) => res.json({ ok: true, username: req.username }));
 
+// API-Schlüssel für die App-Einrichtung – nur für eingeloggte Admins.
+// Bewusst NUR der Sync-API-Key, nicht Admin-/DB-Passwort.
+router.get('/api/web/apikey', requireWebAuth, (req, res) => res.json({ apiKey: API_KEY }));
+
 router.patch('/api/web/me/password', requireWebAuth, express.json(), async (req, res) => {
   const { oldPassword, newPassword } = req.body || {};
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Neues Passwort muss mindestens 6 Zeichen haben' });
