@@ -754,10 +754,24 @@ async function spiegleMaterialNachLager(name, bestand) {
     [rows[0].id, bestand]).catch(() => {});
 }
 
+// Zeitstempel im App-Format (Berlin, naive ISO) für Alt-Clients ohne updatedAt.
+function berlinStamp() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(new Date());
+  const g = (t) => parts.find((p) => p.type === t).value;
+  return `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:${g('second')}`;
+}
+
 router.post('/api/sync/material', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
   let uebernommen = 0;
   for (const m of req.body.material || []) {
     if (!m.name) continue;
+    // Rückwärtskompatibel: Alt-Client (1.9.x) sendet kein updatedAt -> wir setzen
+    // "jetzt" ein, damit seine Änderung wie früher (Replace-All) immer übernommen
+    // wird. 2.0-Clients senden ihren echten Zeitstempel (echtes LWW).
+    const uedt = String(m.updatedAt || '').trim() || berlinStamp();
     const r = await pool.query(
       `INSERT INTO material (name, bestand, bestand_aktiv, aktiv, sort_index, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6)
@@ -767,7 +781,7 @@ router.post('/api/sync/material', requireApiKey, express.json({ limit: '5mb' }),
        WHERE material.updated_at < EXCLUDED.updated_at
        RETURNING name, bestand`,
       [m.name, m.bestand || 0, !!m.bestandAktiv, m.aktiv !== false,
-       m.sortIndex || 0, m.updatedAt || '']);
+       m.sortIndex || 0, uedt]);
     if (r.rowCount > 0) {
       uebernommen++;
       await spiegleMaterialNachLager(r.rows[0].name, r.rows[0].bestand);
