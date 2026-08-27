@@ -4,6 +4,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.FindInPage
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.MeetingRoom
@@ -102,14 +105,27 @@ fun HomeScreen(
     val aktiveRooms = remember(rooms) { rooms.filter { !it.inaktiv } }
     val inaktiveRooms = remember(rooms) { rooms.filter { it.inaktiv } }
 
-    // „Nur ungeprüfte" – kann von der Dashboard-Kachel „Offene Zimmer" gesetzt werden
-    val nurOffenGlobal by viewModel.zimmerNurOffen.collectAsState()
-    var nurOffen by remember { mutableStateOf(false) }
-    LaunchedEffect(nurOffenGlobal) {
-        if (nurOffenGlobal) { nurOffen = true; viewModel.setZimmerNurOffen(false) }
+    val sperren by viewModel.sperren.collectAsState()
+    val stationen = remember(aktiveRooms) {
+        aktiveRooms.map { it.station }.distinct().sortedWith(stationComparator)
     }
 
-    val filtered = remember(aktiveRooms, query, nurOffen, checkedInPeriod) {
+    // Filter-Zustand; „Offene Zimmer"-Kachel vom Dashboard setzt Prüfstatus = ungeprüft
+    var filter by remember { mutableStateOf(ZimmerFilter()) }
+    var zeigeFilterDialog by remember { mutableStateOf(false) }
+    val nurOffenGlobal by viewModel.zimmerNurOffen.collectAsState()
+    LaunchedEffect(nurOffenGlobal) {
+        if (nurOffenGlobal) {
+            filter = filter.copy(pruefStatus = PruefStatus.UNGEPRUEFT)
+            viewModel.setZimmerNurOffen(false)
+        }
+    }
+
+    val heuteIso = remember { Dates.todayIso() }
+    val cutoff28 = remember { java.time.LocalDate.now().minusDays(28).toString() }
+    val sperreById = remember(sperren) { sperren.associateBy { it.roomId } }
+
+    val filtered = remember(aktiveRooms, query, filter, checkedInPeriod, gesperrt, sperreById) {
         aktiveRooms.filter { room ->
             val passtSuche = query.isBlank() ||
                 room.id.contains(query, true) ||
@@ -117,7 +133,40 @@ fun HomeScreen(
                 room.zimmer.contains(query, true) ||
                 room.seriennummer.contains(query, true) ||
                 room.freenetId.contains(query, true)
-            passtSuche && (!nurOffen || room.id !in checkedInPeriod)
+            if (!passtSuche) return@filter false
+
+            val geprueft = room.id in checkedInPeriod
+            val passtPruef = when (filter.pruefStatus) {
+                PruefStatus.ALLE -> true
+                PruefStatus.UNGEPRUEFT -> !geprueft
+                PruefStatus.GEPRUEFT -> geprueft
+            }
+            if (!passtPruef) return@filter false
+
+            val passtFreenet = when (filter.freenet) {
+                FreenetFilter.ALLE -> true
+                FreenetFilter.ABGELAUFEN -> FreenetStatus.of(room.gueltigBis) == FreenetStatus.ABGELAUFEN
+                FreenetFilter.BALD -> FreenetStatus.of(room.gueltigBis) == FreenetStatus.BALD
+                FreenetFilter.OK -> FreenetStatus.of(room.gueltigBis) == FreenetStatus.OK
+            }
+            if (!passtFreenet) return@filter false
+
+            val passtZutritt = when (filter.zutritt) {
+                ZutrittFilter.ALLE -> true
+                ZutrittFilter.KEIN_ZUTRITT -> room.id in gesperrt
+                ZutrittFilter.WIEDERVORLAGE_FAELLIG -> {
+                    val sp = sperreById[room.id]
+                    room.id in gesperrt && sp?.wiedervorlage?.let { it.isNotBlank() && it <= heuteIso } == true
+                }
+            }
+            if (!passtZutritt) return@filter false
+
+            if (filter.station.isNotBlank() && room.station != filter.station) return@filter false
+
+            if (filter.ueberfaellig && !(room.letztePruefung.isBlank() || room.letztePruefung < cutoff28))
+                return@filter false
+
+            true
         }
     }
     val grouped = remember(filtered) {
@@ -212,9 +261,18 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterChip(
-                selected = nurOffen,
-                onClick = { nurOffen = !nurOffen },
-                label = { Text("Nur ungeprüfte") }
+                selected = filter.aktiveAnzahl > 0,
+                onClick = { zeigeFilterDialog = true },
+                label = {
+                    Text(
+                        if (filter.aktiveAnzahl > 0) "Filter (${filter.aktiveAnzahl})"
+                        else "Filter"
+                    )
+                },
+                leadingIcon = {
+                    Icon(Icons.Outlined.FilterList, contentDescription = null,
+                        modifier = Modifier.size(18.dp))
+                }
             )
             AssistChip(
                 onClick = onFreenet,
@@ -385,6 +443,15 @@ fun HomeScreen(
     }
     }
 
+    if (zeigeFilterDialog) {
+        FilterDialog(
+            filter = filter,
+            stationen = stationen,
+            onApply = { filter = it },
+            onDismiss = { zeigeFilterDialog = false }
+        )
+    }
+
     sperrDialogStation?.let { station ->
         val stationRooms = rooms.filter { it.station == station && !it.inaktiv }
         SperrDialog(
@@ -472,12 +539,157 @@ private fun SperrDialog(
     )
 }
 
+/**
+ * Umfassender Filter-Dialog der Zimmerliste. Arbeitet auf einer lokalen Kopie,
+ * die erst mit „Anwenden" übernommen wird; „Zurücksetzen" leert alle Kriterien.
+ */
+@Composable
+private fun FilterDialog(
+    filter: ZimmerFilter,
+    stationen: List<String>,
+    onApply: (ZimmerFilter) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var entwurf by remember { mutableStateOf(filter) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Zimmer filtern") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                FilterAbschnitt("Prüfstatus") {
+                    PruefStatus.entries.forEach { p ->
+                        FilterChip(
+                            selected = entwurf.pruefStatus == p,
+                            onClick = { entwurf = entwurf.copy(pruefStatus = p) },
+                            label = { Text(p.label) }
+                        )
+                    }
+                }
+                FilterAbschnitt("Freenet-Gültigkeit") {
+                    FreenetFilter.entries.forEach { f ->
+                        FilterChip(
+                            selected = entwurf.freenet == f,
+                            onClick = { entwurf = entwurf.copy(freenet = f) },
+                            label = { Text(f.label) }
+                        )
+                    }
+                }
+                FilterAbschnitt("Zutritt") {
+                    ZutrittFilter.entries.forEach { z ->
+                        FilterChip(
+                            selected = entwurf.zutritt == z,
+                            onClick = { entwurf = entwurf.copy(zutritt = z) },
+                            label = { Text(z.label) }
+                        )
+                    }
+                }
+                if (stationen.isNotEmpty()) {
+                    FilterAbschnitt("Station") {
+                        FilterChip(
+                            selected = entwurf.station.isBlank(),
+                            onClick = { entwurf = entwurf.copy(station = "") },
+                            label = { Text("Alle") }
+                        )
+                        stationen.forEach { s ->
+                            FilterChip(
+                                selected = entwurf.station == s,
+                                onClick = {
+                                    entwurf = entwurf.copy(
+                                        station = if (entwurf.station == s) "" else s
+                                    )
+                                },
+                                label = { Text(s) }
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Checkbox(
+                        checked = entwurf.ueberfaellig,
+                        onCheckedChange = { entwurf = entwurf.copy(ueberfaellig = it) }
+                    )
+                    Text(
+                        "Überfällig (seit über 4 Wochen nicht geprüft)",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(entwurf); onDismiss() }) { Text("Anwenden") }
+        },
+        dismissButton = {
+            TextButton(onClick = { entwurf = ZimmerFilter() }) { Text("Zurücksetzen") }
+        }
+    )
+}
+
+/** Beschrifteter Abschnitt mit umbrechender Chip-Reihe im Filter-Dialog. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterAbschnitt(titel: String, content: @Composable () -> Unit) {
+    Text(
+        titel,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+}
+
 /** Sortier-/Filtermodi der Zimmerliste. */
 private enum class SortModus(val label: String) {
     STATION("Nach Station"),
     ZULETZT_NEU("Zuletzt geprüft"),
     LAENGSTE_OFFEN("Am längsten offen"),
     FREENET("Freenet-Ablauf")
+}
+
+/** Prüfstatus im aktuellen Zeitraum. */
+private enum class PruefStatus(val label: String) {
+    ALLE("Alle"),
+    UNGEPRUEFT("Nur ungeprüfte"),
+    GEPRUEFT("Nur geprüfte")
+}
+
+/** Filter nach Freenet-Gültigkeit. */
+private enum class FreenetFilter(val label: String) {
+    ALLE("Alle"),
+    ABGELAUFEN("Abgelaufen"),
+    BALD("Läuft bald ab"),
+    OK("Gültig")
+}
+
+/** Filter nach Zutritt/Sperren. */
+private enum class ZutrittFilter(val label: String) {
+    ALLE("Alle"),
+    KEIN_ZUTRITT("Nur „kein Zutritt“"),
+    WIEDERVORLAGE_FAELLIG("Wiedervorlage fällig")
+}
+
+/**
+ * Gesammelter Filterzustand der Zimmerliste. Leerer Zustand = keine
+ * Einschränkung; [aktiveAnzahl] zählt die gesetzten Kriterien für das Chip-Badge.
+ */
+private data class ZimmerFilter(
+    val pruefStatus: PruefStatus = PruefStatus.ALLE,
+    val freenet: FreenetFilter = FreenetFilter.ALLE,
+    val zutritt: ZutrittFilter = ZutrittFilter.ALLE,
+    val station: String = "",
+    val ueberfaellig: Boolean = false
+) {
+    val aktiveAnzahl: Int
+        get() = listOf(
+            pruefStatus != PruefStatus.ALLE,
+            freenet != FreenetFilter.ALLE,
+            zutritt != ZutrittFilter.ALLE,
+            station.isNotBlank(),
+            ueberfaellig
+        ).count { it }
 }
 
 @Composable
