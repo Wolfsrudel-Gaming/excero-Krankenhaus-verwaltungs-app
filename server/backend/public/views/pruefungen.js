@@ -12,7 +12,7 @@ async function viewPruefungen() {
 
   el.innerHTML = `
     ${pageHeader('Prüfungen', `
-      <a href="/kkh/api/web/export/pruefungen" target="_blank" class="btn btn-secondary btn-sm">📊 Excel-Export</a>
+      <a href="/kkh/api/web/export/pruefungen.xlsx" target="_blank" class="btn btn-secondary btn-sm">📊 Excel-Export</a>
     `)}
     <div class="filter-bar">
       <div class="filter-group"><label>Von</label>
