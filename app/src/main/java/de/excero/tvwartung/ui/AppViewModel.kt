@@ -347,10 +347,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val gepinnteMenue: StateFlow<List<String>> = app.settingsStore.gepinnteMenue
     fun toggleMenuePin(route: String) = app.settingsStore.toggleMenuePin(route)
 
+    // ----- Zimmerliste: Filter & Sortierung -----
+    // Im ViewModel gehalten, damit die Auswahl beim Wechsel in ein Zimmer und
+    // zurück erhalten bleibt (der ViewModel-Scope überlebt die Navigation).
+    private val _zimmerFilter = MutableStateFlow(ZimmerFilter())
+    val zimmerFilter: StateFlow<ZimmerFilter> = _zimmerFilter
+    fun setZimmerFilter(filter: ZimmerFilter) { _zimmerFilter.value = filter }
+
+    private val _zimmerSort = MutableStateFlow(SortModus.STATION)
+    val zimmerSort: StateFlow<SortModus> = _zimmerSort
+    fun setZimmerSort(modus: SortModus) { _zimmerSort.value = modus }
+
     /** Zimmerliste auf noch nicht geprüfte Zimmer beschränken (von der Dashboard-Kachel gesetzt). */
-    private val _zimmerNurOffen = MutableStateFlow(false)
-    val zimmerNurOffen: StateFlow<Boolean> = _zimmerNurOffen
-    fun setZimmerNurOffen(nurOffen: Boolean) { _zimmerNurOffen.value = nurOffen }
+    fun setZimmerNurOffen(nurOffen: Boolean) {
+        if (nurOffen) _zimmerFilter.value =
+            _zimmerFilter.value.copy(pruefStatus = PruefStatus.UNGEPRUEFT)
+    }
 
     /** true = für diese App-Version wurde der „Was ist neu"-Hinweis noch nicht gezeigt. */
     fun wasIstNeuFaellig(version: String): Boolean =

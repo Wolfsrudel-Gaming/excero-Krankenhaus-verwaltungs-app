@@ -67,6 +67,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.excero.tvwartung.data.TvRoom
 import de.excero.tvwartung.ui.AppViewModel
+import de.excero.tvwartung.ui.FreenetFilter
+import de.excero.tvwartung.ui.PruefStatus
+import de.excero.tvwartung.ui.SortModus
+import de.excero.tvwartung.ui.ZimmerFilter
+import de.excero.tvwartung.ui.ZutrittFilter
 import de.excero.tvwartung.ui.theme.OkGreen
 import de.excero.tvwartung.ui.theme.WarnAmber
 import de.excero.tvwartung.util.Dates
@@ -110,16 +115,11 @@ fun HomeScreen(
         aktiveRooms.map { it.station }.distinct().sortedWith(stationComparator)
     }
 
-    // Filter-Zustand; „Offene Zimmer"-Kachel vom Dashboard setzt Prüfstatus = ungeprüft
-    var filter by remember { mutableStateOf(ZimmerFilter()) }
+    // Filter & Sortierung im ViewModel gehalten, damit sie beim Zurückkehren aus
+    // einem Zimmer erhalten bleiben. „Offene Zimmer"-Kachel vom Dashboard setzt
+    // Prüfstatus = ungeprüft (über viewModel.setZimmerNurOffen).
+    val filter by viewModel.zimmerFilter.collectAsState()
     var zeigeFilterDialog by remember { mutableStateOf(false) }
-    val nurOffenGlobal by viewModel.zimmerNurOffen.collectAsState()
-    LaunchedEffect(nurOffenGlobal) {
-        if (nurOffenGlobal) {
-            filter = filter.copy(pruefStatus = PruefStatus.UNGEPRUEFT)
-            viewModel.setZimmerNurOffen(false)
-        }
-    }
 
     val heuteIso = remember { Dates.todayIso() }
     val cutoff3M = remember { java.time.LocalDate.now().minusMonths(3).toString() }
@@ -172,7 +172,7 @@ fun HomeScreen(
     val grouped = remember(filtered) {
         filtered.groupBy { it.station }.toSortedMap(stationComparator)
     }
-    var sortModus by remember { mutableStateOf(SortModus.STATION) }
+    val sortModus by viewModel.zimmerSort.collectAsState()
     val flach = remember(filtered, sortModus) {
         when (sortModus) {
             SortModus.STATION -> filtered
@@ -311,7 +311,7 @@ fun HomeScreen(
             SortModus.entries.forEach { m ->
                 FilterChip(
                     selected = sortModus == m,
-                    onClick = { sortModus = m },
+                    onClick = { viewModel.setZimmerSort(m) },
                     label = { Text(m.label) }
                 )
             }
@@ -447,7 +447,7 @@ fun HomeScreen(
         FilterDialog(
             filter = filter,
             stationen = stationen,
-            onApply = { filter = it },
+            onApply = { viewModel.setZimmerFilter(it) },
             onDismiss = { zeigeFilterDialog = false }
         )
     }
@@ -639,57 +639,6 @@ private fun FilterAbschnitt(titel: String, content: @Composable () -> Unit) {
         modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
     )
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { content() }
-}
-
-/** Sortier-/Filtermodi der Zimmerliste. */
-private enum class SortModus(val label: String) {
-    STATION("Nach Station"),
-    ZULETZT_NEU("Zuletzt geprüft"),
-    LAENGSTE_OFFEN("Am längsten offen"),
-    FREENET("Freenet-Ablauf")
-}
-
-/** Prüfstatus im aktuellen Zeitraum. */
-private enum class PruefStatus(val label: String) {
-    ALLE("Alle"),
-    UNGEPRUEFT("Nur ungeprüfte"),
-    GEPRUEFT("Nur geprüfte")
-}
-
-/** Filter nach Freenet-Gültigkeit. */
-private enum class FreenetFilter(val label: String) {
-    ALLE("Alle"),
-    ABGELAUFEN("Abgelaufen"),
-    BALD("Läuft bald ab"),
-    OK("Gültig")
-}
-
-/** Filter nach Zutritt/Sperren. */
-private enum class ZutrittFilter(val label: String) {
-    ALLE("Alle"),
-    KEIN_ZUTRITT("Nur „kein Zutritt“"),
-    WIEDERVORLAGE_FAELLIG("Wiedervorlage fällig")
-}
-
-/**
- * Gesammelter Filterzustand der Zimmerliste. Leerer Zustand = keine
- * Einschränkung; [aktiveAnzahl] zählt die gesetzten Kriterien für das Chip-Badge.
- */
-private data class ZimmerFilter(
-    val pruefStatus: PruefStatus = PruefStatus.ALLE,
-    val freenet: FreenetFilter = FreenetFilter.ALLE,
-    val zutritt: ZutrittFilter = ZutrittFilter.ALLE,
-    val station: String = "",
-    val faellig: Boolean = false
-) {
-    val aktiveAnzahl: Int
-        get() = listOf(
-            pruefStatus != PruefStatus.ALLE,
-            freenet != FreenetFilter.ALLE,
-            zutritt != ZutrittFilter.ALLE,
-            station.isNotBlank(),
-            faellig
-        ).count { it }
 }
 
 @Composable
