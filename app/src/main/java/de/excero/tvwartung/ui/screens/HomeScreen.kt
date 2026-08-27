@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -64,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import de.excero.tvwartung.data.TvRoom
 import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.ui.theme.OkGreen
+import de.excero.tvwartung.ui.theme.WarnAmber
 import de.excero.tvwartung.util.Dates
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,6 +122,17 @@ fun HomeScreen(
     }
     val grouped = remember(filtered) {
         filtered.groupBy { it.station }.toSortedMap(stationComparator)
+    }
+    var sortModus by remember { mutableStateOf(SortModus.STATION) }
+    val flach = remember(filtered, sortModus) {
+        when (sortModus) {
+            SortModus.STATION -> filtered
+            SortModus.ZULETZT_NEU -> filtered.sortedByDescending { it.letztePruefung }
+            SortModus.LAENGSTE_OFFEN ->
+                filtered.sortedWith(compareBy { it.letztePruefung.ifBlank { "0000-00-00" } })
+            SortModus.FREENET ->
+                filtered.sortedWith(compareBy { it.gueltigBis.ifBlank { "9999-99-99" } })
+        }
     }
     var zeigeInaktive by remember { mutableStateOf(false) }
 
@@ -226,12 +239,45 @@ fun HomeScreen(
             )
         }
 
+        // Sortierung
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.Sort, contentDescription = null, modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            SortModus.entries.forEach { m ->
+                FilterChip(
+                    selected = sortModus == m,
+                    onClick = { sortModus = m },
+                    label = { Text(m.label) }
+                )
+            }
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            grouped.forEach { (station, stationRooms) ->
+            if (sortModus != SortModus.STATION) {
+                items(flach.size, key = { "flach_${flach[it].id}" }) { index ->
+                    RoomCard(
+                        room = flach[index],
+                        checkedToday = flach[index].id in checkedInPeriod,
+                        blocked = flach[index].id in gesperrt,
+                        pruefer = prueferProZimmer[flach[index].id] ?: "",
+                        kompakt = settings.kompaktZimmerliste,
+                        zeigeLetztePruefung = true,
+                        onClick = { onRoomClick(flach[index].id) }
+                    )
+                }
+            }
+            if (sortModus == SortModus.STATION) grouped.forEach { (station, stationRooms) ->
                 item(key = "header_$station") {
                     val gesperrtCount = stationRooms.count { it.id in gesperrt }
                     Row(
@@ -426,6 +472,14 @@ private fun SperrDialog(
     )
 }
 
+/** Sortier-/Filtermodi der Zimmerliste. */
+private enum class SortModus(val label: String) {
+    STATION("Nach Station"),
+    ZULETZT_NEU("Zuletzt geprüft"),
+    LAENGSTE_OFFEN("Am längsten offen"),
+    FREENET("Freenet-Ablauf")
+}
+
 @Composable
 private fun RoomCard(
     room: TvRoom,
@@ -433,6 +487,7 @@ private fun RoomCard(
     blocked: Boolean,
     pruefer: String = "",
     kompakt: Boolean = false,
+    zeigeLetztePruefung: Boolean = false,
     onClick: () -> Unit
 ) {
     Card(
@@ -464,7 +519,8 @@ private fun RoomCard(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Zimmer ${room.zimmer}",
+                        if (zeigeLetztePruefung) "${room.station} · Zimmer ${room.zimmer}"
+                        else "Zimmer ${room.zimmer}",
                         style = if (kompakt) MaterialTheme.typography.bodyLarge
                         else MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
@@ -504,6 +560,16 @@ private fun RoomCard(
                             room.seriennummer.ifBlank { "–" },
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp
+                        )
+                    }
+                    if (zeigeLetztePruefung) {
+                        Text(
+                            "Zuletzt geprüft: " +
+                                (room.letztePruefung.takeIf { it.isNotBlank() }
+                                    ?.let { Dates.isoToGerman(it) } ?: "noch nie"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (room.letztePruefung.isBlank()) WarnAmber
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Spacer(Modifier.height(4.dp))
