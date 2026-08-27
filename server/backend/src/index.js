@@ -739,6 +739,19 @@ router.post('/api/sync/sperren', requireApiKey, express.json({ limit: '5mb' }), 
   res.json({ ok: true });
 });
 
+// Sperren für die App zum Herunterladen (Mehrgerät: Kein-Zutritt vom einen
+// Gerät sichtbar auf dem anderen).
+router.get('/api/sync/sperren', requireApiKey, async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT room_id, gesperrt_am, grund, wiedervorlage FROM sperren');
+  res.json({
+    sperren: rows.map((r) => ({
+      roomId: r.room_id, gesperrtAm: r.gesperrt_am,
+      grund: r.grund || '', wiedervorlage: r.wiedervorlage || '',
+    })),
+  });
+});
+
 // Material-Bestand ist bidirektional (LWW über updated_at): die App schickt
 // ihren Stand, der Server übernimmt nur neuere Zeilen und spiegelt den Bestand
 // in einen verknüpften Lager-Artikel (app_material_name), damit der Chef ihn im
