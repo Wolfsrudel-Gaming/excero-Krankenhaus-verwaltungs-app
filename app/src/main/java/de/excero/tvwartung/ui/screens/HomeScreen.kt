@@ -122,7 +122,7 @@ fun HomeScreen(
     }
 
     val heuteIso = remember { Dates.todayIso() }
-    val cutoff28 = remember { java.time.LocalDate.now().minusDays(28).toString() }
+    val cutoff3M = remember { java.time.LocalDate.now().minusMonths(3).toString() }
     val sperreById = remember(sperren) { sperren.associateBy { it.roomId } }
 
     val filtered = remember(aktiveRooms, query, filter, checkedInPeriod, gesperrt, sperreById) {
@@ -163,7 +163,7 @@ fun HomeScreen(
 
             if (filter.station.isNotBlank() && room.station != filter.station) return@filter false
 
-            if (filter.ueberfaellig && !(room.letztePruefung.isBlank() || room.letztePruefung < cutoff28))
+            if (filter.faellig && !(room.letztePruefung.isBlank() || room.letztePruefung < cutoff3M))
                 return@filter false
 
             true
@@ -609,11 +609,11 @@ private fun FilterDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Checkbox(
-                        checked = entwurf.ueberfaellig,
-                        onCheckedChange = { entwurf = entwurf.copy(ueberfaellig = it) }
+                        checked = entwurf.faellig,
+                        onCheckedChange = { entwurf = entwurf.copy(faellig = it) }
                     )
                     Text(
-                        "Überfällig (seit über 4 Wochen nicht geprüft)",
+                        "Fällig (seit über 3 Monaten nicht geprüft)",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -680,7 +680,7 @@ private data class ZimmerFilter(
     val freenet: FreenetFilter = FreenetFilter.ALLE,
     val zutritt: ZutrittFilter = ZutrittFilter.ALLE,
     val station: String = "",
-    val ueberfaellig: Boolean = false
+    val faellig: Boolean = false
 ) {
     val aktiveAnzahl: Int
         get() = listOf(
@@ -688,7 +688,7 @@ private data class ZimmerFilter(
             freenet != FreenetFilter.ALLE,
             zutritt != ZutrittFilter.ALLE,
             station.isNotBlank(),
-            ueberfaellig
+            faellig
         ).count { it }
 }
 
