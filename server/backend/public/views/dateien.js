@@ -60,13 +60,18 @@ async function viewDateien() {
   ['df-station', 'df-von', 'df-bis'].forEach((id) =>
     document.getElementById(id)?.addEventListener('input', aktualisiereZipLink));
   aktualisiereZipLink();
+  // Stations-Filter auch auf die angezeigte Galerie/PDF-Liste anwenden
+  document.getElementById('df-station')?.addEventListener('input', () => ladeDateien());
 
   // Dateien laden
   async function ladeDateien() {
-    let rooms;
+    document.getElementById('df-fotos-panel').innerHTML = '<div class="loading">Fotos werden geladen…</div>';
+    document.getElementById('df-pdfs-panel').innerHTML = '<div class="loading">PDFs werden geladen…</div>';
+
+    let allFiles;
     try {
-      const d = await api('/kkh/api/web/rooms');
-      rooms = d?.rooms || [];
+      const d = await api('/kkh/api/web/files');
+      allFiles = d?.files || [];
     } catch (e) {
       el.querySelectorAll('[data-panel]').forEach((p) => {
         p.innerHTML = `<div class="alert alert-err">${escH(e.message)}</div>`;
@@ -74,22 +79,14 @@ async function viewDateien() {
       return;
     }
 
-    const allFiles = [];
-    // Erste 5 Zimmer laden um die Ansicht nicht zu überladen
-    const sampleRooms = rooms.slice(0, 5);
-    const results = await Promise.allSettled(sampleRooms.map((r) =>
-      api(`/kkh/api/web/rooms/${encodeURIComponent(r.id)}`).catch(() => null)));
-    results.forEach((res, idx) => {
-      if (res.status === 'fulfilled' && res.value?.files) {
-        const room = sampleRooms[idx];
-        // Signaturen werden clientseitig ebenfalls nicht angezeigt
-        res.value.files
-          .filter((f) => !f.path.includes('_signaturen'))
-          .forEach((f) => allFiles.push({ ...f, station: room.station, zimmer: room.zimmer, roomId: room.id }));
-      }
-    });
+    // Optionaler Stations-Filter (aus dem Filterfeld) auf die Anzeige anwenden
+    const stationFilter = document.getElementById('df-station')?.value?.trim().toLowerCase();
+    if (stationFilter) {
+      allFiles = allFiles.filter((f) => (f.station || '').toLowerCase().includes(stationFilter)
+        || (f.roomId || '').toLowerCase().includes(stationFilter));
+    }
 
-    // Fotos (JPEG/PNG, ohne Signaturen)
+    // Fotos (JPEG/PNG) und PDFs; Signaturen sind serverseitig bereits ausgeschlossen
     const fotos = allFiles.filter((f) => /\.(jpe?g|png)$/i.test(f.path));
     const pdfs = allFiles.filter((f) => f.path.endsWith('.pdf'));
 
@@ -99,13 +96,13 @@ async function viewDateien() {
       if (fotos.length === 0) {
         fotoPanel.innerHTML = `
           <div class="alert alert-info">
-            <strong>Keine Prüfungsfotos in der Stichprobe.</strong><br>
+            <strong>Keine Prüfungsfotos gefunden.</strong><br>
             Fotos werden über die App hochgeladen. Der ZIP-Download oben enthält alle Fotos des gewählten Zeitraums.
           </div>`;
       } else {
         fotoPanel.innerHTML = `
           <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
-            ${fotos.length} Foto(s) (Stichprobe – für alle Fotos ZIP-Download nutzen)
+            ${fotos.length} Foto(s)${stationFilter ? ' (gefiltert)' : ''}
           </p>
           <div class="foto-grid">
             ${fotos.map((f) => `
@@ -125,7 +122,7 @@ async function viewDateien() {
       if (pdfs.length === 0) {
         pdfPanel.innerHTML = `
           <div class="alert alert-info">
-            Keine gespeicherten PDFs in der Stichprobe. Prüfberichte können jederzeit über den
+            Keine gespeicherten PDFs gefunden. Prüfberichte können jederzeit über den
             <strong>Stundenzettel-View</strong> oder den <strong>Zimmer-Detail</strong> als PDF abgerufen werden.
           </div>`;
       } else {

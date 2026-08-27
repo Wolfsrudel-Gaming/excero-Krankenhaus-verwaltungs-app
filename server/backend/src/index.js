@@ -708,6 +708,24 @@ router.get('/api/web/file', requireWebAuth, (req, res) => {
   res.sendFile(ziel);
 });
 
+// Alle gespeicherten Dateien (Fotos + PDFs) für die Dateien-Ansicht im Web.
+// Ableitung von Station/Zimmer aus dem ersten Pfadsegment (= Zimmer-ID) über
+// die Zimmertabelle. Signaturen sind in listFiles bereits ausgeschlossen.
+router.get('/api/web/files', requireWebAuth, async (req, res) => {
+  try {
+    const dateien = listFiles(FILES_DIR, FILES_DIR);
+    const { rows } = await pool.query('SELECT id, station, zimmer FROM rooms');
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const files = dateien.map((f) => {
+      const roomId = f.path.split('/')[0];
+      const r = byId.get(roomId);
+      return { path: f.path, size: f.size, roomId,
+        station: r ? r.station : '', zimmer: r ? r.zimmer : '' };
+    });
+    res.json({ files });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 // ---------- Voll-Synchronisation (Spiegel der App-Daten, Replace-All) ----------
 
