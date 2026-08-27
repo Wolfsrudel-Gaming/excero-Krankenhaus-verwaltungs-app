@@ -280,6 +280,20 @@ class SyncManager(
                 hochgeladen++
             }
         }
+        // Mehrgerät: Fotos/Prüfbericht-PDFs vom Server holen, die lokal fehlen –
+        // so hat z. B. das Tablet die am Handy gemachten Bilder. Signaturen (_signaturen)
+        // und Stundenzettel-PDFs (_stundenzettel) bleiben außen vor.
+        val lokalDateien = root.walkTopDown().filter { it.isFile }
+            .associate { it.relativeTo(root).path.replace(File.separatorChar, '/') to it.length() }
+        for (i in 0 until dateiListe.length()) {
+            val o = dateiListe.getJSONObject(i)
+            val rel = o.optString("path")
+            val size = o.optLong("size")
+            if (rel.isBlank() || rel.startsWith("_")) continue
+            if (lokalDateien[rel] != size) {
+                runCatching { ladeDateiHerunter(rel, File(root, rel)) }.onSuccess { hochgeladen++ }
+            }
+        }
         // Unterschriften hochladen – deterministischer Name <station>_<zeitraumStart>_<rolle>.png
         // damit der Server bei der PDF-Erzeugung die Datei ohne lokale Room-ID auflösen kann.
         val zettelIndex = repository.getAllStundenzettel()
@@ -319,6 +333,26 @@ class SyncManager(
         // anzeigt, entscheidet sie selbst. Tolerant gegenüber älteren Servern.
         var hinweis = ""
         runCatching {
+            // Sperren erst vom Server holen (Mehrgerät), dann die vereinigte Menge pushen
+            runCatching {
+                val serverSperren = httpJson("/api/sync/sperren", "GET")
+                    .optJSONArray("sperren") ?: JSONArray()
+                val liste = buildList {
+                    for (i in 0 until serverSperren.length()) {
+                        val o = serverSperren.getJSONObject(i)
+                        add(
+                            de.excero.tvwartung.data.RoomSperre(
+                                roomId = o.optString("roomId"),
+                                gesperrtAm = o.optString("gesperrtAm"),
+                                grund = o.optString("grund"),
+                                wiedervorlage = o.optString("wiedervorlage")
+                            )
+                        )
+                    }
+                }
+                if (liste.isNotEmpty()) repository.applyServerSperren(liste)
+            }
+
             val sperrenJson = JSONArray()
             repository.getAllSperren().forEach { sp ->
                 sperrenJson.put(JSONObject().apply {
@@ -429,6 +463,15 @@ class SyncManager(
             mitarbeiter = o.optString("mitarbeiter"),
             geloescht = o.optBoolean("geloescht", false)
         )
+    }
+
+    private fun ladeDateiHerunter(relPfad: String, ziel: File) {
+        val kodiert = URLEncoder.encode(relPfad, "UTF-8")
+        val conn = verbinde("/api/sync/file?path=$kodiert", "GET")
+        val code = conn.responseCode
+        if (code !in 200..299) { conn.errorStream?.close(); error("Download fehlgeschlagen ($code): $relPfad") }
+        ziel.parentFile?.mkdirs()
+        conn.inputStream.use { input -> ziel.outputStream().use { input.copyTo(it) } }
     }
 
     private fun ladeDateiHoch(relPfad: String, datei: File) {

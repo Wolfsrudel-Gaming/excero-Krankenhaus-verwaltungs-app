@@ -83,6 +83,18 @@ class Repository(private val db: AppDatabase) {
 
     // Für die Voll-Synchronisation mit dem Server
     suspend fun getAllSperren(): List<RoomSperre> = db.roomSperreDao().getAll()
+
+    /** Sperren vom Server übernehmen (Mehrgerät): fehlende ergänzen (Union, keine Löschung). */
+    suspend fun applyServerSperren(vomServer: List<RoomSperre>) {
+        val lokal = db.roomSperreDao().getAll().associateBy { it.roomId }
+        vomServer.forEach { s ->
+            val eigen = lokal[s.roomId]
+            if (eigen == null || eigen.gesperrtAm != s.gesperrtAm ||
+                eigen.grund != s.grund || eigen.wiedervorlage != s.wiedervorlage) {
+                db.roomSperreDao().upsert(s)
+            }
+        }
+    }
     suspend fun getAllMaterial(): List<Material> = db.materialDao().getAll()
     suspend fun getAllPruefpunkte(): List<CustomPruefpunkt> = db.customPruefpunktDao().getAll()
     suspend fun getAllActivity(): List<ActivityLog> = db.activityLogDao().getAll()
