@@ -261,9 +261,6 @@ async function modalBuchungNeu(artikelId, bezeichnung, einheit, reload) {
   } catch (e) { toast(e.message, 'err'); }
 }
 
-// Für window.modalBuchungNeu (Nachbestellung-View) Kompatibilität
-window.modalBuchungNeu = (id, name, einh) => modalBuchungNeu(id, name, einh, () => viewLagerNachbestellung());
-
 /* ─── Buchungen-View ──────────────────────────────────────────────────── */
 async function viewLagerBuchungen() {
   const el = document.getElementById('content-area');
