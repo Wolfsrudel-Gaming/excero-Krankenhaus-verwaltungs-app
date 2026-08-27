@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KKH TV-Wartung</title>
+  <link rel="stylesheet" href="style.css?v=320">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%2300695C'/><rect x='18' y='24' width='64' height='42' rx='5' fill='white'/><path d='M32 43l9 9 20-18' stroke='%2300695C' stroke-width='8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-view" class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">KKH TV-Wartung</div>
+    <div class="login-sub">Kinderkrankenhaus Köln · EXCERO GmbH</div>
+    <input type="text" id="l-user" placeholder="Benutzername" autocomplete="username" autocapitalize="none">
+    <input type="password" id="l-pw" placeholder="Passwort" autocomplete="current-password">
+    <button class="btn btn-primary" id="l-btn">Anmelden</button>
+    <div id="l-err" class="login-err" hidden></div>
+  </div>
+</div>
+
+<!-- App Shell -->
+<div id="app-shell" hidden>
+  <!-- Topbar -->
+  <div id="topbar">
+    <button id="hamburger" aria-label="Navigation öffnen">☰</button>
+    <span class="brand">KKH TV-Wartung</span>
+    <span class="sub">Kinderkrankenhaus Köln</span>
+    <span class="spacer"></span>
+    <span class="user-info" id="user-chip"></span>
+    <button class="btn btn-ghost btn-sm" id="pw-btn" style="color:#fff;border-color:rgba(255,255,255,.3)">Passwort</button>
+    <button class="btn btn-ghost btn-sm" id="logout-btn" style="color:#fff;border-color:rgba(255,255,255,.3)">Abmelden</button>
+  </div>
+
+  <!-- Sidebar -->
+  <nav id="sidebar" aria-label="Navigation">
+    <div class="nav-section">Übersicht</div>
+    <div class="nav-item" data-route="dashboard"><span class="nav-icon">📊</span>Dashboard</div>
+
+    <div class="nav-section">Wartung</div>
+    <div class="nav-item" data-route="zimmer"><span class="nav-icon">🏥</span>Zimmer</div>
+    <div class="nav-item" data-route="pruefungen"><span class="nav-icon">✅</span>Prüfungen</div>
+    <div class="nav-item" data-route="stundenzettel"><span class="nav-icon">🕐</span>Stundenzettel</div>
+    <div class="nav-item" data-route="mitarbeiter"><span class="nav-icon">👤</span>Mitarbeiter</div>
+    <div class="nav-item" data-route="dateien"><span class="nav-icon">📁</span>Dateien &amp; Fotos</div>
+    <div class="nav-item" data-route="ki"><span class="nav-icon">🤖</span>KI-Prüfung<span class="nav-badge" id="ki-badge" hidden>!</span></div>
+
+    <div class="nav-section">Lager</div>
+    <div class="nav-item" data-route="lager-artikel"><span class="nav-icon">📦</span>Artikel</div>
+    <div class="nav-item" data-route="lager-buchungen"><span class="nav-icon">📋</span>Buchungen</div>
+    <div class="nav-item" data-route="lager-verbrauch"><span class="nav-icon">📉</span>Verbrauch</div>
+    <div class="nav-item" data-route="lager-nachbestellung"><span class="nav-icon">⚠️</span>Nachbestellung<span class="nav-badge" id="nb-badge" hidden>!</span></div>
+    <div class="nav-item" data-route="lieferanten"><span class="nav-icon">🚚</span>Lieferanten</div>
+
+    <div class="nav-section">Auswertung</div>
+    <div class="nav-item" data-route="abrechnung"><span class="nav-icon">💶</span>Abrechnung</div>
+
+    <div class="nav-section">System</div>
+    <div class="nav-item" data-route="benutzer"><span class="nav-icon">🔐</span>Benutzer</div>
+  </nav>
+  <div id="sidebar-overlay"></div>
+
+  <!-- Content -->
+  <main id="content-area" role="main"></main>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-wrap" role="status" aria-live="polite"></div>
+
+<script src="ui.js?v=320"></script>
+<script src="views/dashboard.js?v=320"></script>
+<script src="views/zimmer.js?v=320"></script>
+<script src="views/pruefungen.js?v=320"></script>
+<script src="views/stundenzettel.js?v=320"></script>
+<script src="views/lager.js?v=320"></script>
+<script src="views/benutzer.js?v=320"></script>
+<script src="views/dateien.js?v=320"></script>
+<script src="views/ki.js?v=321"></script>
+<script src="app.js?v=320"></script>
+</body>
+</html>
