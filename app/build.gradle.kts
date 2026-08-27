@@ -13,8 +13,8 @@ android {
         applicationId = "de.excero.tvwartung"
         minSdk = 26
         targetSdk = 35
-        versionCode = 46
-        versionName = "2.0-beta26"
+        versionCode = 47
+        versionName = "2.0-beta27"
     }
 
     // Fester Debug-Schlüssel im Repo, damit jede neue APK als Update über die

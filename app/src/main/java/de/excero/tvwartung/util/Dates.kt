@@ -21,6 +21,15 @@ object Dates {
         runCatching { java.time.LocalDateTime.parse(value, dateTime).format(germanDateTime) }
             .getOrDefault(value)
 
+    /** Stundenzahl als deutscher Text ohne überflüssige Nullen, z. B. 3.25 → "3,25". */
+    fun stundenText(stunden: Double): String =
+        String.format("%.2f", stunden).trimEnd('0').trimEnd('.', ',').replace('.', ',')
+            .ifBlank { "0" }
+
+    /** Deutsche Stundenangabe ("3,25") als Zahl lesen; null/leer → 0.0. */
+    fun stundenWert(text: String?): Double =
+        text?.trim()?.replace(',', '.')?.toDoubleOrNull() ?: 0.0
+
     /** Stunden zwischen zwei ISO-Zeitstempeln, auf Viertelstunden gerundet, z. B. "3,25". */
     fun stundenZwischen(startIso: String, endeIso: String): String = runCatching {
         val start = java.time.LocalDateTime.parse(startIso, dateTime)
