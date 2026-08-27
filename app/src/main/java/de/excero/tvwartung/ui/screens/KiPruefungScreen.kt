@@ -1,6 +1,7 @@
 package de.excero.tvwartung.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -213,7 +214,12 @@ private fun KiDetailDialog(
     onGespeichert: () -> Unit
 ) {
     var fotoDatei by remember(analyse.pfad) { mutableStateOf<java.io.File?>(null) }
+    var zeigeZoom by remember { mutableStateOf(false) }
     LaunchedEffect(analyse.pfad) { fotoDatei = viewModel.kiFotoDatei(analyse.pfad) }
+
+    if (zeigeZoom) fotoDatei?.let { datei ->
+        ZoombaresBildDialog(model = datei, onDismiss = { zeigeZoom = false })
+    }
 
     val relevanteFelder = remember(analyse) {
         KiFelder.ALLE.filter { analyse.felder.containsKey(it) || analyse.abgleich.containsKey(it) }
@@ -242,11 +248,17 @@ private fun KiDetailDialog(
                     if (fotoDatei != null) {
                         AsyncImage(
                             model = fotoDatei,
-                            contentDescription = "Foto",
+                            contentDescription = "Foto – tippen zum Zoomen",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(220.dp)
+                                .clickable { zeigeZoom = true }
+                        )
+                        Text(
+                            "Zum Vergrößern auf das Foto tippen (dann mit zwei Fingern zoomen).",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                         SkeletonBox(

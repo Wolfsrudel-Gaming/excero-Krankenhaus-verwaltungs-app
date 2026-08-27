@@ -47,6 +47,7 @@ import de.excero.tvwartung.ui.screens.RoomDetailScreen
 import de.excero.tvwartung.ui.screens.RoomEditScreen
 import de.excero.tvwartung.ui.screens.SettingsScreen
 import de.excero.tvwartung.ui.screens.StundenzettelListeScreen
+import de.excero.tvwartung.ui.screens.TagAufteilenScreen
 import de.excero.tvwartung.ui.screens.StundenzettelScreen
 import de.excero.tvwartung.ui.screens.VerwaltungScreen
 import de.excero.tvwartung.ui.theme.KKHTheme
@@ -71,6 +72,7 @@ object Routes {
     fun pruefbogen(id: String) = "pruefbogen/${URLEncoder.encode(id, "UTF-8")}"
     fun bericht(id: Long) = "bericht/$id"
     const val STUNDENZETTEL_LISTE = "stundenzettel_liste"
+    const val TAG_AUFTEILEN = "tag_aufteilen"
     fun stundenzettel(station: String) = "stundenzettel/${URLEncoder.encode(station, "UTF-8")}"
     fun stundenzettelEdit(id: Long) = "stundenzettel_edit/$id"
 }
@@ -293,7 +295,17 @@ class MainActivity : ComponentActivity() {
                             StundenzettelListeScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() },
-                                onOpen = { navController.navigate(Routes.stundenzettelEdit(it)) }
+                                onOpen = { navController.navigate(Routes.stundenzettelEdit(it)) },
+                                onTagAufteilen = { navController.navigate(Routes.TAG_AUFTEILEN) }
+                            )
+                        }
+                        composable(Routes.TAG_AUFTEILEN) {
+                            TagAufteilenScreen(
+                                viewModel = viewModel,
+                                onFertig = {
+                                    navController.popBackStack()
+                                },
+                                onBack = { navController.popBackStack() }
                             )
                         }
                         composable(Routes.SETTINGS) {

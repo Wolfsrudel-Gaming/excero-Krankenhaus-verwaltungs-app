@@ -8,6 +8,7 @@
 
 async function viewPruefungen() {
   const el = document.getElementById('content-area');
+  let pfRows = [];
 
   el.innerHTML = `
     ${pageHeader('Prüfungen', `
@@ -55,6 +56,7 @@ async function viewPruefungen() {
       const material = (d.material || []).join(', ') || '–';
       return { ...p, _arbeiten: arbeiten, _material: material };
     });
+    pfRows = rows;
 
     const grid = new DataGrid(container, {
       data: rows,
@@ -76,11 +78,6 @@ async function viewPruefungen() {
           render: (v, row) => `<button class="btn btn-xs btn-ghost" data-detail-uuid="${escH(v)}">Details</button>` },
       ],
       onRowClick: (row) => zeigeDetail(row),
-    });
-
-    container.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-detail-uuid]');
-      if (btn) { e.stopPropagation(); zeigeDetail(rows.find((r) => r.uuid === btn.dataset.detailUuid)); }
     });
   }
 
@@ -134,16 +131,22 @@ async function viewPruefungen() {
   document.getElementById('pf-laden').addEventListener('click', () => laden(false));
   document.getElementById('pf-alle').addEventListener('click', () => laden(true));
 
-  // Delegation für Zimmer-Link innerhalb Modal
-  document.body.addEventListener('click', function onRoomLink(e) {
-    const btn = e.target.closest('[data-open-room]');
-    if (btn) {
-      document.body.removeEventListener('click', onRoomLink);
-      // Zimmer-Detail öffnen: route zu zimmer, dann Detail
-      window._zimmerDetailId = btn.dataset.openRoom;
-      route('zimmer');
-    }
+  // Detail-Button einmalig als Delegation (nicht in laden(), sonst stapeln sich
+  // die Listener und der Detail-Dialog öffnet sich mehrfach).
+  document.getElementById('pf-container').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-detail-uuid]');
+    if (btn) { e.stopPropagation(); zeigeDetail(pfRows.find((r) => r.uuid === btn.dataset.detailUuid)); }
   });
 
   await laden(false);
 }
+
+// Zimmer-Link aus dem Prüfungs-Detail-Dialog: einmalig global registriert
+// (statt bei jedem Öffnen der Prüfungs-Ansicht erneut → sonst mehrfach geroutet).
+document.body.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-open-room]');
+  if (btn) {
+    window._zimmerDetailId = btn.dataset.openRoom;
+    route('zimmer');
+  }
+});

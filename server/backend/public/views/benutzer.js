@@ -83,31 +83,30 @@ async function viewBenutzer() {
       ],
     });
 
-    container.addEventListener('click', async (e) => {
-      const resetBtn = e.target.closest('.bu-reset');
-      const renameBtn = e.target.closest('.bu-rename');
-      const delBtn = e.target.closest('.bu-del');
-
-      if (resetBtn) {
-        const id = resetBtn.dataset.id;
-        const name = resetBtn.dataset.name;
-        await resetPasswort(id, name);
-      } else if (renameBtn) {
-        const id = renameBtn.dataset.id;
-        const name = renameBtn.dataset.name;
-        await umbenennen(id, name);
-      } else if (delBtn) {
-        const id = delBtn.dataset.id;
-        const name = delBtn.dataset.name;
-        if (!(await confirm(`Benutzer "${name}" wirklich löschen? Diese Aktion ist nicht rückgängig zu machen.`))) return;
-        try {
-          await api(`/kkh/api/web/users/${id}`, { method: 'DELETE' });
-          toast('Benutzer gelöscht');
-          lade();
-        } catch (err) { toast(err.message, 'err'); }
-      }
-    });
   }
+
+  // Aktionen einmalig als Delegation registrieren (nicht in lade(), sonst
+  // stapeln sich bei jedem Neuladen die Listener → mehrfach geöffnete Dialoge).
+  document.getElementById('bu-container').addEventListener('click', async (e) => {
+    const resetBtn = e.target.closest('.bu-reset');
+    const renameBtn = e.target.closest('.bu-rename');
+    const delBtn = e.target.closest('.bu-del');
+
+    if (resetBtn) {
+      await resetPasswort(resetBtn.dataset.id, resetBtn.dataset.name);
+    } else if (renameBtn) {
+      await umbenennen(renameBtn.dataset.id, renameBtn.dataset.name);
+    } else if (delBtn) {
+      const id = delBtn.dataset.id;
+      const name = delBtn.dataset.name;
+      if (!(await confirm(`Benutzer "${name}" wirklich löschen? Diese Aktion ist nicht rückgängig zu machen.`))) return;
+      try {
+        await api(`/kkh/api/web/users/${id}`, { method: 'DELETE' });
+        toast('Benutzer gelöscht');
+        lade();
+      } catch (err) { toast(err.message, 'err'); }
+    }
+  });
 
   async function resetPasswort(id, name) {
     const res = await modal(`Passwort zurücksetzen: ${name}`, `

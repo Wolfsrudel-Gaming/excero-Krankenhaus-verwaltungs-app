@@ -347,10 +347,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val gepinnteMenue: StateFlow<List<String>> = app.settingsStore.gepinnteMenue
     fun toggleMenuePin(route: String) = app.settingsStore.toggleMenuePin(route)
 
+    // ----- Zimmerliste: Filter & Sortierung -----
+    // Im ViewModel gehalten, damit die Auswahl beim Wechsel in ein Zimmer und
+    // zurück erhalten bleibt (der ViewModel-Scope überlebt die Navigation).
+    private val _zimmerFilter = MutableStateFlow(ZimmerFilter())
+    val zimmerFilter: StateFlow<ZimmerFilter> = _zimmerFilter
+    fun setZimmerFilter(filter: ZimmerFilter) { _zimmerFilter.value = filter }
+
+    private val _zimmerSort = MutableStateFlow(SortModus.STATION)
+    val zimmerSort: StateFlow<SortModus> = _zimmerSort
+    fun setZimmerSort(modus: SortModus) { _zimmerSort.value = modus }
+
     /** Zimmerliste auf noch nicht geprüfte Zimmer beschränken (von der Dashboard-Kachel gesetzt). */
-    private val _zimmerNurOffen = MutableStateFlow(false)
-    val zimmerNurOffen: StateFlow<Boolean> = _zimmerNurOffen
-    fun setZimmerNurOffen(nurOffen: Boolean) { _zimmerNurOffen.value = nurOffen }
+    fun setZimmerNurOffen(nurOffen: Boolean) {
+        if (nurOffen) _zimmerFilter.value =
+            _zimmerFilter.value.copy(pruefStatus = PruefStatus.UNGEPRUEFT)
+    }
 
     /** true = für diese App-Version wurde der „Was ist neu"-Hinweis noch nicht gezeigt. */
     fun wasIstNeuFaellig(version: String): Boolean =
@@ -672,6 +684,128 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _message.value = "Einsatz beendet – $stunden Std. übernommen"
                 if (settings.value.autoSync) syncNow(leise = true)
             }
+        }
+    }
+
+    // ----- Tagesstunden automatisch auf die Stationen verteilen -----
+
+    /** Ein Stations-Anteil bei der automatischen Tagesaufteilung. */
+    data class TagPosten(
+        val station: String,
+        val zeitraumStart: String,
+        val zimmer: Int,          // an diesem Tag geprüfte Zimmer der Station
+        val arbeiten: Int,        // Summe der eingetragenen Arbeiten/Material-Zeilen
+        val gewicht: Double,      // Arbeitsaufwand relativ zu den anderen Stationen
+        val arbeitStunden: Double,// zugeteilte Arbeitsstunden (Viertelstunden)
+        val anfahrt: Double,      // Anfahrt (nur auf der ersten Station > 0)
+        val bereitsErfasst: Double// bereits auf „meiner" Zeile stehende Stunden
+    ) {
+        val gesamt: Double get() = arbeitStunden + anfahrt
+    }
+
+    /** Ergebnis der Aufteilung inkl. Tag und Summen für die Vorschau. */
+    data class TagAufteilung(
+        val datum: String,
+        val gesamtStunden: Double,
+        val anfahrt: Double,
+        val posten: List<TagPosten>
+    ) {
+        val verteilteArbeit: Double get() = posten.sumOf { it.arbeitStunden }
+    }
+
+    /**
+     * Verteilt die am Tagesende angegebenen Arbeitsstunden auf die Stationen,
+     * auf denen an [isoDate] gearbeitet wurde – gewichtet danach, wie viel auf
+     * jedem Zettel steht (Zimmer + eingetragene Arbeiten). Die Anfahrt kommt auf
+     * die zuerst besuchte Station. Nichts wird gespeichert – nur berechnet.
+     */
+    suspend fun berechneTagAufteilung(
+        gesamtStunden: Double,
+        anfahrtStunden: Double,
+        isoDate: String = Dates.todayIso()
+    ): TagAufteilung = withContext(Dispatchers.IO) {
+        val roomsById = repository.allRooms().associateBy { it.id }
+        val start = settings.value.zeitraumStartIso()
+        val me = settings.value.mitarbeiter.ifBlank { "Unbenannt" }
+
+        val heute = repository.allInspections()
+            .filter { it.datum == isoDate && !it.geloescht && roomsById.containsKey(it.roomId) }
+
+        // Nach Station gruppieren; Reihenfolge = zuerst besuchte Station zuerst
+        // (kleinste Inspektions-ID = früher angelegt).
+        data class Roh(val station: String, val zimmer: Int, val arbeiten: Int, val ersteId: Long)
+        val proStation = heute.groupBy { roomsById.getValue(it.roomId).station }
+            .map { (station, insp) ->
+                Roh(
+                    station = station,
+                    zimmer = insp.map { it.roomId }.distinct().size,
+                    arbeiten = insp.sumOf { it.arbeitenListe().size },
+                    ersteId = insp.minOf { it.id }
+                )
+            }
+            .sortedBy { it.ersteId }
+
+        if (proStation.isEmpty()) {
+            return@withContext TagAufteilung(isoDate, gesamtStunden, anfahrtStunden, emptyList())
+        }
+
+        // Gewicht: jedes Zimmer zählt voll, jede Arbeit/Material-Zeile zur Hälfte.
+        val gewichte = proStation.map { it.zimmer + 0.5 * it.arbeiten }
+        val gewichtSumme = gewichte.sum().takeIf { it > 0 } ?: proStation.size.toDouble()
+
+        // Roh-Anteile auf Viertelstunden runden, danach die Rundungsdifferenz auf
+        // die Station mit dem größten Gewicht legen, damit die Summe exakt passt.
+        val roh = gewichte.map { it / gewichtSumme * gesamtStunden }
+        val gerundet = roh.map { (Math.round(it / 0.25) * 0.25) }.toMutableList()
+        val differenz = Math.round((gesamtStunden - gerundet.sum()) / 0.25) * 0.25
+        if (differenz != 0.0 && gerundet.isNotEmpty()) {
+            val idx = gewichte.indices.maxByOrNull { gewichte[it] } ?: 0
+            gerundet[idx] = (gerundet[idx] + differenz).coerceAtLeast(0.0)
+        }
+
+        val posten = proStation.mapIndexed { i, r ->
+            val bereits = repository.getEintraege(r.station, start)
+                .find { it.mitarbeiter == me }?.let { Dates.stundenWert(it.stunden) } ?: 0.0
+            TagPosten(
+                station = r.station,
+                zeitraumStart = start,
+                zimmer = r.zimmer,
+                arbeiten = r.arbeiten,
+                gewicht = gewichte[i],
+                arbeitStunden = gerundet[i],
+                anfahrt = if (i == 0) anfahrtStunden else 0.0,
+                bereitsErfasst = bereits
+            )
+        }
+        TagAufteilung(isoDate, gesamtStunden, anfahrtStunden, posten)
+    }
+
+    /**
+     * Übernimmt eine berechnete Aufteilung: addiert je Station die zugeteilten
+     * Stunden (und die Anfahrt auf der ersten) zur eigenen Zeile des Team-Zettels.
+     */
+    fun uebernehmeTagAufteilung(aufteilung: TagAufteilung, onDone: () -> Unit = {}) {
+        val me = settings.value.mitarbeiter.ifBlank { "Unbenannt" }
+        viewModelScope.launch(Dispatchers.IO) {
+            aufteilung.posten.forEach { p ->
+                val vorhanden = repository.getEintraege(p.station, p.zeitraumStart)
+                    .find { it.mitarbeiter == me }
+                val neueStunden = Dates.stundenWert(vorhanden?.stunden) + p.arbeitStunden
+                val neueAnfahrt = Dates.stundenWert(vorhanden?.anfahrt) + p.anfahrt
+                repository.upsertEintrag(
+                    de.excero.tvwartung.data.StundenzettelEintrag(
+                        station = p.station,
+                        zeitraumStart = p.zeitraumStart,
+                        mitarbeiter = me,
+                        stunden = Dates.stundenText(neueStunden),
+                        anfahrt = if (neueAnfahrt > 0) Dates.stundenText(neueAnfahrt)
+                        else (vorhanden?.anfahrt ?: "")
+                    )
+                )
+            }
+            _message.value = "Stunden auf ${aufteilung.posten.size} Station(en) verteilt"
+            if (settings.value.autoSync) syncNow(leise = true)
+            withContext(Dispatchers.Main) { onDone() }
         }
     }
 
