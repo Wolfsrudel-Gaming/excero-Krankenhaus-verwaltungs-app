@@ -56,6 +56,7 @@ fun PhotoSection(
     viewModel: AppViewModel,
     roomId: String,
     dateFolder: String = Dates.todayFolder(),
+    freenetVerlaengert: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var refresh by remember(roomId, dateFolder) { mutableIntStateOf(0) }
@@ -106,11 +107,37 @@ fun PhotoSection(
                     Spacer(Modifier.width(6.dp))
                     Text("Foto fern")
                 }
-                FilledTonalButton(onClick = { capture("nah") }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Foto nah")
+                if (!freenetVerlaengert) {
+                    FilledTonalButton(onClick = { capture("nah") }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Foto nah")
+                    }
                 }
+            }
+            // Bei verlängertem Freenet zwei Nah-Aufnahmen: erst der alte Stand
+            // (vor der Verlängerung), dann der neue Stand (nach der Verlängerung).
+            if (freenetVerlaengert) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = { capture("nah1") }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Nah (vorher)")
+                    }
+                    FilledTonalButton(onClick = { capture("nah2") }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Nah (nachher)")
+                    }
+                }
+            }
+            FilledTonalButton(
+                onClick = { capture("fernbedienung") },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Outlined.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Foto Fernbedienung")
             }
             OutlinedButton(
                 onClick = {
@@ -165,7 +192,10 @@ fun PhotoSection(
                 }
             } else {
                 Text(
-                    "Noch keine Fotos – ein Foto von fern und eins von nah aufnehmen.",
+                    if (freenetVerlaengert)
+                        "Noch keine Fotos – fern, Fernbedienung sowie nah (vorher/nachher der Verlängerung) aufnehmen."
+                    else
+                        "Noch keine Fotos – ein Foto von fern, eins von nah und eins der Fernbedienung aufnehmen.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -304,17 +304,28 @@ object PruefberichtPdf {
         }
     }
 
-    /** "A4_01a_20260714_fern_101530.jpg" → "fern · 10:15:30" */
+    /** "A4_01a_20260714_fern_101530.jpg" → "Fern · 10:15:30" */
     private fun photoLabel(file: File): String {
         val parts = file.nameWithoutExtension.split("_")
         // Uhrzeit ist der letzte 6-stellige Ziffernblock, das Label steht davor
         val timeIndex = parts.indexOfLast { it.length == 6 && it.all { c -> c.isDigit() } }
         if (timeIndex >= 1) {
             val time = parts[timeIndex]
-            val label = parts[timeIndex - 1]
+            val label = lesbaresLabel(parts[timeIndex - 1])
             return "$label · ${time.substring(0, 2)}:${time.substring(2, 4)}:${time.substring(4, 6)}"
         }
         return file.name
+    }
+
+    /** Interne Foto-Kürzel in verständliche Beschriftungen übersetzen. */
+    private fun lesbaresLabel(label: String): String = when (label) {
+        "fern" -> "Fern"
+        "nah" -> "Nah"
+        "nah1" -> "Nah (vor Verlängerung)"
+        "nah2" -> "Nah (nach Verlängerung)"
+        "fernbedienung" -> "Fernbedienung"
+        "galerie" -> "Galerie"
+        else -> label
     }
 
     private fun decodeScaled(file: File, reqWidth: Int): Bitmap? {

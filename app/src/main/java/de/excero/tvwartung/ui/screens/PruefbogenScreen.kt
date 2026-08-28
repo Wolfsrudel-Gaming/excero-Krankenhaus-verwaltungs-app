@@ -237,7 +237,11 @@ fun PruefbogenScreen(
             }
 
             // Fotos direkt hier aufnehmen – ohne den Prüfbogen zu verlassen
-            PhotoSection(viewModel = viewModel, roomId = current.id)
+            PhotoSection(
+                viewModel = viewModel,
+                roomId = current.id,
+                freenetVerlaengert = freenetVerlaengert
+            )
 
             // KI-Vorschläge aus den Fotos (nur wenn KI aktiv + Server hinterlegt)
             if (viewModel.kiVerfuegbar()) {
