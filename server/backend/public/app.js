@@ -15,6 +15,7 @@ const ROUTES = {
   'lager-buchungen':      viewLagerBuchungen,
   'lager-verbrauch':      viewLagerVerbrauch,
   'lager-nachbestellung': viewLagerNachbestellung,
+  'material-zuordnung':   viewMaterialZuordnung,
   'lieferanten':          viewLieferanten,
   'abrechnung':           viewAbrechnung,
   'benutzer':             viewBenutzer,

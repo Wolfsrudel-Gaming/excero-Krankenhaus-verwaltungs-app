@@ -1419,6 +1419,55 @@ router.post('/api/web/lager/buchung', requireWebAuth, express.json(), async (req
   } finally { client.release(); }
 });
 
+// Material-Zuordnung: welche App-Materialien / tatsächlich verbrauchten Arbeiten
+// sind KEINEM Lager-Artikel zugeordnet? Nur zugeordnete werden beim Verbrauch
+// automatisch aufs Lager gebucht – hier sieht man, was sonst „durchrutscht".
+router.get('/api/web/material/zuordnung', requireWebAuth, async (req, res) => {
+  // Namen aus dem App-Materialkatalog + tatsächlich in Prüfungen verwendete Arbeiten
+  const { rows: katalog } = await pool.query(
+    'SELECT name, bestand_aktiv FROM material WHERE aktiv ORDER BY name');
+  const { rows: verwendet } = await pool.query(
+    `SELECT elem.value AS name, COUNT(*)::int AS anzahl
+       FROM inspections i
+       CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(i.daten->'arbeiten','[]'::jsonb)) AS elem
+      WHERE COALESCE(i.geloescht,FALSE)=FALSE
+      GROUP BY elem.value`);
+  const anzahlByName = new Map(verwendet.map((r) => [String(r.name).toLowerCase(), r.anzahl]));
+
+  // Alle Namen zusammenführen (Katalog + tatsächlich verwendete)
+  const namen = new Map(); // lower -> Anzeigename
+  katalog.forEach((r) => namen.set(r.name.toLowerCase(), r.name));
+  verwendet.forEach((r) => { if (r.name) namen.set(String(r.name).toLowerCase(), String(r.name)); });
+  const katalogNamen = new Set(katalog.map((r) => r.name.toLowerCase()));
+  const bestandAktivByName = new Map(katalog.map((r) => [r.name.toLowerCase(), r.bestand_aktiv]));
+
+  const { rows: artikel } = await pool.query(
+    `SELECT id, bezeichnung, app_material_name FROM lager_artikel WHERE aktiv`);
+  const artikelByKey = new Map();
+  artikel.forEach((a) => {
+    if (a.app_material_name) artikelByKey.set(a.app_material_name.toLowerCase(), a);
+    artikelByKey.set(a.bezeichnung.toLowerCase(), a);
+  });
+
+  const eintraege = [...namen.entries()].map(([lower, name]) => {
+    const a = artikelByKey.get(lower) || null;
+    return {
+      name,
+      imKatalog: katalogNamen.has(lower),
+      bestandAktiv: !!bestandAktivByName.get(lower),
+      verbrauchtAnzahl: anzahlByName.get(lower) || 0,
+      artikelId: a ? a.id : null,
+      artikel: a ? a.bezeichnung : '',
+      zugeordnet: !!a,
+    };
+  }).sort((x, y) => Number(x.zugeordnet) - Number(y.zugeordnet) || x.name.localeCompare(y.name, 'de'));
+
+  res.json({
+    eintraege,
+    offen: eintraege.filter((e) => !e.zugeordnet).length,
+  });
+});
+
 // Verbrauchsauswertung aus Prüfungen
 router.get('/api/web/lager/verbrauch', requireWebAuth, async (req, res) => {
   const von = String(req.query.von || new Date(Date.now() - 30 * 86400e3).toISOString().slice(0, 10));
