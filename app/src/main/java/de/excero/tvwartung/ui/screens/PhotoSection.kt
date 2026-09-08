@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddAPhoto
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -29,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -100,6 +102,23 @@ fun PhotoSection(
         viewModel.aktualisiereBerichtPdf(roomId, dateFolder)
         refresh++
     }
+    // Zweistufige Bestätigung vor dem Löschen (Foto lässt sich nicht wiederherstellen)
+    var loeschKandidat by remember { mutableStateOf<File?>(null) }
+    loeschKandidat?.let { datei ->
+        AlertDialog(
+            onDismissRequest = { loeschKandidat = null },
+            title = { Text("Foto löschen?") },
+            text = { Text("Dieses Foto wird endgültig entfernt.") },
+            confirmButton = {
+                TextButton(onClick = { loesche(datei); loeschKandidat = null }) {
+                    Text("Löschen")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { loeschKandidat = null }) { Text("Abbrechen") }
+            }
+        )
+    }
 
     // Feste Foto-Felder: je Aufnahmetyp genau ein Bild. Bei verlängertem Freenet
     // zwei Nah-Felder (Stand vor/nach der Verlängerung).
@@ -137,7 +156,7 @@ fun PhotoSection(
                         caption = caption,
                         foto = fotoFuer(label),
                         onCapture = { capture(label) },
-                        onDelete = { fotoFuer(label)?.let { loesche(it) } }
+                        onDelete = { fotoFuer(label)?.let { loeschKandidat = it } }
                     )
                 }
             }
@@ -177,7 +196,7 @@ fun PhotoSection(
                                     .clip(RoundedCornerShape(10.dp))
                             )
                             IconButton(
-                                onClick = { loesche(file) },
+                                onClick = { loeschKandidat = file },
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .size(28.dp)

@@ -15,8 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,6 +59,8 @@ fun SettingsScreen(
         mutableStateOf(Dates.isoToGerman(settings.seitDatum))
     }
     var dateError by remember { mutableStateOf(false) }
+    var apiKeySichtbar by remember { mutableStateOf(false) }
+    var zeigeChangelog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -230,6 +235,19 @@ fun SettingsScreen(
                         onValueChange = { viewModel.updateSettings(settings.copy(apiKey = it.trim())) },
                         label = { Text("API-Schlüssel") },
                         singleLine = true,
+                        visualTransformation = if (apiKeySichtbar)
+                            androidx.compose.ui.text.input.VisualTransformation.None
+                        else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { apiKeySichtbar = !apiKeySichtbar }) {
+                                Icon(
+                                    if (apiKeySichtbar) Icons.Outlined.VisibilityOff
+                                    else Icons.Outlined.Visibility,
+                                    contentDescription = if (apiKeySichtbar) "API-Schlüssel verbergen"
+                                    else "API-Schlüssel anzeigen"
+                                )
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -371,7 +389,77 @@ fun SettingsScreen(
                 }
             }
 
+            // Über die App / Info + Changelog
+            Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Über die App",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        "KKH TV-Wartung · EXCERO GmbH",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "Version ${de.excero.tvwartung.BuildConfig.VERSION_NAME} " +
+                            "(Build ${de.excero.tvwartung.BuildConfig.VERSION_CODE})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { zeigeChangelog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Änderungen anzeigen") }
+                }
+            }
+
             Spacer(Modifier.height(16.dp))
         }
     }
+
+    if (zeigeChangelog) {
+        ChangelogDialog(onDismiss = { zeigeChangelog = false })
+    }
+}
+
+/** Änderungsverlauf der letzten Versionen (aus V2.0-ROADMAP abgeleitet). */
+@Composable
+private fun ChangelogDialog(onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Schließen") }
+        },
+        title = { Text("Änderungen") },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                de.excero.tvwartung.util.Changelog.EINTRAEGE.forEach { (version, punkte) ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            version,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        punkte.forEach {
+                            Text("•  $it", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
