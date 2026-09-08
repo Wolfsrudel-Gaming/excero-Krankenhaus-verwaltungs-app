@@ -215,7 +215,17 @@ router.post('/api/sync/inspections', requireApiKey, express.json({ limit: '50mb'
        RETURNING (xmax = 0) AS inserted`,
       [i.uuid, i.roomId, i.datum || '', JSON.stringify(daten), i.mitarbeiter || '', !!i.geloescht]
     );
-    if (r.rows[0] && r.rows[0].inserted) neu++;
+    if (r.rows[0] && r.rows[0].inserted) {
+      neu++;
+      // Nur beim ERSTEN Eintreffen und wenn nicht gelöscht: Verbrauch aufs Lager buchen
+      if (!i.geloescht) {
+        try {
+          await bucheVerbrauchFuerInspection(i.uuid, i.roomId, i.arbeiten || [], i.mitarbeiter || '');
+        } catch (e) {
+          console.error('Verbrauchsbuchung fehlgeschlagen für', i.uuid, e.message);
+        }
+      }
+    }
   }
   res.json({ neu });
 });
@@ -775,18 +785,51 @@ router.get('/api/sync/sperren', requireApiKey, async (req, res) => {
 // in einen verknüpften Lager-Artikel (app_material_name), damit der Chef ihn im
 // Web-Lager sieht. Der Rückweg (Web → App) läuft über spiegleLagerNachMaterial().
 async function spiegleMaterialNachLager(name, bestand) {
-  // Nur wenn ein aktiver Lager-Artikel verknüpft ist und sich der Bestand ändert
+  // Verknüpften Lager-Artikel suchen
   const { rows } = await pool.query(
     `SELECT id, bestand FROM lager_artikel
      WHERE lower(app_material_name) = lower($1) AND aktiv = TRUE LIMIT 1`, [name]);
   if (!rows.length) return;
-  if (Number(rows[0].bestand) === Number(bestand)) return;
-  await pool.query('UPDATE lager_artikel SET bestand=$1, updated_at=now() WHERE id=$2',
-    [bestand, rows[0].id]);
+  const delta = Number(bestand) - Number(rows[0].bestand);
+  // Nur ZUWÄCHSE spiegeln (Nachschub aus der App = Eingang). Rückgänge sind
+  // Materialverbrauch und werden zimmerbezogen über die Ausgangsbuchung beim
+  // Prüfbogen-Sync gebucht – hier NICHT ein zweites Mal abziehen.
+  if (delta <= 0) return;
+  await pool.query('UPDATE lager_artikel SET bestand=bestand+$1, updated_at=now() WHERE id=$2',
+    [delta, rows[0].id]);
   await pool.query(
     `INSERT INTO lager_buchungen (artikel_id, typ, menge, grund, benutzer)
-     VALUES ($1,'korrektur',$2,'Abgleich aus der App','App-Sync')`,
-    [rows[0].id, bestand]).catch(() => {});
+     VALUES ($1,'eingang',$2,'Zugang aus der App','App-Sync')`,
+    [rows[0].id, delta]).catch(() => {});
+}
+
+/**
+ * Bucht den Materialverbrauch eines gerade neu eingegangenen Prüfbogens
+ * zimmerbezogen als Ausgang aufs Web-Lager. Wird nur beim ERSTEN Eintreffen
+ * einer Inspektion (uuid) aufgerufen, daher kein Doppelabzug bei Re-Syncs.
+ * Jede Arbeit/Material-Zeile = 1 Stück; verknüpft über app_material_name/Bezeichnung.
+ */
+async function bucheVerbrauchFuerInspection(uuid, roomId, arbeiten, mitarbeiter) {
+  if (!Array.isArray(arbeiten) || arbeiten.length === 0) return;
+  const mengen = new Map();
+  for (const a of arbeiten) {
+    const name = String(a || '').trim();
+    if (name) mengen.set(name.toLowerCase(), (mengen.get(name.toLowerCase()) || 0) + 1);
+  }
+  for (const [nameLower, menge] of mengen) {
+    const { rows } = await pool.query(
+      `SELECT id FROM lager_artikel
+       WHERE aktiv AND (lower(app_material_name) = $1 OR lower(bezeichnung) = $1)
+       ORDER BY (lower(app_material_name) = $1) DESC LIMIT 1`, [nameLower]);
+    if (!rows.length) continue;
+    const artikelId = rows[0].id;
+    await pool.query('UPDATE lager_artikel SET bestand = bestand - $1, updated_at = now() WHERE id = $2',
+      [menge, artikelId]);
+    await pool.query(
+      `INSERT INTO lager_buchungen (artikel_id, typ, menge, grund, bezug, benutzer)
+       VALUES ($1,'ausgang',$2,$3,$4,$5)`,
+      [artikelId, menge, `Verbrauch Zimmer ${roomId}`, roomId, mitarbeiter || 'App']);
+  }
 }
 
 // Zeitstempel im App-Format (Berlin, naive ISO) für Alt-Clients ohne updatedAt.
