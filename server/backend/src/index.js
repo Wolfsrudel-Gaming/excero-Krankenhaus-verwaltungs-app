@@ -846,6 +846,35 @@ router.get('/api/sync/lieferanten', requireApiKey, async (req, res) => {
   res.json({ lieferanten: rows });
 });
 
+// Vollständiger Lager-Artikelkatalog für die App (nur lesen) – damit die
+// Lagerübersicht in der App dieselben Daten wie das Web-Lager zeigt
+// (Bestand, Mindestbestand, Kategorie, Einheit, EK/VK, Lieferant, Artikelnr.).
+// Die Verknüpfung zum App-Material läuft über app_material_name bzw. den Namen.
+router.get('/api/sync/lager-artikel', requireApiKey, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT a.bezeichnung, a.artikelnummer, a.kategorie, a.einheit,
+            a.ek_preis, a.vk_preis, a.bestand, a.mindestbestand,
+            a.app_material_name, l.name AS lieferant_name
+     FROM lager_artikel a
+     LEFT JOIN lieferanten l ON l.id = a.lieferant_id
+     WHERE a.aktiv
+     ORDER BY a.bezeichnung`);
+  res.json({
+    artikel: rows.map((r) => ({
+      bezeichnung: r.bezeichnung,
+      artikelnummer: r.artikelnummer || '',
+      kategorie: r.kategorie || '',
+      einheit: r.einheit || '',
+      ekPreis: r.ek_preis != null ? Number(r.ek_preis) : null,
+      vkPreis: r.vk_preis != null ? Number(r.vk_preis) : null,
+      bestand: Number(r.bestand),
+      mindestbestand: Number(r.mindestbestand),
+      appMaterialName: r.app_material_name || '',
+      lieferant: r.lieferant_name || '',
+    })),
+  });
+});
+
 router.post('/api/sync/pruefpunkte', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
   await replaceAll('app_pruefpunkte', ['titel', 'aktiv', 'sort_index'],
     (req.body.punkte || []).map((p) => ({

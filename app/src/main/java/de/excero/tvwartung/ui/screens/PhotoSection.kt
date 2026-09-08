@@ -3,6 +3,8 @@ package de.excero.tvwartung.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,19 +12,18 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.AddAPhoto
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +57,7 @@ fun PhotoSection(
     viewModel: AppViewModel,
     roomId: String,
     dateFolder: String = Dates.todayFolder(),
+    freenetVerlaengert: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var refresh by remember(roomId, dateFolder) { mutableIntStateOf(0) }
@@ -92,6 +94,30 @@ fun PhotoSection(
         pendingPhoto = file to label
         takePicture.launch(viewModel.photoStore.uriFor(file))
     }
+    fun loesche(file: File) {
+        viewModel.photoStore.delete(file)
+        viewModel.logAction(roomId, "Foto gelöscht")
+        viewModel.aktualisiereBerichtPdf(roomId, dateFolder)
+        refresh++
+    }
+
+    // Feste Foto-Felder: je Aufnahmetyp genau ein Bild. Bei verlängertem Freenet
+    // zwei Nah-Felder (Stand vor/nach der Verlängerung).
+    val felder = buildList {
+        add("fern" to "Fern")
+        if (freenetVerlaengert) {
+            add("nah1" to "Nah (vorher)")
+            add("nah2" to "Nah (nachher)")
+        } else {
+            add("nah" to "Nah")
+        }
+        add("fernbedienung" to "Fernbedienung")
+    }
+    // Neuestes Foto zu einem Feld (Label steckt im Dateinamen: …_<label>_<zeit>.jpg)
+    fun fotoFuer(label: String): File? =
+        photos.filter { it.name.contains("_${label}_") }.maxByOrNull { it.name }
+    val feldFotos = felder.mapNotNull { fotoFuer(it.first) }.toSet()
+    val weitereFotos = photos.filterNot { it in feldFotos }
 
     Card(modifier = modifier, elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -100,18 +126,22 @@ fun PhotoSection(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = { capture("fern") }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Outlined.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Foto fern")
-                }
-                FilledTonalButton(onClick = { capture("nah") }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Outlined.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Foto nah")
+            // Feste Felder als Kacheln – tippen nimmt genau dieses Bild auf
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                felder.forEach { (label, caption) ->
+                    FotoFeld(
+                        caption = caption,
+                        foto = fotoFuer(label),
+                        onCapture = { capture(label) },
+                        onDelete = { fotoFuer(label)?.let { loesche(it) } }
+                    )
                 }
             }
+
             OutlinedButton(
                 onClick = {
                     pickFromGallery.launch(
@@ -122,18 +152,21 @@ fun PhotoSection(
             ) {
                 Icon(Icons.Outlined.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Aus Galerie hinzufügen")
+                Text("Weitere Fotos aus Galerie")
             }
-            if (photos.isNotEmpty()) {
-                // Raster (wrappt in mehrere Reihen) statt seitlichem Scrollen –
-                // mehr Fotos auf einen Blick. FlowRow, damit es in scrollbaren
-                // Screens (Prüfbogen/Bericht) nicht mit verschachteltem Scrollen kollidiert.
+
+            if (weitereFotos.isNotEmpty()) {
+                Text(
+                    "Weitere Fotos (${weitereFotos.size})",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    photos.forEach { file ->
+                    weitereFotos.forEach { file ->
                         Box {
                             AsyncImage(
                                 model = file,
@@ -144,12 +177,7 @@ fun PhotoSection(
                                     .clip(RoundedCornerShape(10.dp))
                             )
                             IconButton(
-                                onClick = {
-                                    viewModel.photoStore.delete(file)
-                                    viewModel.logAction(roomId, "Foto gelöscht")
-                                    viewModel.aktualisiereBerichtPdf(roomId, dateFolder)
-                                    refresh++
-                                },
+                                onClick = { loesche(file) },
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .size(28.dp)
@@ -163,13 +191,80 @@ fun PhotoSection(
                         }
                     }
                 }
-            } else {
-                Text(
-                    "Noch keine Fotos – ein Foto von fern und eins von nah aufnehmen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
+    }
+}
+
+/**
+ * Ein festes Foto-Feld (Kachel): zeigt das aufgenommene Bild oder – solange leer –
+ * ein Kamera-Symbol; Antippen nimmt genau dieses Bild auf, ✕ löscht es.
+ */
+@Composable
+private fun FotoFeld(
+    caption: String,
+    foto: File?,
+    onCapture: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.width(104.dp)
+    ) {
+        Box(
+            Modifier
+                .size(104.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .then(if (foto == null) Modifier.clickable(onClick = onCapture) else Modifier)
+        ) {
+            if (foto != null) {
+                AsyncImage(
+                    model = foto,
+                    contentDescription = caption,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = "Foto löschen",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            } else {
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.AddAPhoto,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(30.dp)
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        "Aufnehmen",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        Text(
+            caption,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = if (foto != null) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

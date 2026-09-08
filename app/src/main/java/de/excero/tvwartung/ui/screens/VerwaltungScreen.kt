@@ -64,6 +64,28 @@ fun VerwaltungScreen(
     val materialien by viewModel.materialien.collectAsState()
     val pruefpunkte by viewModel.customPruefpunkte.collectAsState()
 
+    // Web-Lager (Artikelkatalog) laden, damit die App dieselben Daten zeigt.
+    val scope = rememberCoroutineScope()
+    var lagerArtikel by remember { mutableStateOf<List<de.excero.tvwartung.sync.LagerArtikel>?>(null) }
+    var lagerLaedt by remember { mutableStateOf(false) }
+    fun ladeLager() {
+        scope.launch {
+            lagerLaedt = true
+            lagerArtikel = viewModel.ladeLagerArtikel()
+            lagerLaedt = false
+        }
+    }
+    LaunchedEffect(Unit) { ladeLager() }
+    // Verknüpfung App-Material ↔ Web-Artikel über app_material_name bzw. Bezeichnung
+    val artikelByName = remember(lagerArtikel) {
+        buildMap<String, de.excero.tvwartung.sync.LagerArtikel> {
+            lagerArtikel?.forEach { a ->
+                a.appMaterialName.takeIf { it.isNotBlank() }?.let { put(it.trim().lowercase(), a) }
+                put(a.bezeichnung.trim().lowercase(), a)
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Material & Prüfpunkte", fontWeight = FontWeight.Bold) },
@@ -167,7 +189,7 @@ fun VerwaltungScreen(
                     )
                     HorizontalDivider()
                     materialien.forEach { material ->
-                        MaterialRow(material, viewModel)
+                        MaterialRow(material, viewModel, artikelByName[material.name.trim().lowercase()])
                     }
                     HorizontalDivider()
                     NeuesMaterialEingabe(viewModel)
@@ -219,11 +241,153 @@ fun VerwaltungScreen(
                 }
             }
 
+            // Web-Lager: vollständiger Artikelkatalog wie in der Weboberfläche
+            WebLagerCard(lagerArtikel, lagerLaedt) { ladeLager() }
+
             // Lieferanten (nur lesen, aus dem Web-Lager)
             LieferantenCard(viewModel)
         }
     }
 }
+
+/**
+ * Spiegelt den Web-Lager-Artikelkatalog in der App (nur lesend): Bestand,
+ * Mindestbestand, Kategorie, Einheit, EK/VK, Lieferant – plus Nachbestell-Markierung.
+ */
+@Composable
+private fun WebLagerCard(
+    artikel: List<de.excero.tvwartung.sync.LagerArtikel>?,
+    laedt: Boolean,
+    onReload: () -> Unit
+) {
+    var suche by remember { mutableStateOf("") }
+    Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Lagerbestand (Web-Lager)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onReload, enabled = !laedt) { Text("Aktualisieren") }
+            }
+            Text(
+                "Vollständiger Artikelkatalog wie in der Weboberfläche – nur lesend, " +
+                    "gepflegt wird im Web-Lager.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            HorizontalDivider()
+            when {
+                laedt && artikel == null ->
+                    SkeletonBox(Modifier.fillMaxWidth().height(60.dp), corner = 10)
+                artikel == null -> Text(
+                    "Server nicht erreichbar oder kein Zugang hinterlegt.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                artikel.isEmpty() -> Text(
+                    "Noch keine Artikel im Web-Lager angelegt.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                else -> {
+                    val nachbestellen = artikel.count { it.nachbestellen }
+                    if (nachbestellen > 0) {
+                        Text(
+                            "⚠️ $nachbestellen Artikel unter Mindestbestand",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = WarnAmber
+                        )
+                    }
+                    OutlinedTextField(
+                        value = suche,
+                        onValueChange = { suche = it },
+                        label = { Text("Artikel suchen") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    val gefiltert = artikel.filter {
+                        suche.isBlank() ||
+                            it.bezeichnung.contains(suche, true) ||
+                            it.kategorie.contains(suche, true) ||
+                            it.artikelnummer.contains(suche, true) ||
+                            it.lieferant.contains(suche, true)
+                    }
+                    Text(
+                        "${gefiltert.size} von ${artikel.size} Artikeln",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    gefiltert.forEach { a -> WebLagerZeile(a) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WebLagerZeile(a: de.excero.tvwartung.sync.LagerArtikel) {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(a.bezeichnung, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            val zeile2 = listOfNotNull(
+                a.kategorie.ifBlank { null },
+                a.artikelnummer.ifBlank { null }?.let { "Nr. $it" },
+                a.lieferant.ifBlank { null }
+            )
+            if (zeile2.isNotEmpty()) {
+                Text(
+                    zeile2.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            val preise = listOfNotNull(
+                a.ekPreis?.let { "EK %.2f €".format(it) },
+                a.vkPreis?.let { "VK %.2f €".format(it) }
+            )
+            if (preise.isNotEmpty()) {
+                Text(
+                    preise.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                "${fmtMenge(a.bestand)} ${a.einheit}".trim(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    a.nachbestellen -> ErrorRed
+                    a.mindestbestand > 0 && a.bestand <= a.mindestbestand -> WarnAmber
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
+            )
+            if (a.mindestbestand > 0) {
+                Text(
+                    "Min. ${fmtMenge(a.mindestbestand)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (a.nachbestellen) StatusBadge("Nachbestellen", ErrorRed)
+        }
+    }
+}
+
+/** Menge ohne unnötige Nachkommastellen: 5.0 → "5", 2.5 → "2,5". */
+private fun fmtMenge(x: Double): String =
+    if (x == x.toLong().toDouble()) x.toLong().toString()
+    else "%.2f".format(x).trimEnd('0').trimEnd('.', ',').replace('.', ',')
 
 @Composable
 private fun LieferantenCard(viewModel: AppViewModel) {
@@ -288,7 +452,11 @@ private fun LieferantenCard(viewModel: AppViewModel) {
 }
 
 @Composable
-private fun MaterialRow(material: Material, viewModel: AppViewModel) {
+private fun MaterialRow(
+    material: Material,
+    viewModel: AppViewModel,
+    artikel: de.excero.tvwartung.sync.LagerArtikel? = null
+) {
     var zeigeBuchung by remember { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -302,6 +470,23 @@ private fun MaterialRow(material: Material, viewModel: AppViewModel) {
                 color = if (material.aktiv) MaterialTheme.colorScheme.onSurface
                 else MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // Verknüpfte Web-Lager-Daten (falls im Web-Lager vorhanden)
+            artikel?.let { a ->
+                val info = listOfNotNull(
+                    a.kategorie.ifBlank { null },
+                    if (a.mindestbestand > 0) "Min. ${fmtMenge(a.mindestbestand)}" else null,
+                    a.lieferant.ifBlank { null },
+                    a.ekPreis?.let { "EK %.2f €".format(it) }
+                )
+                if (info.isNotEmpty()) {
+                    Text(
+                        "🔗 " + info.joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (a.nachbestellen) ErrorRed
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = material.bestandAktiv,

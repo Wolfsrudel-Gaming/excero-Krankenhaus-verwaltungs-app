@@ -342,6 +342,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }.getOrDefault(emptyList())
         }
 
+    /**
+     * Vollständigen Lager-Artikelkatalog vom Server laden (read-only), damit die
+     * App-Lagerübersicht dieselben Daten wie das Web-Lager zeigt. null = Server
+     * nicht erreichbar/kein Zugang (zur Unterscheidung von „leer").
+     */
+    suspend fun ladeLagerArtikel(): List<de.excero.tvwartung.sync.LagerArtikel>? =
+        withContext(Dispatchers.IO) {
+            val s = settings.value
+            if (s.serverUrl.isBlank() || s.apiKey.isBlank()) return@withContext null
+            runCatching {
+                de.excero.tvwartung.sync.LagerClient(s.serverUrl, s.apiKey).artikel()
+            }.getOrNull()
+        }
+
     // ----- Menü: angepinnte Seiten + „Was ist neu" -----
 
     val gepinnteMenue: StateFlow<List<String>> = app.settingsStore.gepinnteMenue
