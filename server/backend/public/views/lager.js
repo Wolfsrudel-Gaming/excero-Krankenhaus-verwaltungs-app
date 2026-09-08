@@ -704,3 +704,105 @@ async function viewMitarbeiter() {
 
   await lade();
 }
+
+/* ─── Material-Zuordnung ──────────────────────────────────────────────────
+   Zeigt, welche App-Materialien / verbrauchten Arbeiten KEINEM Lager-Artikel
+   zugeordnet sind. Nur zugeordnete werden beim Verbrauch automatisch aufs
+   Lager gebucht – hier lässt sich schnell nachverknüpfen. */
+async function viewMaterialZuordnung() {
+  const el = document.getElementById('content-area');
+  el.innerHTML = `
+    ${pageHeader('Material-Zuordnung', `
+      <button class="btn btn-secondary btn-sm" id="mz-reload">🔄 Aktualisieren</button>
+    `)}
+    <div class="alert alert-info" style="margin-bottom:12px">
+      Nur Materialien, die einem Lager-Artikel zugeordnet sind, werden beim Verbrauch
+      auf einem Zimmer automatisch vom Lagerbestand abgebucht. Nicht zugeordnete
+      „rutschen durch" – hier verknüpfen oder als Artikel anlegen.
+    </div>
+    <div id="mz-kpi"></div>
+    <div id="mz-container"><div class="loading">Wird geladen…</div></div>
+  `;
+
+  async function lade() {
+    const container = document.getElementById('mz-container');
+    if (!container) return;
+    container.innerHTML = '<div class="loading">Wird geladen…</div>';
+    let data;
+    try { data = await api('/kkh/api/web/material/zuordnung'); }
+    catch (e) { container.innerHTML = `<div class="alert alert-err">${escH(e.message)}</div>`; return; }
+
+    const rows = (data?.eintraege || []).map((e) => ({ ...e, _rowClass: e.zugeordnet ? '' : 'warn-row' }));
+    const offen = data?.offen ?? 0;
+    const kpi = document.getElementById('mz-kpi');
+    if (kpi) kpi.innerHTML = `
+      <div class="kpi-grid" style="margin-bottom:12px">
+        <div class="kpi-card ${offen > 0 ? 'warn' : 'ok'}">
+          <div class="kpi-label">Nicht zugeordnet</div>
+          <div class="kpi-value">${offen}</div>
+          <div class="kpi-sub">von ${rows.length} Materialien</div>
+        </div>
+      </div>`;
+
+    new DataGrid(container, {
+      data: rows,
+      filterKeys: ['name', 'artikel'],
+      columns: [
+        { key: 'name', label: 'Material / Arbeit', sort: true,
+          render: (v) => `<strong>${escH(v)}</strong>` },
+        { key: 'imKatalog', label: 'Im App-Katalog', width: '120px', align: 'center',
+          render: (v) => v ? badge('Ja', 'teal') : badge('nur verbraucht', 'gray') },
+        { key: 'verbrauchtAnzahl', label: 'Verbraucht', sort: true, width: '100px', align: 'right',
+          render: (v) => v > 0 ? `${v}×` : '–' },
+        { key: 'zugeordnet', label: 'Lager-Artikel', sort: true,
+          render: (v, row) => v ? badge(escH(row.artikel), 'ok') : badge('Nicht zugeordnet', 'err') },
+        { key: '_actions', label: '', width: '140px', align: 'right',
+          render: (v, row) => row.zugeordnet
+            ? ''
+            : `<button class="btn btn-xs btn-primary mz-zuordnen" data-name="${escH(row.name)}">Zuordnen…</button>` },
+      ],
+    });
+  }
+
+  document.getElementById('mz-container').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.mz-zuordnen');
+    if (btn) await modalMaterialZuordnen(btn.dataset.name, lade);
+  });
+  document.getElementById('mz-reload').addEventListener('click', lade);
+  await lade();
+}
+
+async function modalMaterialZuordnen(name, reload) {
+  // Vorhandene Artikel für die Verknüpfung laden
+  const data = await api('/kkh/api/web/lager/artikel').catch(() => null);
+  const artikel = (data?.artikel || []).filter((a) => !a.inaktiv);
+  const artikelOpts = artikel.map((a) => `<option value="${a.id}">${escH(a.bezeichnung)}</option>`).join('');
+  const res = await modal(`„${name}" zuordnen`, `
+    <div class="form-grid">
+      <div class="form-group full">
+        <label class="form-label">Vorhandenen Artikel verknüpfen</label>
+        <select class="form-control" id="mz-artikel">
+          <option value="">– neuen Artikel anlegen –</option>
+          ${artikelOpts}
+        </select>
+        <div class="form-hint">Der App-Material-Name „${escH(name)}" wird auf den gewählten
+          Artikel gesetzt. Leer lassen, um einen neuen Artikel mit diesem Namen anzulegen.</div>
+      </div>
+    </div>`,
+    [{ label: 'Abbrechen', value: null, cls: 'btn-secondary' }, { label: 'Zuordnen', cls: 'btn-primary', value: 'ok' }]);
+  if (!res || res.action !== 'ok') return;
+  const artikelId = mf(res, 'mz-artikel');
+  try {
+    if (artikelId) {
+      await api(`/kkh/api/web/lager/artikel/${artikelId}`, { method: 'PATCH', body: { app_material_name: name } });
+      toast('Verknüpft');
+    } else {
+      await api('/kkh/api/web/lager/artikel', { method: 'POST', body: {
+        bezeichnung: name, einheit: 'Stk.', bestand: 0, mindestbestand: 0, app_material_name: name,
+      }});
+      toast('Artikel angelegt & verknüpft');
+    }
+    if (reload) reload();
+    ladeNachbestellungsBadge?.();
+  } catch (e) { toast(e.message, 'err'); }
+}
