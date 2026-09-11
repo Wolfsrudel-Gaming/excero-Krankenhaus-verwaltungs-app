@@ -192,8 +192,13 @@ fun StundenzettelListeScreen(
                                 StatusBadge(if (fertig) "FERTIG" else "OFFEN", if (fertig) OkGreen else WarnAmber)
                             }
                             Text(
-                                "ab ${Dates.isoToGerman(z.zeitraumStart)}" +
-                                    if (z.datum.isNotBlank()) " · ${z.datum}" else "",
+                                buildString {
+                                    // Tageszettel: Datum; erneuter Besuch (Zeitschlüssel): Datum + Uhrzeit
+                                    append(z.datum.ifBlank { Dates.isoToGerman(z.zeitraumStart.take(10)) })
+                                    if (z.zeitraumStart.length >= 16 && z.zeitraumStart[10] == 'T') {
+                                        append(" · ${z.zeitraumStart.substring(11, 16)} Uhr (erneuter Besuch)")
+                                    }
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.PictureAsPdf
+import androidx.compose.material.icons.outlined.Replay
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -45,8 +46,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -72,8 +75,10 @@ fun StundenzettelScreen(
     viewModel: AppViewModel,
     station: String?,
     zettelId: Long?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOeffneZettel: (Long) -> Unit = {}
 ) {
+    val neuBesuchScope = rememberCoroutineScope()
     val gespeichert by produceState<StundenzettelEntity?>(initialValue = null, station, zettelId) {
         value = if (zettelId != null) viewModel.ladeStundenzettelById(zettelId)
         else station?.let { viewModel.ladeStundenzettel(it) }
@@ -246,6 +251,21 @@ fun StundenzettelScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+            }
+
+            // Erneuter Besuch derselben Station am selben Tag → eigener Zettel
+            OutlinedButton(
+                onClick = {
+                    neuBesuchScope.launch {
+                        val neu = viewModel.neuerBesuchStundenzettel(zettel.station)
+                        onOeffneZettel(neu)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Outlined.Replay, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Erneuter Besuch: neuer Stundenzettel")
             }
 
             // Team: Arbeitszeiten je Mitarbeiter (gemeinsamer Stationszettel)
