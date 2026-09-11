@@ -278,7 +278,8 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 station = station,
                                 zettelId = null,
-                                onBack = { navController.popBackStack() }
+                                onBack = { navController.popBackStack() },
+                                onOeffneZettel = { navController.navigate(Routes.stundenzettelEdit(it)) }
                             )
                         }
                         composable("stundenzettel_edit/{zettelId}") { entry ->
@@ -288,7 +289,8 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 station = null,
                                 zettelId = zettelId,
-                                onBack = { navController.popBackStack() }
+                                onBack = { navController.popBackStack() },
+                                onOeffneZettel = { navController.navigate(Routes.stundenzettelEdit(it)) }
                             )
                         }
                         composable(Routes.STUNDENZETTEL_LISTE) {

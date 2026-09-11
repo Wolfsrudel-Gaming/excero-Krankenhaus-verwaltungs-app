@@ -610,7 +610,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     suspend fun ladeStundenzettel(station: String): StundenzettelEntity =
         withContext(Dispatchers.IO) {
-            val start = settings.value.zeitraumStartIso()
+            // Pro Tag ein eigener Stundenzettel je Station: An einem neuen Tag (oder
+            // bei einer Station, an der man vor Wochen schon war und jetzt erneut ist)
+            // entsteht automatisch ein frischer Zettel statt alles in einen zu werfen.
+            val start = Dates.todayIso()
             repository.getStundenzettel(station, start) ?: repository.saveStundenzettel(
                 StundenzettelEntity(
                     station = station,
@@ -619,6 +622,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     datum = Dates.todayGerman()
                 )
             )
+        }
+
+    /**
+     * Neuen Stundenzettel für einen ERNEUTEN Besuch derselben Station am selben Tag
+     * anlegen (z. B. Rückkehr, weil ein TV als defekt gemeldet wurde) und dessen ID
+     * liefern. Eindeutiger Schlüssel über die aktuelle Uhrzeit, damit er neben dem
+     * Tageszettel besteht.
+     */
+    suspend fun neuerBesuchStundenzettel(station: String): Long =
+        withContext(Dispatchers.IO) {
+            val key = Dates.nowIsoDateTime()   // z. B. 2026-09-11T14:30:05 (Tagespräfix bleibt erhalten)
+            repository.saveStundenzettel(
+                StundenzettelEntity(
+                    station = station,
+                    zeitraumStart = key,
+                    auftragsnummer = serverAuftragsnummer() ?: repository.naechsteAuftragsnummer(),
+                    datum = Dates.todayGerman()
+                )
+            ).id
         }
 
     /**
@@ -739,7 +761,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         isoDate: String = Dates.todayIso()
     ): TagAufteilung = withContext(Dispatchers.IO) {
         val roomsById = repository.allRooms().associateBy { it.id }
-        val start = settings.value.zeitraumStartIso()
+        // Stundenzettel sind pro Tag: die verteilten Stunden landen auf dem Tageszettel.
+        val start = isoDate
         val me = settings.value.mitarbeiter.ifBlank { "Unbenannt" }
 
         val heute = repository.allInspections()
@@ -917,7 +940,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val station = eingabe.station.replace(Regex("[^A-Za-z0-9äöüÄÖÜß_-]"), "_")
                 java.io.File(
                     stundenzettelPdfDir(),
-                    "Stundenzettel_${station}_${eingabe.zeitraumStart}.pdf"
+                    "Stundenzettel_${station}_${eingabe.zeitraumStart.replace(':', '-')}.pdf"
                 ).outputStream().use { out -> StundenzettelPdf.write(zettel, out) }
                 basis.leistungen.size
             }.onSuccess {
@@ -964,7 +987,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val stationSicher = zettel.station.replace(Regex("[^A-Za-z0-9äöüÄÖÜß_-]"), "_")
                 java.io.File(
                     stundenzettelPdfDir(),
-                    "Stundenzettel_${stationSicher}_${zettel.zeitraumStart}.pdf"
+                    "Stundenzettel_${stationSicher}_${zettel.zeitraumStart.replace(':', '-')}.pdf"
                 ).outputStream().use { out -> StundenzettelPdf.write(pdf, out) }
             }
         }

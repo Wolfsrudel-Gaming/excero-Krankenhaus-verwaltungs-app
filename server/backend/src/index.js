@@ -736,6 +736,144 @@ router.get('/api/web/files', requireWebAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ---------- HiDrive-Export (optional, manuell ausgelöst) ----------
+// Legt Fotos + Prüfberichte je Zimmer/Tag per WebDAV in HiDrive ab, Struktur:
+//   /Fotos_Zimmer/<Station_Zimmer>/<JJJJMMTT>/<Datei>
+// – identisch zur ZIP-Struktur. Zugangsdaten (WebDAV-URL/Benutzer/App-Passwort)
+// liegen in einstellungen.hidrive; der HiDrive-Freigabe-Link reicht dafür NICHT.
+const HIDRIVE_EXPORT_ROOT = '/Fotos_Zimmer';
+
+async function hidriveCreds() {
+  const { rows } = await pool.query("SELECT wert FROM einstellungen WHERE key='hidrive'");
+  return rows[0]?.wert || null;
+}
+function hidriveUrl(c, pfad) {
+  const base = String(c.url || '').replace(/\/$/, '');
+  const enc = pfad.split('/').map((s) => (s ? encodeURIComponent(s) : s)).join('/');
+  return base + enc;
+}
+async function hidriveReq(c, method, pfad, body, extra = {}) {
+  return fetch(hidriveUrl(c, pfad), {
+    method,
+    headers: {
+      Authorization: 'Basic ' + Buffer.from(`${c.user}:${c.passwort}`).toString('base64'),
+      ...extra,
+    },
+    body: body || undefined,
+  });
+}
+// Alle Pfadebenen anlegen (MKCOL je Segment; „existiert schon" wird ignoriert).
+async function hidriveMkcolP(c, ordnerPfad) {
+  const teile = ordnerPfad.split('/').filter(Boolean);
+  let cur = '';
+  for (const t of teile) {
+    cur += '/' + t;
+    try { await hidriveReq(c, 'MKCOL', cur); } catch { /* ignorieren */ }
+  }
+}
+// Vorhandene Dateien eines HiDrive-Ordners (Name -> Größe) für „nur neue".
+async function hidriveVorhanden(c, ordnerPfad) {
+  try {
+    const r = await hidriveReq(c, 'PROPFIND', ordnerPfad + '/', null,
+      { Depth: '1', 'Content-Type': 'application/xml' });
+    if (!r.ok) return null;
+    const xml = await r.text();
+    const map = new Map();
+    const re = /<[^:]*:?response[^>]*>([\s\S]*?)<\/[^:]*:?response>/gi;
+    let m;
+    while ((m = re.exec(xml))) {
+      const block = m[1];
+      const href = (/<[^:]*:?href[^>]*>([\s\S]*?)<\/[^:]*:?href>/i.exec(block)?.[1] || '').trim();
+      const size = Number(/<[^:]*:?getcontentlength[^>]*>(\d+)<\/[^:]*:?getcontentlength>/i.exec(block)?.[1] || -1);
+      const name = decodeURIComponent(href.split('/').filter(Boolean).pop() || '');
+      if (name) map.set(name, size);
+    }
+    return map;
+  } catch { return null; }
+}
+
+router.get('/api/web/hidrive/config', requireWebAuth, async (req, res) => {
+  const c = await hidriveCreds();
+  res.json({
+    konfiguriert: !!(c && c.url && c.user && c.passwort),
+    url: c?.url || '', user: c?.user || '',
+  });
+});
+
+router.post('/api/web/hidrive/config', requireWebAuth, express.json(), async (req, res) => {
+  const b = req.body || {};
+  const alt = (await hidriveCreds()) || {};
+  const neu = {
+    url: String(b.url ?? alt.url ?? '').trim(),
+    user: String(b.user ?? alt.user ?? '').trim(),
+    // Platzhalter „••••••••" bedeutet: altes Passwort behalten
+    passwort: (b.passwort && b.passwort !== '••••••••') ? b.passwort : (alt.passwort || ''),
+  };
+  await pool.query(
+    `INSERT INTO einstellungen (key, wert) VALUES ('hidrive', $1)
+     ON CONFLICT (key) DO UPDATE SET wert = EXCLUDED.wert`, [JSON.stringify(neu)]);
+  res.json({ ok: true });
+});
+
+// Verbindung testen (PROPFIND auf Wurzel)
+router.get('/api/web/hidrive/test', requireWebAuth, async (req, res) => {
+  const c = await hidriveCreds();
+  if (!c?.url || !c.user) return res.status(503).json({ error: 'Nicht konfiguriert' });
+  try {
+    const r = await hidriveReq(c, 'PROPFIND', '/', null, { Depth: '0' });
+    res.json({ ok: r.ok, status: r.status });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+router.post('/api/web/hidrive/export', requireWebAuth, express.json(), async (req, res) => {
+  const c = await hidriveCreds();
+  if (!c?.url || !c.user || !c.passwort) {
+    return res.status(503).json({ error: 'HiDrive nicht konfiguriert – WebDAV-URL, Benutzer und App-Passwort in den Einstellungen hinterlegen.' });
+  }
+  const station = String(req.query.station || '').trim().toLowerCase();
+  const von = String(req.query.von || '').replace(/-/g, '');   // JJJJMMTT
+  const bis = String(req.query.bis || '').replace(/-/g, '');
+  const alle = req.query.alle === '1';  // alle erneut hochladen statt nur neue/geänderte
+
+  // Nur Zimmer-Dateien: <roomId>/<JJJJMMTT>/<Datei> (Fotos + Prüfbericht-PDFs)
+  const dateien = listFiles(FILES_DIR, FILES_DIR).filter((f) => {
+    const seg = f.path.split('/');
+    if (seg.length < 3) return false;
+    if (!/^\d{8}$/.test(seg[1])) return false;
+    if (station && !seg[0].toLowerCase().startsWith(station)) return false;
+    if (von && seg[1] < von) return false;
+    if (bis && seg[1] > bis) return false;
+    return true;
+  });
+
+  let hochgeladen = 0, uebersprungen = 0, fehler = 0;
+  const ordnerCache = new Map(); // Zielordner -> vorhandene Dateien (Name->Größe)
+  try {
+    for (const f of dateien) {
+      const seg = f.path.split('/');
+      const zielOrdner = `${HIDRIVE_EXPORT_ROOT}/${seg[0]}/${seg[1]}`;
+      const zielName = seg.slice(2).join('/'); // i. d. R. nur der Dateiname
+      if (!ordnerCache.has(zielOrdner)) {
+        let vorhanden = await hidriveVorhanden(c, zielOrdner);
+        if (vorhanden === null) { await hidriveMkcolP(c, zielOrdner); vorhanden = new Map(); }
+        ordnerCache.set(zielOrdner, vorhanden);
+      }
+      const vorhanden = ordnerCache.get(zielOrdner);
+      if (!alle && vorhanden.has(zielName) && vorhanden.get(zielName) === f.size) {
+        uebersprungen++; continue;
+      }
+      const buf = fs.readFileSync(path.join(FILES_DIR, f.path));
+      const r = await hidriveReq(c, 'PUT', `${zielOrdner}/${zielName}`, buf,
+        { 'Content-Type': 'application/octet-stream' });
+      if (r.ok || r.status === 201 || r.status === 204) hochgeladen++; else fehler++;
+    }
+    res.json({ ok: true, gesamt: dateien.length, hochgeladen, uebersprungen, fehler,
+      ordner: ordnerCache.size, ziel: HIDRIVE_EXPORT_ROOT });
+  } catch (e) {
+    res.status(502).json({ error: e.message, hochgeladen, uebersprungen, fehler });
+  }
+});
+
 
 // ---------- Voll-Synchronisation (Spiegel der App-Daten, Replace-All) ----------
 

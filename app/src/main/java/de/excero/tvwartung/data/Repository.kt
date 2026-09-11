@@ -308,14 +308,21 @@ class Repository(private val db: AppDatabase) {
         db.stundenzettelDao().getById(id)
 
     /**
-     * Zeitfenster eines Stundenzettels: von seinem Zeitraumbeginn bis zum
-     * Beginn des nächsten Zettels derselben Station (exklusiv), sonst offen.
+     * Zeitfenster eines Stundenzettels als Tages-Grenzen: vom Tag seines Beginns
+     * bis zum Tag des nächsten Zettels derselben Station (exklusiv), sonst offen.
+     * Auf Tages-Ebene, weil Prüfungen nur ein Datum (keine Uhrzeit) tragen –
+     * mehrere Zettel desselben Tages (erneuter Besuch) teilen sich dieselben
+     * Leistungen dieses Tages.
      */
     suspend fun zettelFenster(zettel: StundenzettelEntity): Pair<String, String?> {
+        val startTag = zettel.zeitraumStart.take(10)
         val ende = db.stundenzettelDao().getAll()
-            .filter { it.station == zettel.station && it.zeitraumStart > zettel.zeitraumStart }
-            .minOfOrNull { it.zeitraumStart }
-        return zettel.zeitraumStart to ende
+            .asSequence()
+            .filter { it.station == zettel.station }
+            .map { it.zeitraumStart.take(10) }
+            .filter { it > startTag }
+            .minOrNull()
+        return startTag to ende
     }
 
     suspend fun saveStundenzettel(zettel: StundenzettelEntity): StundenzettelEntity {

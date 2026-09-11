@@ -6,6 +6,10 @@ package de.excero.tvwartung.util
  */
 object Changelog {
     val EINTRAEGE: List<Pair<String, List<String>>> = listOf(
+        "2.0-beta33" to listOf(
+            "Stundenzettel pro Tag je Station (erneuter Anlauf nach Wochen = eigener Zettel)",
+            "„Erneuter Besuch“-Knopf für einen zusätzlichen Stundenzettel am selben Tag",
+        ),
         "2.0-beta32" to listOf(
             "Kein-Zutritt entfernen wird jetzt korrekt auf alle Geräte übertragen (kein Zurückkommen nach dem Sync mehr)",
         ),
