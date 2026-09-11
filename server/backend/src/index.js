@@ -956,13 +956,30 @@ router.get('/api/sync/mitarbeiter', requireApiKey, async (req, res) => {
 
 // Delta-Pull: alle Prüfbögen (aller Geräte), optional nur neue seit ?since=
 router.get('/api/sync/inspections', requireApiKey, async (req, res) => {
-  const since = String(req.query.since || '');
-  const { rows } = since
-    ? await pool.query(
-        `SELECT uuid, room_id, datum, daten, mitarbeiter, geloescht FROM inspections
-         WHERE created_at > $1::timestamptz ORDER BY created_at`, [since])
-    : await pool.query(
-        'SELECT uuid, room_id, datum, daten, mitarbeiter, geloescht FROM inspections ORDER BY created_at');
+  const since = String(req.query.since || '').trim();
+  const SEL = 'SELECT uuid, room_id, datum, daten, mitarbeiter, geloescht FROM inspections';
+  let rows;
+  if (since) {
+    // Die App sendet lokale (Berliner) Zeit OHNE Zeitzone. Würde Postgres sie als
+    // UTC auslegen, entstünde ein Zeitversatz (im Sommer +2 h) und gerade erst
+    // erstellte Berichte anderer Geräte würden übersprungen – dann „sieht" das
+    // Tablet die Prüfung vom Handy nicht. Daher naive Zeit als Europe/Berlin
+    // interpretieren; enthält der Wert schon eine Zone, direkt verwenden. Kleiner
+    // Sicherheitspuffer gegen Uhr-Abweichungen (mehrfaches Ziehen ist idempotent).
+    const hatZone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(since);
+    const grenze = hatZone
+      ? "$1::timestamptz - interval '10 minutes'"
+      : "($1::timestamp AT TIME ZONE 'Europe/Berlin') - interval '10 minutes'";
+    try {
+      rows = (await pool.query(
+        `${SEL} WHERE created_at > (${grenze}) ORDER BY created_at`, [since])).rows;
+    } catch (e) {
+      // Unparsbarer since-Wert: lieber alles liefern als nichts (Sync darf nicht hängen)
+      rows = (await pool.query(`${SEL} ORDER BY created_at`)).rows;
+    }
+  } else {
+    rows = (await pool.query(`${SEL} ORDER BY created_at`)).rows;
+  }
   res.json({
     inspections: rows.map((r) => ({
       uuid: r.uuid, roomId: r.room_id, datum: r.datum,

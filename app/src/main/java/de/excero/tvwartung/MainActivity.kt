@@ -352,16 +352,12 @@ private fun WasIstNeuDialog(onDismiss: () -> Unit) {
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Verstanden") }
         },
-        title = { Text("Neu in Version 2.0") },
+        title = { Text("Was ist neu") },
         text = {
             Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
-                listOf(
-                    "Neues Menü links (Symbol oben links oder von der Kante wischen)",
-                    "Dashboard als Startseite mit Kennzahlen",
-                    "Globale Suche über die Lupe oben",
-                    "KI-Vorschläge direkt im Prüfbogen",
-                    "Menüpunkte lange drücken zum Anpinnen"
-                ).forEach { Text("•  $it", style = MaterialTheme.typography.bodyMedium) }
+                de.excero.tvwartung.util.Changelog.NEUESTE.forEach {
+                    Text("•  $it", style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
     )

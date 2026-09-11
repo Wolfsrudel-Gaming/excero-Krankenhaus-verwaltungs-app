@@ -9,12 +9,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -93,6 +96,24 @@ fun DashboardScreen(
             .take(8)
     }
 
+    // Hinweis, wenn der Prüfzeitraum bald endet und noch Zimmer offen sind.
+    // TAG: nachmittags (ab 15 Uhr); WOCHE: ab Freitag; SEIT_DATUM: offen -> kein Hinweis.
+    val offeneZimmerGesamt = aktiveRooms.size - geprueft.size
+    val zeitraumHinweis = remember(settings.zeitraum, offeneZimmerGesamt) {
+        if (offeneZimmerGesamt <= 0) null
+        else when (settings.zeitraum) {
+            de.excero.tvwartung.data.Pruefzeitraum.TAG ->
+                if (java.time.LocalTime.now().hour >= 15)
+                    "Der heutige Prüfzeitraum endet bald – noch $offeneZimmerGesamt Zimmer offen."
+                else null
+            de.excero.tvwartung.data.Pruefzeitraum.WOCHE ->
+                if (java.time.LocalDate.now().dayOfWeek.value >= 5)
+                    "Diese Woche endet bald – noch $offeneZimmerGesamt Zimmer offen."
+                else null
+            de.excero.tvwartung.data.Pruefzeitraum.SEIT_DATUM -> null
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = {
@@ -125,6 +146,40 @@ fun DashboardScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            zeitraumHinweis?.let { hinweis ->
+                item {
+                    Card(
+                        onClick = onOffeneZimmer,
+                        colors = CardDefaults.cardColors(
+                            containerColor = WarnAmber.copy(alpha = 0.15f)
+                        )
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Outlined.Schedule,
+                                contentDescription = null,
+                                tint = WarnAmber,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                hinweis,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                Icons.Outlined.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
             item {
                 Row(
                     Modifier
