@@ -87,6 +87,9 @@ CREATE INDEX IF NOT EXISTS idx_inspections_created ON inspections(created_at);
 ALTER TABLE material ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT '';
 -- v2.0: Kein-Zutritt mit optionalem Wiedervorlage-Datum
 ALTER TABLE sperren ADD COLUMN IF NOT EXISTS wiedervorlage TEXT NOT NULL DEFAULT '';
+-- v2.0: Sperren-LWW + Grabstein, damit das Aufheben auf andere Geräte übertragen wird
+ALTER TABLE sperren ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE sperren ADD COLUMN IF NOT EXISTS aufgehoben BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS mitarbeiter (
     name  TEXT PRIMARY KEY,

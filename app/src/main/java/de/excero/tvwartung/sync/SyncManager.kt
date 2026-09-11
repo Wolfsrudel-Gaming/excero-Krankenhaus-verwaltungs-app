@@ -345,7 +345,9 @@ class SyncManager(
                                 roomId = o.optString("roomId"),
                                 gesperrtAm = o.optString("gesperrtAm"),
                                 grund = o.optString("grund"),
-                                wiedervorlage = o.optString("wiedervorlage")
+                                wiedervorlage = o.optString("wiedervorlage"),
+                                updatedAt = o.optString("updatedAt"),
+                                aufgehoben = o.optBoolean("aufgehoben", false)
                             )
                         )
                     }
@@ -358,6 +360,7 @@ class SyncManager(
                 sperrenJson.put(JSONObject().apply {
                     put("roomId", sp.roomId); put("gesperrtAm", sp.gesperrtAm); put("grund", sp.grund)
                     put("wiedervorlage", sp.wiedervorlage)
+                    put("updatedAt", sp.updatedAt); put("aufgehoben", sp.aufgehoben)
                 })
             }
             httpJson("/api/sync/sperren", "POST", JSONObject().put("sperren", sperrenJson))

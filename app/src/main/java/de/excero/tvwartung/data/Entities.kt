@@ -121,7 +121,12 @@ data class RoomSperre(
     @ColumnInfo(defaultValue = "")
     val grund: String = "",              // optional, z. B. "Isolation"
     @ColumnInfo(defaultValue = "")
-    val wiedervorlage: String = ""       // optional ISO-Datum: „nochmal versuchen am"
+    val wiedervorlage: String = "",      // optional ISO-Datum: „nochmal versuchen am"
+    @ColumnInfo(defaultValue = "")
+    val updatedAt: String = "",          // ISO-Datum+Zeit für LWW-Sync (Mehrgerät)
+    @ColumnInfo(defaultValue = "0")
+    val aufgehoben: Boolean = false      // true = Sperre aufgehoben (Grabstein, damit
+                                         // die Löschung auf andere Geräte übertragen wird)
 )
 
 /**

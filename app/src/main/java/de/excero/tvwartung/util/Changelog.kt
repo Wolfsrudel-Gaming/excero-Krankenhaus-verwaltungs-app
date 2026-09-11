@@ -6,6 +6,9 @@ package de.excero.tvwartung.util
  */
 object Changelog {
     val EINTRAEGE: List<Pair<String, List<String>>> = listOf(
+        "2.0-beta32" to listOf(
+            "Kein-Zutritt entfernen wird jetzt korrekt auf alle Geräte übertragen (kein Zurückkommen nach dem Sync mehr)",
+        ),
         "2.0-beta31" to listOf(
             "Einstellungen: API-Schlüssel maskiert (Auge zum Einblenden)",
             "Neue Info-/Über-die-App-Seite mit Version und Änderungsverlauf",

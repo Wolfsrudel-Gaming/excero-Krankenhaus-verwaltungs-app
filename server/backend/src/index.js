@@ -759,23 +759,39 @@ async function replaceAll(tabelle, spalten, zeilen) {
   }
 }
 
+// Sperren-Sync per Last-Write-Wins (updated_at) statt Replace-All, damit das
+// Aufheben (aufgehoben=true als Grabstein) nicht von einem anderen Gerät wieder
+// überschrieben wird. Alt-Clients ohne updated_at/aufgehoben legen neue Sperren
+// weiterhin an, überschreiben aber keine neueren Grabsteine.
 router.post('/api/sync/sperren', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
-  await replaceAll('sperren', ['room_id', 'gesperrt_am', 'grund', 'wiedervorlage'],
-    (req.body.sperren || []).map((s) => ({
-      room_id: s.roomId, gesperrt_am: s.gesperrtAm || '', grund: s.grund || '',
-      wiedervorlage: s.wiedervorlage || '' })));
+  for (const s of req.body.sperren || []) {
+    if (!s.roomId) continue;
+    await pool.query(
+      `INSERT INTO sperren (room_id, gesperrt_am, grund, wiedervorlage, updated_at, aufgehoben)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (room_id) DO UPDATE SET
+         gesperrt_am=EXCLUDED.gesperrt_am, grund=EXCLUDED.grund,
+         wiedervorlage=EXCLUDED.wiedervorlage, updated_at=EXCLUDED.updated_at,
+         aufgehoben=EXCLUDED.aufgehoben
+       WHERE sperren.updated_at < EXCLUDED.updated_at`,
+      [s.roomId, s.gesperrtAm || '', s.grund || '', s.wiedervorlage || '',
+       s.updatedAt || '', !!s.aufgehoben]);
+  }
   res.json({ ok: true });
 });
 
 // Sperren für die App zum Herunterladen (Mehrgerät: Kein-Zutritt vom einen
-// Gerät sichtbar auf dem anderen).
+// Gerät sichtbar auf dem anderen). Grabsteine (aufgehoben) werden mitgeliefert,
+// damit neue Clients die Aufhebung übernehmen; für Alt-Clients ist gesperrt_am
+// dann leer, sodass sie die Sperre ohnehin nicht mehr als aktiv werten.
 router.get('/api/sync/sperren', requireApiKey, async (req, res) => {
   const { rows } = await pool.query(
-    'SELECT room_id, gesperrt_am, grund, wiedervorlage FROM sperren');
+    'SELECT room_id, gesperrt_am, grund, wiedervorlage, updated_at, aufgehoben FROM sperren');
   res.json({
     sperren: rows.map((r) => ({
       roomId: r.room_id, gesperrtAm: r.gesperrt_am,
       grund: r.grund || '', wiedervorlage: r.wiedervorlage || '',
+      updatedAt: r.updated_at || '', aufgehoben: !!r.aufgehoben,
     })),
   });
 });
