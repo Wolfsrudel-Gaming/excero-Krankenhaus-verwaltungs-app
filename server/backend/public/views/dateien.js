@@ -38,11 +38,105 @@ async function viewDateien() {
     <div data-panel="pdfs" id="df-pdfs-panel" hidden>
       <div class="loading">PDFs werden geladen…</div>
     </div>
+
+    <div class="section-title" style="margin-top:20px">☁️ HiDrive-Export (optional)</div>
+    <div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+      <p style="font-size:12px;color:var(--muted);margin:0">
+        Legt Fotos und Prüfberichte je Zimmer/Tag in HiDrive ab – Struktur
+        <code>/Fotos_Zimmer/&lt;Station_Zimmer&gt;/&lt;JJJJMMTT&gt;/</code> (wie im ZIP).
+        Braucht die HiDrive-<strong>WebDAV</strong>-Zugangsdaten (nicht den Freigabe-Link).
+      </p>
+      <div id="hd-status" style="font-size:13px"></div>
+      <details id="hd-config-box">
+        <summary style="cursor:pointer;font-weight:600">Zugangsdaten (WebDAV)</summary>
+        <div class="form-grid" style="margin-top:10px">
+          <div class="form-group full"><label class="form-label">WebDAV-URL</label>
+            <input class="form-control" id="hd-url" placeholder="https://webdav.hidrive.ionos.com/"></div>
+          <div class="form-group"><label class="form-label">Benutzer</label>
+            <input class="form-control" id="hd-user" autocapitalize="none"></div>
+          <div class="form-group"><label class="form-label">App-Passwort</label>
+            <input type="password" class="form-control" id="hd-pw" placeholder="••••••••"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-secondary btn-sm" id="hd-save">Speichern</button>
+          <button class="btn btn-ghost btn-sm" id="hd-test">Verbindung testen</button>
+        </div>
+      </details>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:13px"><input type="checkbox" id="hd-alle"> alle erneut hochladen</label>
+        <button class="btn btn-primary" id="hd-export">Nach HiDrive exportieren</button>
+        <span id="hd-result" style="font-size:13px;color:var(--muted)"></span>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:0">
+        Es werden die oben gewählten Filter (Station/Von/Bis) angewandt. „alle erneut" lädt auch
+        bereits vorhandene Dateien neu; sonst werden nur fehlende/geänderte übertragen.
+      </p>
+    </div>
   `;
 
   // Tabs initialisieren
   const tabContainer = el.querySelector('#df-tabs').parentElement;
   initTabs(tabContainer);
+
+  // HiDrive-Konfiguration + Export
+  (async () => {
+    const statusEl = document.getElementById('hd-status');
+    async function ladeConfig() {
+      try {
+        const c = await api('/kkh/api/web/hidrive/config');
+        document.getElementById('hd-url').value = c.url || '';
+        document.getElementById('hd-user').value = c.user || '';
+        document.getElementById('hd-pw').value = c.konfiguriert ? '••••••••' : '';
+        statusEl.innerHTML = c.konfiguriert
+          ? badge('Zugang hinterlegt', 'ok')
+          : badge('Noch keine Zugangsdaten', 'warn');
+        if (!c.konfiguriert) document.getElementById('hd-config-box').open = true;
+      } catch (e) { statusEl.innerHTML = `<span class="alert-err">${escH(e.message)}</span>`; }
+    }
+    await ladeConfig();
+
+    document.getElementById('hd-save')?.addEventListener('click', async () => {
+      try {
+        await api('/kkh/api/web/hidrive/config', { method: 'POST', body: {
+          url: document.getElementById('hd-url').value.trim(),
+          user: document.getElementById('hd-user').value.trim(),
+          passwort: document.getElementById('hd-pw').value,
+        }});
+        toast('HiDrive-Zugang gespeichert');
+        ladeConfig();
+      } catch (e) { toast(e.message, 'err'); }
+    });
+
+    document.getElementById('hd-test')?.addEventListener('click', async () => {
+      const r = document.getElementById('hd-result');
+      r.textContent = 'Teste…';
+      try {
+        const d = await api('/kkh/api/web/hidrive/test');
+        r.textContent = d.ok ? '✅ Verbindung ok' : `⚠️ Server antwortete mit ${d.status}`;
+      } catch (e) { r.textContent = '❌ ' + e.message; }
+    });
+
+    document.getElementById('hd-export')?.addEventListener('click', async () => {
+      const btn = document.getElementById('hd-export');
+      const r = document.getElementById('hd-result');
+      const params = new URLSearchParams();
+      const station = document.getElementById('df-station')?.value?.trim();
+      const von = document.getElementById('df-von')?.value;
+      const bis = document.getElementById('df-bis')?.value;
+      if (station) params.set('station', station);
+      if (von) params.set('von', von);
+      if (bis) params.set('bis', bis);
+      if (document.getElementById('hd-alle')?.checked) params.set('alle', '1');
+      btn.disabled = true; r.textContent = 'Export läuft… (bitte warten)';
+      try {
+        const d = await api(`/kkh/api/web/hidrive/export?${params}`, { method: 'POST' });
+        r.textContent = `✅ ${d.hochgeladen} hochgeladen, ${d.uebersprungen} übersprungen`
+          + (d.fehler ? `, ${d.fehler} Fehler` : '') + ` (${d.gesamt} Dateien, ${d.ordner} Ordner)`;
+        toast('HiDrive-Export fertig');
+      } catch (e) { r.textContent = '❌ ' + e.message; toast(e.message, 'err'); }
+      finally { btn.disabled = false; }
+    });
+  })();
 
   // ZIP-Link aktualisieren
   function aktualisiereZipLink() {
