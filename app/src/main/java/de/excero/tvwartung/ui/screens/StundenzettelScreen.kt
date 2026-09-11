@@ -23,8 +23,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Replay
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -92,6 +94,23 @@ fun StundenzettelScreen(
     val eintraege by viewModel.eintraegeFor(zettel.station, zettel.zeitraumStart)
         .collectAsState(initial = emptyList())
     val laufenderEinsatz by viewModel.laufenderEinsatz().collectAsState(initial = null)
+    var loeschEintragKandidat by remember(zettel.id) { mutableStateOf<String?>(null) }
+    loeschEintragKandidat?.let { name ->
+        AlertDialog(
+            onDismissRequest = { loeschEintragKandidat = null },
+            title = { Text("Zeile löschen?") },
+            text = { Text("Die Stunden-Zeile von „$name“ wird von diesem Stundenzettel entfernt.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.loescheEintrag(zettel.station, zettel.zeitraumStart, name)
+                    loeschEintragKandidat = null
+                }) { Text("Löschen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { loeschEintragKandidat = null }) { Text("Abbrechen") }
+            }
+        )
+    }
     var meineStunden by remember(zettel.id) { mutableStateOf("") }
     var meineAnfahrt by remember(zettel.id) { mutableStateOf("") }
     var meineGeladen by remember(zettel.id) { mutableStateOf(false) }
@@ -324,7 +343,10 @@ fun StundenzettelScreen(
                         )
                     } else {
                         eintraege.forEach { e ->
-                            Row(Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
                                     e.mitarbeiter + if (e.mitarbeiter == settings.mitarbeiter) " (ich)" else "",
                                     style = MaterialTheme.typography.bodyMedium,
@@ -335,6 +357,17 @@ fun StundenzettelScreen(
                                     (e.stunden.ifBlank { "–" }) + " Std. · Anfahrt " + (e.anfahrt.ifBlank { "–" }),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
+                                IconButton(
+                                    onClick = { loeschEintragKandidat = e.mitarbeiter },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Close,
+                                        contentDescription = "Zeile von ${e.mitarbeiter} löschen",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }

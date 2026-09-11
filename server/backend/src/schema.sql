@@ -105,6 +105,8 @@ CREATE TABLE IF NOT EXISTS zettel_eintraege (
     updated_at     TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (station, zeitraum_start, mitarbeiter)
 );
+-- v2.0: Team-Stundenzettel-Zeilen löschbar (Grabstein), Löschung sync-fest
+ALTER TABLE zettel_eintraege ADD COLUMN IF NOT EXISTS geloescht BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- =====================================================================
 -- Lager-Modul (unabhängig vom App-Prüfbogen-Material-Spiegel)

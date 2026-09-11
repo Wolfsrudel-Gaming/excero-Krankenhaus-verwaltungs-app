@@ -198,7 +198,9 @@ data class StundenzettelEintrag(
     val mitarbeiter: String,
     val stunden: String = "",            // z. B. "3,5"
     val anfahrt: String = "",
-    val updatedAt: String = ""
+    val updatedAt: String = "",
+    @ColumnInfo(defaultValue = "0")
+    val geloescht: Boolean = false       // Grabstein: gelöschte Zeile (Sync-Löschung)
 )
 
 /**

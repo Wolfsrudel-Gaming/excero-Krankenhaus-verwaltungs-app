@@ -199,6 +199,7 @@ class SyncManager(
                     put("station", e.station); put("zeitraumStart", e.zeitraumStart)
                     put("mitarbeiter", e.mitarbeiter); put("stunden", e.stunden)
                     put("anfahrt", e.anfahrt); put("updatedAt", e.updatedAt)
+                    put("geloescht", e.geloescht)
                 })
             }
             httpJson("/api/sync/zettel-eintraege", "POST", JSONObject().put("eintraege", eintraegeJson))
@@ -218,7 +219,8 @@ class SyncManager(
                             mitarbeiter = o.optString("mitarbeiter"),
                             stunden = o.optString("stunden"),
                             anfahrt = o.optString("anfahrt"),
-                            updatedAt = o.optString("updatedAt")
+                            updatedAt = o.optString("updatedAt"),
+                            geloescht = o.optBoolean("geloescht", false)
                         )
                     )
                 }

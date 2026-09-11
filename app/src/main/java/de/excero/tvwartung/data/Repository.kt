@@ -242,8 +242,18 @@ class Repository(private val db: AppDatabase) {
     suspend fun applyEintrag(eintrag: StundenzettelEintrag) =
         db.stundenzettelEintragDao().upsert(eintrag)
 
+    /**
+     * Team-Zeile löschen: als Grabstein markieren (geloescht=true, neuer updatedAt)
+     * statt hart zu löschen – so bleibt die Löschung über den Sync erhalten und
+     * kommt nicht beim nächsten Abgleich zurück.
+     */
     suspend fun deleteEintrag(station: String, zeitraumStart: String, mitarbeiter: String) =
-        db.stundenzettelEintragDao().delete(station, zeitraumStart, mitarbeiter)
+        db.stundenzettelEintragDao().upsert(
+            StundenzettelEintrag(
+                station = station, zeitraumStart = zeitraumStart, mitarbeiter = mitarbeiter,
+                stunden = "", anfahrt = "", updatedAt = Dates.nowIsoDateTime(), geloescht = true
+            )
+        )
 
     fun laufenderEinsatz(mitarbeiter: String): Flow<Einsatz?> =
         db.einsatzDao().observeLaufender(mitarbeiter)

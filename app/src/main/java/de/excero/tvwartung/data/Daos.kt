@@ -84,10 +84,10 @@ interface StundenzettelEintragDao {
     @Query("DELETE FROM stundenzettel_eintraege")
     suspend fun deleteAll()
 
-    @Query("SELECT * FROM stundenzettel_eintraege WHERE station = :station AND zeitraumStart = :zeitraumStart ORDER BY mitarbeiter")
+    @Query("SELECT * FROM stundenzettel_eintraege WHERE station = :station AND zeitraumStart = :zeitraumStart AND geloescht = 0 ORDER BY mitarbeiter")
     fun observeFor(station: String, zeitraumStart: String): Flow<List<StundenzettelEintrag>>
 
-    @Query("SELECT * FROM stundenzettel_eintraege WHERE station = :station AND zeitraumStart = :zeitraumStart ORDER BY mitarbeiter")
+    @Query("SELECT * FROM stundenzettel_eintraege WHERE station = :station AND zeitraumStart = :zeitraumStart AND geloescht = 0 ORDER BY mitarbeiter")
     suspend fun getFor(station: String, zeitraumStart: String): List<StundenzettelEintrag>
 
     @Query("SELECT * FROM stundenzettel_eintraege")

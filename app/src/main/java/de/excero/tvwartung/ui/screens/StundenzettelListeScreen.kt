@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,7 +33,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,11 +56,20 @@ fun StundenzettelListeScreen(
     onOpen: (Long) -> Unit,
     onTagAufteilen: () -> Unit = {}
 ) {
-    val zettel by viewModel.alleStundenzettel.collectAsState()
+    val zettelRoh by viewModel.alleStundenzettel.collectAsState()
     val einsaetze by viewModel.alleEinsaetze.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val me = settings.mitarbeiter.trim()
     val laufend by remember(me) { viewModel.laufenderEinsatz() }.collectAsState(initial = null)
+
+    var nurHeute by remember { mutableStateOf(false) }
+    val heute = remember { Dates.todayIso() }
+    // Neueste zuerst; optional nur die von heute (Tages-/Besuchsschlüssel beginnt mit Datum)
+    val zettel = remember(zettelRoh, nurHeute, heute) {
+        zettelRoh
+            .filter { !nurHeute || it.zeitraumStart.take(10) == heute }
+            .sortedByDescending { it.zeitraumStart }
+    }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -144,6 +156,26 @@ fun StundenzettelListeScreen(
             // Wochenübersicht (aktuelle Woche, Stunden je Tag)
             item {
                 WochenUebersicht(einsaetze = einsaetze, mitarbeiter = me)
+            }
+
+            // Filter: nur die Stundenzettel von heute anzeigen
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(
+                        selected = nurHeute,
+                        onClick = { nurHeute = !nurHeute },
+                        label = { Text("Nur heute") }
+                    )
+                    Text(
+                        "${zettel.size} Stundenzettel",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             if (zettel.isEmpty()) {
