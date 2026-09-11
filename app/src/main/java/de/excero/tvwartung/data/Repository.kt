@@ -28,7 +28,7 @@ class Repository(private val db: AppDatabase) {
     fun activityFor(roomId: String): Flow<List<ActivityLog>> =
         db.activityLogDao().observeForRoom(roomId)
 
-    val sperren: Flow<List<RoomSperre>> get() = db.roomSperreDao().observeAll()
+    val sperren: Flow<List<RoomSperre>> get() = db.roomSperreDao().observeAktiv()
 
     /**
      * "Kein Zutritt" für ein Zimmer setzen oder aufheben. Beim Setzen wird ein
@@ -41,10 +41,14 @@ class Repository(private val db: AppDatabase) {
         val basis = "${Dates.todayGerman()}: Zimmer konnte nicht betreten werden"
         val vermerk = if (grund.isBlank()) basis else "$basis ($grund)"
         fun istHeutigerVermerk(zeile: String) = zeile.trim().startsWith(basis)
+        val jetzt = Dates.nowIsoDateTime()
         db.withTransaction {
             val room = db.tvRoomDao().getById(roomId)
             if (gesperrt) {
-                db.roomSperreDao().upsert(RoomSperre(roomId, Dates.todayIso(), grund.trim(), wiedervorlage.trim()))
+                db.roomSperreDao().upsert(
+                    RoomSperre(roomId, Dates.todayIso(), grund.trim(), wiedervorlage.trim(),
+                        updatedAt = jetzt, aufgehoben = false)
+                )
                 if (room != null) {
                     // Bereits vorhandenen heutigen Vermerk ersetzen (z. B. Grund nachgetragen)
                     val zeilen = room.lebenslauf.lines().filterNot { istHeutigerVermerk(it) }
@@ -53,7 +57,12 @@ class Repository(private val db: AppDatabase) {
                 }
                 logAction(roomId, "Kein Zutritt vermerkt" + if (grund.isBlank()) "" else " ($grund)")
             } else {
-                db.roomSperreDao().delete(roomId)
+                // Nicht hart löschen, sondern als aufgehoben markieren (Grabstein) –
+                // sonst holt der nächste Sync die Sperre vom Server wieder zurück.
+                db.roomSperreDao().upsert(
+                    RoomSperre(roomId, gesperrtAm = "", grund = "", wiedervorlage = "",
+                        updatedAt = jetzt, aufgehoben = true)
+                )
                 if (room != null && room.lebenslauf.lines().any { istHeutigerVermerk(it) }) {
                     val neu = room.lebenslauf.lines()
                         .filterNot { istHeutigerVermerk(it) }
@@ -84,15 +93,26 @@ class Repository(private val db: AppDatabase) {
     // Für die Voll-Synchronisation mit dem Server
     suspend fun getAllSperren(): List<RoomSperre> = db.roomSperreDao().getAll()
 
-    /** Sperren vom Server übernehmen (Mehrgerät): fehlende ergänzen (Union, keine Löschung). */
+    /**
+     * Sperren vom Server übernehmen (Mehrgerät, Last-Write-Wins): eine Server-Zeile
+     * ersetzt die lokale nur, wenn sie neuer ist (updatedAt) – so wird auch das
+     * Aufheben (Grabstein aufgehoben=true) korrekt auf dieses Gerät übertragen.
+     * Fehlt ein Zeitstempel (Alt-Client), wird die Server-Zeile nur ergänzt, wenn
+     * lokal noch nichts existiert.
+     */
     suspend fun applyServerSperren(vomServer: List<RoomSperre>) {
         val lokal = db.roomSperreDao().getAll().associateBy { it.roomId }
         vomServer.forEach { s ->
             val eigen = lokal[s.roomId]
-            if (eigen == null || eigen.gesperrtAm != s.gesperrtAm ||
-                eigen.grund != s.grund || eigen.wiedervorlage != s.wiedervorlage) {
-                db.roomSperreDao().upsert(s)
+            val uebernehmen = when {
+                eigen == null -> true
+                s.updatedAt.isNotBlank() && eigen.updatedAt.isNotBlank() ->
+                    s.updatedAt > eigen.updatedAt
+                s.updatedAt.isNotBlank() && eigen.updatedAt.isBlank() -> true
+                else -> eigen.gesperrtAm != s.gesperrtAm ||
+                    eigen.grund != s.grund || eigen.wiedervorlage != s.wiedervorlage
             }
+            if (uebernehmen) db.roomSperreDao().upsert(s)
         }
     }
     suspend fun getAllMaterial(): List<Material> = db.materialDao().getAll()

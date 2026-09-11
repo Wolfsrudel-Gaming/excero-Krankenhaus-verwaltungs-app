@@ -138,9 +138,17 @@ interface RoomSperreDao {
     @Query("DELETE FROM room_sperren WHERE roomId = :roomId")
     suspend fun delete(roomId: String)
 
+    /** Nur aktive Sperren (ohne aufgehobene Grabsteine) – für die Oberfläche. */
+    @Query("SELECT * FROM room_sperren WHERE aufgehoben = 0")
+    fun observeAktiv(): Flow<List<RoomSperre>>
+
+    @Query("SELECT * FROM room_sperren WHERE roomId = :roomId")
+    suspend fun getByRoom(roomId: String): RoomSperre?
+
     @Query("SELECT * FROM room_sperren")
     fun observeAll(): Flow<List<RoomSperre>>
 
+    /** Alle Zeilen inkl. aufgehobener Grabsteine – für den Sync. */
     @Query("SELECT * FROM room_sperren")
     suspend fun getAll(): List<RoomSperre>
 }
