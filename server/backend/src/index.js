@@ -568,7 +568,7 @@ router.get('/api/web/stundenzettel', requireWebAuth, async (req, res) => {
   const { rows } = await pool.query(
     'SELECT * FROM stundenzettel ORDER BY zeitraum_start DESC, station');
   // Team-Summen je Zettel (für die Listenansicht)
-  const { rows: eintraege } = await pool.query('SELECT * FROM zettel_eintraege');
+  const { rows: eintraege } = await pool.query('SELECT * FROM zettel_eintraege WHERE geloescht = FALSE');
   const summen = {};
   for (const e of eintraege) {
     const key = `${e.station}|${e.zeitraum_start}`;
@@ -636,7 +636,7 @@ router.get('/api/web/stundenzettel/detail', requireWebAuth, async (req, res) => 
     'SELECT * FROM stundenzettel WHERE station=$1 AND zeitraum_start=$2', [station, zeitraum]);
   if (!rows[0]) return res.status(404).json({ error: 'Stundenzettel nicht gefunden' });
   const { rows: eintraege } = await pool.query(
-    `SELECT * FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2
+    `SELECT * FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2 AND geloescht = FALSE
      ORDER BY mitarbeiter`, [station, zeitraum]);
   // Nächster Zettel derselben Station begrenzt den Zeitraum
   const { rows: naechste } = await pool.query(
@@ -1148,7 +1148,8 @@ router.get('/api/sync/zettel-eintraege', requireApiKey, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM zettel_eintraege');
   res.json({ eintraege: rows.map((e) => ({
     station: e.station, zeitraumStart: e.zeitraum_start, mitarbeiter: e.mitarbeiter,
-    stunden: e.stunden, anfahrt: e.anfahrt, updatedAt: e.updated_at })) });
+    stunden: e.stunden, anfahrt: e.anfahrt, updatedAt: e.updated_at,
+    geloescht: !!e.geloescht })) });
 });
 
 router.post('/api/sync/zettel-eintraege', requireApiKey, express.json({ limit: '5mb' }), async (req, res) => {
@@ -1156,13 +1157,15 @@ router.post('/api/sync/zettel-eintraege', requireApiKey, express.json({ limit: '
   for (const e of req.body.eintraege || []) {
     if (!e.station || !e.zeitraumStart || !e.mitarbeiter) continue;
     const r = await pool.query(
-      `INSERT INTO zettel_eintraege (station, zeitraum_start, mitarbeiter, stunden, anfahrt, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO zettel_eintraege (station, zeitraum_start, mitarbeiter, stunden, anfahrt, updated_at, geloescht)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (station, zeitraum_start, mitarbeiter) DO UPDATE SET
-         stunden=EXCLUDED.stunden, anfahrt=EXCLUDED.anfahrt, updated_at=EXCLUDED.updated_at
+         stunden=EXCLUDED.stunden, anfahrt=EXCLUDED.anfahrt, updated_at=EXCLUDED.updated_at,
+         geloescht=EXCLUDED.geloescht
        WHERE zettel_eintraege.updated_at < EXCLUDED.updated_at
        RETURNING station`,
-      [e.station, e.zeitraumStart, e.mitarbeiter, e.stunden || '', e.anfahrt || '', e.updatedAt || '']);
+      [e.station, e.zeitraumStart, e.mitarbeiter, e.stunden || '', e.anfahrt || '',
+       e.updatedAt || '', !!e.geloescht]);
     if (r.rowCount > 0) uebernommen++;
   }
   res.json({ uebernommen });
@@ -1187,7 +1190,7 @@ router.patch('/api/web/mitarbeiter/:name', requireWebAuth, express.json(), async
 });
 
 router.get('/api/web/zettel-eintraege', requireWebAuth, async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM zettel_eintraege ORDER BY zeitraum_start DESC, station');
+  const { rows } = await pool.query('SELECT * FROM zettel_eintraege WHERE geloescht = FALSE ORDER BY zeitraum_start DESC, station');
   res.json({ eintraege: rows });
 });
 
@@ -1277,7 +1280,7 @@ router.get('/api/web/stundenzettel/pdf', requireWebAuth, async (req, res) => {
   try {
     const [zettelQ, eintraegeQ, inspQ] = await Promise.all([
       pool.query('SELECT * FROM stundenzettel WHERE station=$1 AND zeitraum_start=$2', [station, zeitraum]),
-      pool.query('SELECT * FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2', [station, zeitraum]),
+      pool.query('SELECT * FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2 AND geloescht = FALSE', [station, zeitraum]),
       pool.query(
         `SELECT i.datum, r.zimmer, i.daten->'arbeiten' AS arbeiten
          FROM inspections i JOIN rooms r ON r.id=i.room_id
@@ -1750,7 +1753,7 @@ router.get('/api/web/export/pruefungen.:fmt', requireWebAuth, async (req, res) =
 
 router.get('/api/web/export/stundenzettel.:fmt', requireWebAuth, async (req, res) => {
   const { rows: zRows } = await pool.query('SELECT * FROM stundenzettel ORDER BY zeitraum_start DESC, station');
-  const { rows: eRows } = await pool.query('SELECT * FROM zettel_eintraege ORDER BY station, zeitraum_start, mitarbeiter');
+  const { rows: eRows } = await pool.query('SELECT * FROM zettel_eintraege WHERE geloescht = FALSE ORDER BY station, zeitraum_start, mitarbeiter');
   const zHeaders = ['Auftragsnummer','Station','Zeitraum ab','Datum','Stunden','Anfahrt','Techniker'];
   const zData = zRows.map((r) => [r.auftragsnummer, r.station, r.zeitraum_start, r.datum, r.stunden, r.anfahrt, r.techniker]);
   const eHeaders = ['Station','Zeitraum ab','Mitarbeiter','Stunden','Anfahrt'];

@@ -685,6 +685,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Eine Mitarbeiter-Zeile vom Team-Zettel löschen (Grabstein, sync-fest). */
+    fun loescheEintrag(station: String, zeitraumStart: String, mitarbeiter: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteEintrag(station, zeitraumStart, mitarbeiter)
+            _message.value = "Zeile von $mitarbeiter gelöscht"
+            if (settings.value.autoSync) syncNow(leise = true)
+        }
+    }
+
     fun laufenderEinsatz() = repository.laufenderEinsatz(settings.value.mitarbeiter)
 
     /** Alle Einsätze (für die Wochenübersicht). */

@@ -6,6 +6,10 @@ package de.excero.tvwartung.util
  */
 object Changelog {
     val EINTRAEGE: List<Pair<String, List<String>>> = listOf(
+        "2.0-beta34" to listOf(
+            "Team-Zeile im Stundenzettel löschbar (z. B. versehentlich doppelt erfasst) – sync-fest",
+            "Stundenzettel-Liste: „Nur heute“-Filter und neueste zuerst",
+        ),
         "2.0-beta33" to listOf(
             "Stundenzettel pro Tag je Station (erneuter Anlauf nach Wochen = eigener Zettel)",
             "„Erneuter Besuch“-Knopf für einen zusätzlichen Stundenzettel am selben Tag",
