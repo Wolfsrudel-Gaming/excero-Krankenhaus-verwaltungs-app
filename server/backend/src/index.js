@@ -1417,12 +1417,15 @@ router.get('/api/web/export/fotos.zip', requireWebAuth, (req, res) => {
   const dateien = listFiles(root, root);
   for (const datei of dateien) {
     const p = datei.path;
-    if (!/\.(jpe?g|png)$/i.test(p)) continue;
+    // Fotos UND Prüfbericht-PDFs mit aufnehmen – beide liegen im Zimmer/Tages-Ordner
+    if (!/\.(jpe?g|png|pdf)$/i.test(p)) continue;
     const teile = p.split('/');
-    // Struktur: <Station_Zimmer>/<JJJJMMTT>/Foto.jpg
-    if (teile.length < 2) continue;
+    // Struktur: <Station_Zimmer>/<JJJJMMTT>/<Datei> – nur echte Zimmer/Tages-Ordner
+    // (schließt _signaturen, _stundenzettel, app/ automatisch aus).
+    if (teile.length < 3) continue;
     const zimmerOrdner = teile[0]; // z. B. A4_01a
     const datum        = teile[1]; // z. B. 20260715
+    if (!/^\d{8}$/.test(datum)) continue;
     if (station && !zimmerOrdner.startsWith(station)) continue;
     if (zimmer && !zimmerOrdner.includes(zimmer)) continue;
     if (von && datum < von.replace(/-/g, '')) continue;
