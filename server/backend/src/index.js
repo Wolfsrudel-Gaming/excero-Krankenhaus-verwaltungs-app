@@ -1282,7 +1282,7 @@ router.get('/api/web/stundenzettel/pdf', requireWebAuth, async (req, res) => {
       pool.query('SELECT * FROM stundenzettel WHERE station=$1 AND zeitraum_start=$2', [station, zeitraum]),
       pool.query('SELECT * FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2 AND geloescht = FALSE', [station, zeitraum]),
       pool.query(
-        `SELECT i.datum, r.zimmer, i.daten->'arbeiten' AS arbeiten
+        `SELECT i.datum, r.zimmer, r.id AS room_id, r.gueltig_bis, i.daten->'arbeiten' AS arbeiten
          FROM inspections i JOIN rooms r ON r.id=i.room_id
          WHERE r.station=$1 AND i.datum>=$2 AND COALESCE(i.geloescht,FALSE)=FALSE
          ORDER BY i.datum, r.zimmer`, [station, zeitraum]),
@@ -1294,10 +1294,28 @@ router.get('/api/web/stundenzettel/pdf', requireWebAuth, async (req, res) => {
     const sigSta = safeFilePath(`_signaturen/${stationSafe}_${zeitraum}_station.png`);
     const sigTech = safeFilePath(`_signaturen/${stationSafe}_${zeitraum}_techniker.png`);
 
-    // Material-Zusammenfassung
+    // Zimmer deduplizieren (mehrfache Inspektionen zusammenführen)
+    const roomMap = new Map();
+    for (const i of inspQ.rows) {
+      const key = i.room_id || i.zimmer;
+      if (!roomMap.has(key)) {
+        roomMap.set(key, { zimmer: i.zimmer, datum: i.datum, arbeiten: new Set(), gueltig_bis: i.gueltig_bis || '' });
+      }
+      for (const a of (i.arbeiten || [])) {
+        if (typeof a === 'string') roomMap.get(key).arbeiten.add(a);
+      }
+    }
+    const leistungen = [...roomMap.values()].map((r) => ({
+      zimmer: r.zimmer, datum: r.datum, arbeiten: [...r.arbeiten], freenetBis: r.gueltig_bis,
+    }));
+
+    // Material-Zusammenfassung – nur echtes Material (kein Sendersuchlauf etc.)
+    const nichtMaterial = new Set(['Sendersuchlauf durchgeführt', 'Halterung befestigt', 'TV neu eingerichtet']);
     const matMap = {};
     for (const i of inspQ.rows) {
-      for (const a of (i.arbeiten || [])) { matMap[a] = (matMap[a] || 0) + 1; }
+      for (const a of (i.arbeiten || [])) {
+        if (typeof a === 'string' && !nichtMaterial.has(a)) matMap[a] = (matMap[a] || 0) + 1;
+      }
     }
 
     const pdf = await erzeugeStundenzettelPdf({
@@ -1306,10 +1324,7 @@ router.get('/api/web/stundenzettel/pdf', requireWebAuth, async (req, res) => {
       eintraege: eintraegeQ.rows.map((e) => ({
         mitarbeiter: e.mitarbeiter, stunden: e.stunden, anfahrt: e.anfahrt
       })),
-      leistungen: inspQ.rows.map((i) => ({
-        zimmer: i.zimmer, datum: i.datum,
-        arbeiten: (i.arbeiten || []).filter((a) => typeof a === 'string'),
-      })),
+      leistungen,
       material: Object.entries(matMap).map(([bezeichnung, anzahl]) => ({ bezeichnung, anzahl })),
       signaturStation: sigSta && fs.existsSync(sigSta) ? sigSta : null,
       signaturTechniker: sigTech && fs.existsSync(sigTech) ? sigTech : null,

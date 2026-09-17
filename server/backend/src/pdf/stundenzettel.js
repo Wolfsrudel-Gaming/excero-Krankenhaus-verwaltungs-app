@@ -65,7 +65,7 @@ async function erzeugePdf(daten) {
     const auftragsText = `Station${auftragsnummer ? ` · Auftrag ${auftragsnummer}` : ''}`;
     doc.fillColor(GRAY).fontSize(8).font('Helvetica').text(auftragsText, col2 + 10, boxY + 12);
     doc.fillColor('#000').fontSize(10).font('Helvetica-Bold').text(station, col2 + 10, boxY + 24);
-    doc.fillColor('#000').fontSize(9).font('Helvetica').text(`Zeitraum: ${zeitraum}`, col2 + 10, boxY + 37);
+    if (datum) doc.fillColor('#000').fontSize(9).font('Helvetica').text(`Datum: ${datum}`, col2 + 10, boxY + 37);
     doc.y = boxY + 62 + 16;
 
     // ── Team-Zeiten ──────────────────────────────────────────────────────
@@ -73,31 +73,26 @@ async function erzeugePdf(daten) {
       doc.fillColor(TEAL).fontSize(12).font('Helvetica-Bold').text('Arbeitszeiten', MX, doc.y);
       doc.moveDown(0.4);
       doc.fillColor(GRAY).fontSize(8.5).font('Helvetica-Bold');
-      doc.text('Mitarbeiter', MX + 4, doc.y, { continued: true, width: 220 });
-      doc.text('Arbeitsstunden', MX + 260, doc.y, { continued: true, width: 100 });
-      doc.text('Anfahrt', MX + 370, doc.y, { width: 80 });
+      doc.text('Mitarbeiter', MX + 4, doc.y, { continued: true, width: 260 });
+      doc.text('Arbeitsstunden', MX + 300, doc.y, { width: 150 });
       doc.moveDown(0.2);
       doc.moveTo(MX, doc.y).lineTo(MX + W, doc.y).strokeColor('#b4b4b4').stroke();
       const parse = (s) => Number(String(s || '0').replace(',', '.')) || 0;
-      let sumStd = 0, sumAnf = 0;
+      let sumStd = 0;
       eintraege.forEach((e, i) => {
         const rowY = doc.y;
         if (i % 2 === 0) doc.rect(MX, rowY, W, 16).fill(ROW_ALT);
-        doc.fillColor('#000').fontSize(9.5).font('Helvetica').text(e.mitarbeiter, MX + 4, rowY + 4, { width: 220 });
+        doc.fillColor('#000').fontSize(9.5).font('Helvetica').text(e.mitarbeiter, MX + 4, rowY + 4, { width: 260 });
         const std = parse(e.stunden);
-        const anf = parse(e.anfahrt);
         sumStd += std;
-        sumAnf += anf;
-        doc.text(std ? `${e.stunden} Std.` : '–', MX + 260, rowY + 4, { width: 100 });
-        doc.text(anf ? `${e.anfahrt} Std.` : '–', MX + 370, rowY + 4, { width: 80 });
+        doc.text(std ? `${e.stunden} Std.` : '–', MX + 300, rowY + 4, { width: 150 });
         doc.y = rowY + 16;
       });
       doc.moveTo(MX, doc.y).lineTo(MX + W, doc.y).strokeColor('#b4b4b4').stroke();
       const sumY = doc.y;
       const fmtNum = (n) => Number(n.toFixed(2)).toString().replace('.', ',');
-      doc.fillColor('#000').fontSize(9.5).font('Helvetica-Bold').text('Gesamt', MX + 4, sumY + 4, { width: 220 });
-      doc.text(`${fmtNum(sumStd)} Std.`, MX + 260, sumY + 4, { width: 100 });
-      doc.text(`${fmtNum(sumAnf)} Std.`, MX + 370, sumY + 4, { width: 80 });
+      doc.fillColor('#000').fontSize(9.5).font('Helvetica-Bold').text('Gesamt', MX + 4, sumY + 4, { width: 260 });
+      doc.text(`${fmtNum(sumStd)} Std.`, MX + 300, sumY + 4, { width: 150 });
       doc.y = sumY + 22;
       if (datum) {
         doc.fillColor(GRAY).fontSize(9).font('Helvetica').text(`Datum der Leistung: ${datum}`, MX + 4, doc.y);
@@ -133,7 +128,10 @@ async function erzeugePdf(daten) {
       doc.moveDown(1);
     } else {
       leistungen.forEach((l, i) => {
-        const text = l.arbeiten.length ? 'TV überprüft; ' + l.arbeiten.join(', ') : 'TV überprüft';
+        const parts = ['TV überprüft'];
+        if (l.arbeiten.length) parts.push(...l.arbeiten);
+        if (l.freenetBis) parts.push(`Freenet bis ${isoToGerman(l.freenetBis)}`);
+        const text = parts.join('; ');
         const rowH = Math.max(16, 8 + Math.ceil(doc.widthOfString(text) / (W - 152)) * 11);
         if (doc.y + rowH > doc.page.height - 100) doc.addPage();
         const rowY = doc.y;
@@ -182,7 +180,7 @@ async function erzeugePdf(daten) {
 
     doc.moveTo(MX, lineY).lineTo(MX + colW, lineY).strokeColor('#000').lineWidth(0.8).stroke();
     doc.fillColor(GRAY).fontSize(8.5).font('Helvetica')
-       .text('Unterschrift Station (Datum, Name, Stempel)', MX, lineY + 4);
+       .text('Unterschrift Station', MX, lineY + 4);
     doc.moveTo(x2, lineY).lineTo(x2 + colW, lineY).strokeColor('#000').stroke();
     doc.text(techniker ? `Unterschrift Dienstleister: ${techniker}` : 'Unterschrift Dienstleister', x2, lineY + 4);
 

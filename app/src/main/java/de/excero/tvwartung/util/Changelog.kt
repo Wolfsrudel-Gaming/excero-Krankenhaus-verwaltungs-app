@@ -6,6 +6,13 @@ package de.excero.tvwartung.util
  */
 object Changelog {
     val EINTRAEGE: List<Pair<String, List<String>>> = listOf(
+        "2.0-beta35" to listOf(
+            "Stundenzettel-PDF: Anfahrt/Fahrtzeit und Zeitraum entfernt, Datum reicht",
+            "Stundenzettel-PDF: Freenet-Datum bei jeder Leistung sichtbar",
+            "Stundenzettel-PDF: Zimmer-Duplikate zusammengeführt",
+            "Stundenzettel-PDF: Sendersuchlauf nicht mehr als Material gezählt",
+            "Stundenzettel-PDF: Unterschrift Station ohne „Datum, Name, Stempel“-Zeile",
+        ),
         "2.0-beta34" to listOf(
             "Team-Zeile im Stundenzettel löschbar (z. B. versehentlich doppelt erfasst) – sync-fest",
             "Stundenzettel-Liste: „Nur heute“-Filter und neueste zuerst",
