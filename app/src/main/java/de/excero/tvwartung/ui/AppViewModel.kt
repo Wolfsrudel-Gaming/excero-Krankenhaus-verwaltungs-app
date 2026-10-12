@@ -877,17 +877,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     roomsById[it.roomId]?.station == zettel.station
             }
             .sortedWith(compareBy({ roomsById[it.roomId]?.zimmer ?: "" }, { it.datum }))
-        val leistungen = inspektionen.map {
+        // Zimmer deduplizieren: mehrfache Inspektionen desselben Zimmers zusammenführen
+        val grouped = LinkedHashMap<String, MutableList<Inspection>>()
+        inspektionen.forEach { insp ->
+            grouped.getOrPut(insp.roomId) { mutableListOf() }.add(insp)
+        }
+        val leistungen = grouped.map { (roomId, insps) ->
+            val room = roomsById[roomId]
+            val alleArbeiten = insps.flatMap { it.arbeitenListe() }.distinct()
             StundenzettelPdf.Leistung(
-                zimmer = roomsById[it.roomId]?.zimmer ?: it.roomId,
-                datum = it.datum,
-                arbeiten = it.arbeitenListe()
+                zimmer = room?.zimmer ?: roomId,
+                datum = insps.first().datum,
+                arbeiten = alleArbeiten,
+                freenetBis = room?.gueltigBis ?: ""
             )
         }
-        // Material zusammenzählen (Katalogreihenfolge, dann Freenet, dann Sonstiges)
+        // Material zusammenzählen – nur echtes Material (mit Bestandsführung)
+        val nichtMaterial = Arbeiten.SEED.filter { !it.second }.map { it.first }.toSet()
         val counts = LinkedHashMap<String, Int>()
         inspektionen.forEach { insp ->
-            insp.arbeitenListe().forEach { a -> counts[a] = (counts[a] ?: 0) + 1 }
+            insp.arbeitenListe()
+                .filter { it !in nichtMaterial }
+                .forEach { a -> counts[a] = (counts[a] ?: 0) + 1 }
         }
         val order = Arbeiten.KATALOG + Arbeiten.FREENET_VERLAENGERT
         val material = order.filter { counts.containsKey(it) }.map { it to counts.getValue(it) } +

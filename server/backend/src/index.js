@@ -142,16 +142,15 @@ function safeFilePath(rel) {
   return ziel;
 }
 
-function listFiles(dir, base) {
+function listFiles(dir, base, opts = {}) {
   const ergebnis = [];
   if (!fs.existsSync(dir)) return ergebnis;
   for (const eintrag of fs.readdirSync(dir, { withFileTypes: true })) {
     const voll = path.join(dir, eintrag.name);
-    if (eintrag.isDirectory()) ergebnis.push(...listFiles(voll, base));
+    if (eintrag.isDirectory()) ergebnis.push(...listFiles(voll, base, opts));
     else {
       const relPfad = path.relative(base, voll).split(path.sep).join('/');
-      // Signaturen werden NICHT in Dateilisten für die Web-API aufgenommen
-      if (relPfad.includes('_signaturen')) continue;
+      if (relPfad.includes('_signaturen') && !opts.includeSignaturen) continue;
       const st = fs.statSync(voll);
       ergebnis.push({ path: relPfad, size: st.size });
     }
@@ -167,18 +166,26 @@ const roomToJson = (r) => ({
 });
 
 async function upsertRoomLww(r) {
-  // Nur übernehmen, wenn neuer als der vorhandene Stand (last-write-wins)
+  // Feld-Level-Merge: bei Konflikt werden nicht-leere Werte beider Seiten
+  // beibehalten, damit z.B. eine Verlängerung auf Gerät A nicht verloren geht,
+  // wenn Gerät B den selben Raum mit neuerer updatedAt synct.
   const res = await pool.query(
     `INSERT INTO rooms (id, station, zimmer, lebenslauf, letzte_pruefung, tv_typ,
                         seriennummer, freenet_id, gueltig_bis, inaktiv, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      ON CONFLICT (id) DO UPDATE SET
-       station=EXCLUDED.station, zimmer=EXCLUDED.zimmer, lebenslauf=EXCLUDED.lebenslauf,
-       letzte_pruefung=EXCLUDED.letzte_pruefung, tv_typ=EXCLUDED.tv_typ,
-       seriennummer=EXCLUDED.seriennummer, freenet_id=EXCLUDED.freenet_id,
-       gueltig_bis=EXCLUDED.gueltig_bis, inaktiv=EXCLUDED.inaktiv,
-       updated_at=EXCLUDED.updated_at
-     WHERE rooms.updated_at < EXCLUDED.updated_at
+       station=EXCLUDED.station, zimmer=EXCLUDED.zimmer,
+       lebenslauf = CASE WHEN length(EXCLUDED.lebenslauf) > length(rooms.lebenslauf)
+                         THEN EXCLUDED.lebenslauf ELSE rooms.lebenslauf END,
+       letzte_pruefung = CASE WHEN EXCLUDED.letzte_pruefung > rooms.letzte_pruefung
+                              THEN EXCLUDED.letzte_pruefung ELSE rooms.letzte_pruefung END,
+       tv_typ = CASE WHEN EXCLUDED.tv_typ <> '' THEN EXCLUDED.tv_typ ELSE rooms.tv_typ END,
+       seriennummer = CASE WHEN EXCLUDED.seriennummer <> '' THEN EXCLUDED.seriennummer ELSE rooms.seriennummer END,
+       freenet_id = CASE WHEN EXCLUDED.freenet_id <> '' THEN EXCLUDED.freenet_id ELSE rooms.freenet_id END,
+       gueltig_bis = CASE WHEN EXCLUDED.gueltig_bis > rooms.gueltig_bis
+                          THEN EXCLUDED.gueltig_bis ELSE rooms.gueltig_bis END,
+       inaktiv = CASE WHEN EXCLUDED.updated_at > rooms.updated_at THEN EXCLUDED.inaktiv ELSE rooms.inaktiv END,
+       updated_at = GREATEST(EXCLUDED.updated_at, rooms.updated_at)
      RETURNING id`,
     [r.id, r.station || '', r.zimmer || '', r.lebenslauf || '', r.letztePruefung || '',
      r.tvTyp || '', r.seriennummer || '', r.freenetId || '', r.gueltigBis || '',
@@ -266,7 +273,7 @@ router.get('/api/sync/stundenzettel', requireApiKey, async (req, res) => {
 });
 
 router.get('/api/sync/files', requireApiKey, (req, res) => {
-  res.json({ files: listFiles(FILES_DIR, FILES_DIR) });
+  res.json({ files: listFiles(FILES_DIR, FILES_DIR, { includeSignaturen: true }) });
 });
 
 router.put('/api/sync/file', requireApiKey,
@@ -1282,7 +1289,7 @@ router.get('/api/web/stundenzettel/pdf', requireWebAuth, async (req, res) => {
       pool.query('SELECT * FROM stundenzettel WHERE station=$1 AND zeitraum_start=$2', [station, zeitraum]),
       pool.query('SELECT * FROM zettel_eintraege WHERE station=$1 AND zeitraum_start=$2 AND geloescht = FALSE', [station, zeitraum]),
       pool.query(
-        `SELECT i.datum, r.zimmer, i.daten->'arbeiten' AS arbeiten
+        `SELECT i.datum, r.zimmer, r.id AS room_id, r.gueltig_bis, i.daten->'arbeiten' AS arbeiten
          FROM inspections i JOIN rooms r ON r.id=i.room_id
          WHERE r.station=$1 AND i.datum>=$2 AND COALESCE(i.geloescht,FALSE)=FALSE
          ORDER BY i.datum, r.zimmer`, [station, zeitraum]),
@@ -1294,10 +1301,28 @@ router.get('/api/web/stundenzettel/pdf', requireWebAuth, async (req, res) => {
     const sigSta = safeFilePath(`_signaturen/${stationSafe}_${zeitraum}_station.png`);
     const sigTech = safeFilePath(`_signaturen/${stationSafe}_${zeitraum}_techniker.png`);
 
-    // Material-Zusammenfassung
+    // Zimmer deduplizieren (mehrfache Inspektionen zusammenführen)
+    const roomMap = new Map();
+    for (const i of inspQ.rows) {
+      const key = i.room_id || i.zimmer;
+      if (!roomMap.has(key)) {
+        roomMap.set(key, { zimmer: i.zimmer, datum: i.datum, arbeiten: new Set(), gueltig_bis: i.gueltig_bis || '' });
+      }
+      for (const a of (i.arbeiten || [])) {
+        if (typeof a === 'string') roomMap.get(key).arbeiten.add(a);
+      }
+    }
+    const leistungen = [...roomMap.values()].map((r) => ({
+      zimmer: r.zimmer, datum: r.datum, arbeiten: [...r.arbeiten], freenetBis: r.gueltig_bis,
+    }));
+
+    // Material-Zusammenfassung – nur echtes Material (kein Sendersuchlauf etc.)
+    const nichtMaterial = new Set(['Sendersuchlauf durchgeführt', 'Halterung befestigt', 'TV neu eingerichtet']);
     const matMap = {};
     for (const i of inspQ.rows) {
-      for (const a of (i.arbeiten || [])) { matMap[a] = (matMap[a] || 0) + 1; }
+      for (const a of (i.arbeiten || [])) {
+        if (typeof a === 'string' && !nichtMaterial.has(a)) matMap[a] = (matMap[a] || 0) + 1;
+      }
     }
 
     const pdf = await erzeugeStundenzettelPdf({
@@ -1306,10 +1331,7 @@ router.get('/api/web/stundenzettel/pdf', requireWebAuth, async (req, res) => {
       eintraege: eintraegeQ.rows.map((e) => ({
         mitarbeiter: e.mitarbeiter, stunden: e.stunden, anfahrt: e.anfahrt
       })),
-      leistungen: inspQ.rows.map((i) => ({
-        zimmer: i.zimmer, datum: i.datum,
-        arbeiten: (i.arbeiten || []).filter((a) => typeof a === 'string'),
-      })),
+      leistungen,
       material: Object.entries(matMap).map(([bezeichnung, anzahl]) => ({ bezeichnung, anzahl })),
       signaturStation: sigSta && fs.existsSync(sigSta) ? sigSta : null,
       signaturTechniker: sigTech && fs.existsSync(sigTech) ? sigTech : null,
@@ -2009,7 +2031,6 @@ router.get('/api/sync/ki/status', requireApiKey, async (req, res) => {
 // dieser eine, gezielt abgerufene Pfad, kein Massen-Download aller Fotos).
 router.get('/api/sync/file', requireApiKey, (req, res) => {
   const rel = String(req.query.path || '');
-  if (rel.includes('_signaturen')) return res.status(403).json({ error: 'Zugriff auf Signaturen nicht erlaubt' });
   const ziel = safeFilePath(rel);
   if (!ziel || !fs.existsSync(ziel)) return res.status(404).json({ error: 'Datei nicht gefunden' });
   res.sendFile(ziel);

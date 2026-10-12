@@ -22,7 +22,8 @@ object StundenzettelPdf {
     data class Leistung(
         val zimmer: String,
         val datum: String,          // ISO
-        val arbeiten: List<String>
+        val arbeiten: List<String>,
+        val freenetBis: String = "" // ISO – gueltig_bis des Zimmers
     )
 
     /** Zeile eines Mitarbeiters auf dem Team-Stundenzettel. */
@@ -160,7 +161,9 @@ object StundenzettelPdf {
             col2 + 12f, ctx.y + 18f, label
         )
         canvas.drawText(zettel.station, col2 + 12f, ctx.y + 33f, value)
-        canvas.drawText("Zeitraum: ${zettel.zeitraum}", col2 + 12f, ctx.y + 48f, paint(9.5f, Color.BLACK))
+        if (zettel.datum.isNotBlank()) {
+            canvas.drawText("Datum: ${zettel.datum}", col2 + 12f, ctx.y + 48f, paint(9.5f, Color.BLACK))
+        }
         ctx.y += boxH + 20f
     }
 
@@ -197,13 +200,12 @@ object StundenzettelPdf {
             Paint().apply { color = ROW_ALT })
         val label = paint(8.5f, GRAY)
         val value = paint(10.5f, Color.BLACK, bold = true)
-        val cellW = CONTENT_W / 4
         val felder = listOf(
             "Datum" to zettel.datum,
             "Arbeitsstunden" to zettel.arbeitsstunden,
-            "Anfahrt" to zettel.anfahrt,
             "Techniker" to zettel.techniker
         )
+        val cellW = CONTENT_W / felder.size
         felder.forEachIndexed { i, (l, v) ->
             val x = MARGIN + i * cellW + 12f
             canvas.drawText(l, x, ctx.y + 17f, label)
@@ -220,15 +222,12 @@ object StundenzettelPdf {
         val kopf = paint(9f, GRAY, bold = true)
         val body = paint(10f, Color.BLACK)
         val bodyBold = paint(10f, Color.BLACK, bold = true)
-        val col2 = MARGIN + 260f
-        val col3 = MARGIN + 380f
+        val col2 = MARGIN + 300f
         canvas.drawText("Mitarbeiter", MARGIN + 4f, ctx.y + 11f, kopf)
         canvas.drawText("Arbeitsstunden", col2, ctx.y + 11f, kopf)
-        canvas.drawText("Anfahrt", col3, ctx.y + 11f, kopf)
         ctx.y += 16f
         canvas.drawLine(MARGIN, ctx.y, MARGIN + CONTENT_W, ctx.y, Paint().apply { color = LINE })
         var summeStunden = 0.0
-        var summeAnfahrt = 0.0
         fun zahl(t: String) = t.replace(',', '.').toDoubleOrNull() ?: 0.0
         zettel.eintraege.forEachIndexed { i, z ->
             if (i % 2 == 0) {
@@ -236,16 +235,13 @@ object StundenzettelPdf {
             }
             canvas.drawText(z.name, MARGIN + 4f, ctx.y + 13f, body)
             canvas.drawText(if (z.stunden.isBlank()) "–" else "${z.stunden} Std.", col2, ctx.y + 13f, body)
-            canvas.drawText(if (z.anfahrt.isBlank()) "–" else "${z.anfahrt} Std.", col3, ctx.y + 13f, body)
             summeStunden += zahl(z.stunden)
-            summeAnfahrt += zahl(z.anfahrt)
             ctx.y += 18f
         }
         canvas.drawLine(MARGIN, ctx.y, MARGIN + CONTENT_W, ctx.y, Paint().apply { color = LINE })
         fun fmt(d: Double) = String.format("%.2f", d).trimEnd('0').trimEnd('.', ',').replace('.', ',')
         canvas.drawText("Gesamt", MARGIN + 4f, ctx.y + 14f, bodyBold)
         canvas.drawText("${fmt(summeStunden)} Std.", col2, ctx.y + 14f, bodyBold)
-        canvas.drawText("${fmt(summeAnfahrt)} Std.", col3, ctx.y + 14f, bodyBold)
         ctx.y += 22f
         if (zettel.datum.isNotBlank()) {
             canvas.drawText("Datum der Leistung: ${zettel.datum}", MARGIN + 4f, ctx.y + 10f, paint(9.5f, GRAY))
@@ -288,8 +284,11 @@ object StundenzettelPdf {
         }
 
         zettel.leistungen.forEachIndexed { index, l ->
-            val text = if (l.arbeiten.isEmpty()) "TV überprüft"
-            else "TV überprüft; " + l.arbeiten.joinToString(", ")
+            val parts = mutableListOf<String>()
+            parts.add("TV überprüft")
+            if (l.arbeiten.isNotEmpty()) parts.addAll(l.arbeiten)
+            if (l.freenetBis.isNotBlank()) parts.add("Freenet bis ${Dates.isoToGerman(l.freenetBis)}")
+            val text = parts.joinToString("; ")
             val lines = wrap(text, body, arbeitW)
             val rowH = maxOf(18f, 6f + lines.size * 12f)
             if (ctx.y + rowH > PAGE_H - 40f) {
@@ -361,12 +360,13 @@ object StundenzettelPdf {
         // Station
         c.drawLine(MARGIN, lineY, MARGIN + colW, lineY, linePaint)
         c.drawText("Unterschrift Station", MARGIN, lineY + 14f, label)
-        c.drawText("Datum, Name, Stempel", MARGIN, lineY + 26f, sub)
 
         // Dienstleister / Techniker
         c.drawLine(x2, lineY, x2 + colW, lineY, linePaint)
         c.drawText("Unterschrift Dienstleister", x2, lineY + 14f, label)
-        c.drawText(zettel.techniker.ifBlank { "Datum, Name" }, x2, lineY + 26f, sub)
+        if (zettel.techniker.isNotBlank()) {
+            c.drawText(zettel.techniker, x2, lineY + 26f, sub)
+        }
 
         ctx.y = lineY + 40f
     }
@@ -374,7 +374,7 @@ object StundenzettelPdf {
     /** Unterschriften: Station plus ein Feld je Mitarbeiter (2 Spalten, mehrzeilig). */
     private fun drawTeamUnterschriften(ctx: Ctx, zettel: Stundenzettel) {
         val felder = buildList {
-            add("Unterschrift Station (Datum, Name, Stempel)" to zettel.signaturStation)
+            add("Unterschrift Station" to zettel.signaturStation)
             zettel.eintraege.forEach { add("Unterschrift ${it.name}" to it.signatur) }
         }
         ctx.ensure(40f)

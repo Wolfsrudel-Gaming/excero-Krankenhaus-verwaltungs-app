@@ -18,7 +18,7 @@ class SignatureStore(private val context: Context) {
         const val ROLLE_TECHNIKER = "techniker"
     }
 
-    private fun dir(): File = File(context.filesDir, "signaturen").apply { mkdirs() }
+    fun dir(): File = File(context.filesDir, "signaturen").apply { mkdirs() }
 
     private fun file(zettelId: Long, rolle: String): File =
         File(dir(), "zettel_${zettelId}_$rolle.png")

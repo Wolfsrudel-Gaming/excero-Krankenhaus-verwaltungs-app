@@ -99,9 +99,29 @@ class SyncManager(
                 updatedAt = o.optString("updatedAt")
             )
             val eigenes = lokal[id]
-            if (eigenes == null || server.updatedAt > eigenes.updatedAt) {
+            if (eigenes == null) {
                 uebernehmen.add(server)
                 empfangen++
+            } else if (server.updatedAt > eigenes.updatedAt) {
+                uebernehmen.add(server.copy(
+                    lebenslauf = if (server.lebenslauf.length >= eigenes.lebenslauf.length) server.lebenslauf else eigenes.lebenslauf,
+                    letztePruefung = maxOf(server.letztePruefung, eigenes.letztePruefung),
+                    tvTyp = server.tvTyp.ifBlank { eigenes.tvTyp },
+                    seriennummer = server.seriennummer.ifBlank { eigenes.seriennummer },
+                    freenetId = server.freenetId.ifBlank { eigenes.freenetId },
+                    gueltigBis = maxOf(server.gueltigBis, eigenes.gueltigBis),
+                ))
+                empfangen++
+            } else if (server.updatedAt < eigenes.updatedAt) {
+                val merged = eigenes.copy(
+                    lebenslauf = if (eigenes.lebenslauf.length >= server.lebenslauf.length) eigenes.lebenslauf else server.lebenslauf,
+                    letztePruefung = maxOf(server.letztePruefung, eigenes.letztePruefung),
+                    tvTyp = eigenes.tvTyp.ifBlank { server.tvTyp },
+                    seriennummer = eigenes.seriennummer.ifBlank { server.seriennummer },
+                    freenetId = eigenes.freenetId.ifBlank { server.freenetId },
+                    gueltigBis = maxOf(server.gueltigBis, eigenes.gueltigBis),
+                )
+                if (merged != eigenes) { uebernehmen.add(merged); empfangen++ }
             }
         }
         if (uebernehmen.isNotEmpty()) repository.importRooms(uebernehmen)
@@ -283,15 +303,41 @@ class SyncManager(
             }
         }
         // Mehrgerät: Fotos/Prüfbericht-PDFs vom Server holen, die lokal fehlen –
-        // so hat z. B. das Tablet die am Handy gemachten Bilder. Signaturen (_signaturen)
-        // und Stundenzettel-PDFs (_stundenzettel) bleiben außen vor.
+        // so hat z. B. das Tablet die am Handy gemachten Bilder.
+        // Stundenzettel-PDFs (_stundenzettel) bleiben außen vor.
         val lokalDateien = root.walkTopDown().filter { it.isFile }
             .associate { it.relativeTo(root).path.replace(File.separatorChar, '/') to it.length() }
+        // Reverse-Index: Server-Signatur-Name → lokaler Zettel-ID für den SignatureStore
+        val zettelByKey = repository.getAllStundenzettel().associateBy { z ->
+            val stSafe = z.station.replace(Regex("[^A-Za-z0-9äöüÄÖÜß_-]"), "_")
+            "${stSafe}_${z.zeitraumStart}"
+        }
+        val sigDir = signatureStore?.dir()
         for (i in 0 until dateiListe.length()) {
             val o = dateiListe.getJSONObject(i)
             val rel = o.optString("path")
             val size = o.optLong("size")
-            if (rel.isBlank() || rel.startsWith("_")) continue
+            if (rel.isBlank() || rel.startsWith("_stundenzettel")) continue
+            // Signaturen: vom Server herunterladen und lokal unter SignatureStore ablegen
+            if (rel.startsWith("_signaturen/") && signatureStore != null && sigDir != null) {
+                val name = rel.removePrefix("_signaturen/")
+                // Name ist <station>_<zeitraumStart>_<rolle>.png
+                val lastUnderscore = name.lastIndexOf('_')
+                if (lastUnderscore > 0) {
+                    val rolle = name.substring(lastUnderscore + 1).removeSuffix(".png")
+                    val key = name.substring(0, lastUnderscore)
+                    val zettel = zettelByKey[key]
+                    if (zettel != null) {
+                        val lokalName = "zettel_${zettel.id}_$rolle.png"
+                        val zielDatei = File(sigDir, lokalName)
+                        if (!zielDatei.exists() || zielDatei.length() != size) {
+                            runCatching { ladeDateiHerunter(rel, zielDatei) }.onSuccess { hochgeladen++ }
+                        }
+                    }
+                }
+                continue
+            }
+            if (rel.startsWith("_")) continue
             if (lokalDateien[rel] != size) {
                 runCatching { ladeDateiHerunter(rel, File(root, rel)) }.onSuccess { hochgeladen++ }
             }
