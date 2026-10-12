@@ -166,18 +166,26 @@ const roomToJson = (r) => ({
 });
 
 async function upsertRoomLww(r) {
-  // Nur übernehmen, wenn neuer als der vorhandene Stand (last-write-wins)
+  // Feld-Level-Merge: bei Konflikt werden nicht-leere Werte beider Seiten
+  // beibehalten, damit z.B. eine Verlängerung auf Gerät A nicht verloren geht,
+  // wenn Gerät B den selben Raum mit neuerer updatedAt synct.
   const res = await pool.query(
     `INSERT INTO rooms (id, station, zimmer, lebenslauf, letzte_pruefung, tv_typ,
                         seriennummer, freenet_id, gueltig_bis, inaktiv, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      ON CONFLICT (id) DO UPDATE SET
-       station=EXCLUDED.station, zimmer=EXCLUDED.zimmer, lebenslauf=EXCLUDED.lebenslauf,
-       letzte_pruefung=EXCLUDED.letzte_pruefung, tv_typ=EXCLUDED.tv_typ,
-       seriennummer=EXCLUDED.seriennummer, freenet_id=EXCLUDED.freenet_id,
-       gueltig_bis=EXCLUDED.gueltig_bis, inaktiv=EXCLUDED.inaktiv,
-       updated_at=EXCLUDED.updated_at
-     WHERE rooms.updated_at < EXCLUDED.updated_at
+       station=EXCLUDED.station, zimmer=EXCLUDED.zimmer,
+       lebenslauf = CASE WHEN length(EXCLUDED.lebenslauf) > length(rooms.lebenslauf)
+                         THEN EXCLUDED.lebenslauf ELSE rooms.lebenslauf END,
+       letzte_pruefung = CASE WHEN EXCLUDED.letzte_pruefung > rooms.letzte_pruefung
+                              THEN EXCLUDED.letzte_pruefung ELSE rooms.letzte_pruefung END,
+       tv_typ = CASE WHEN EXCLUDED.tv_typ <> '' THEN EXCLUDED.tv_typ ELSE rooms.tv_typ END,
+       seriennummer = CASE WHEN EXCLUDED.seriennummer <> '' THEN EXCLUDED.seriennummer ELSE rooms.seriennummer END,
+       freenet_id = CASE WHEN EXCLUDED.freenet_id <> '' THEN EXCLUDED.freenet_id ELSE rooms.freenet_id END,
+       gueltig_bis = CASE WHEN EXCLUDED.gueltig_bis > rooms.gueltig_bis
+                          THEN EXCLUDED.gueltig_bis ELSE rooms.gueltig_bis END,
+       inaktiv = CASE WHEN EXCLUDED.updated_at > rooms.updated_at THEN EXCLUDED.inaktiv ELSE rooms.inaktiv END,
+       updated_at = GREATEST(EXCLUDED.updated_at, rooms.updated_at)
      RETURNING id`,
     [r.id, r.station || '', r.zimmer || '', r.lebenslauf || '', r.letztePruefung || '',
      r.tvTyp || '', r.seriennummer || '', r.freenetId || '', r.gueltigBis || '',

@@ -99,9 +99,29 @@ class SyncManager(
                 updatedAt = o.optString("updatedAt")
             )
             val eigenes = lokal[id]
-            if (eigenes == null || server.updatedAt > eigenes.updatedAt) {
+            if (eigenes == null) {
                 uebernehmen.add(server)
                 empfangen++
+            } else if (server.updatedAt > eigenes.updatedAt) {
+                uebernehmen.add(server.copy(
+                    lebenslauf = if (server.lebenslauf.length >= eigenes.lebenslauf.length) server.lebenslauf else eigenes.lebenslauf,
+                    letztePruefung = maxOf(server.letztePruefung, eigenes.letztePruefung),
+                    tvTyp = server.tvTyp.ifBlank { eigenes.tvTyp },
+                    seriennummer = server.seriennummer.ifBlank { eigenes.seriennummer },
+                    freenetId = server.freenetId.ifBlank { eigenes.freenetId },
+                    gueltigBis = maxOf(server.gueltigBis, eigenes.gueltigBis),
+                ))
+                empfangen++
+            } else if (server.updatedAt < eigenes.updatedAt) {
+                val merged = eigenes.copy(
+                    lebenslauf = if (eigenes.lebenslauf.length >= server.lebenslauf.length) eigenes.lebenslauf else server.lebenslauf,
+                    letztePruefung = maxOf(server.letztePruefung, eigenes.letztePruefung),
+                    tvTyp = eigenes.tvTyp.ifBlank { server.tvTyp },
+                    seriennummer = eigenes.seriennummer.ifBlank { server.seriennummer },
+                    freenetId = eigenes.freenetId.ifBlank { server.freenetId },
+                    gueltigBis = maxOf(server.gueltigBis, eigenes.gueltigBis),
+                )
+                if (merged != eigenes) { uebernehmen.add(merged); empfangen++ }
             }
         }
         if (uebernehmen.isNotEmpty()) repository.importRooms(uebernehmen)
