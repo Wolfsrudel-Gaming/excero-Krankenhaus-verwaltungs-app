@@ -142,16 +142,15 @@ function safeFilePath(rel) {
   return ziel;
 }
 
-function listFiles(dir, base) {
+function listFiles(dir, base, opts = {}) {
   const ergebnis = [];
   if (!fs.existsSync(dir)) return ergebnis;
   for (const eintrag of fs.readdirSync(dir, { withFileTypes: true })) {
     const voll = path.join(dir, eintrag.name);
-    if (eintrag.isDirectory()) ergebnis.push(...listFiles(voll, base));
+    if (eintrag.isDirectory()) ergebnis.push(...listFiles(voll, base, opts));
     else {
       const relPfad = path.relative(base, voll).split(path.sep).join('/');
-      // Signaturen werden NICHT in Dateilisten für die Web-API aufgenommen
-      if (relPfad.includes('_signaturen')) continue;
+      if (relPfad.includes('_signaturen') && !opts.includeSignaturen) continue;
       const st = fs.statSync(voll);
       ergebnis.push({ path: relPfad, size: st.size });
     }
@@ -266,7 +265,7 @@ router.get('/api/sync/stundenzettel', requireApiKey, async (req, res) => {
 });
 
 router.get('/api/sync/files', requireApiKey, (req, res) => {
-  res.json({ files: listFiles(FILES_DIR, FILES_DIR) });
+  res.json({ files: listFiles(FILES_DIR, FILES_DIR, { includeSignaturen: true }) });
 });
 
 router.put('/api/sync/file', requireApiKey,
@@ -2024,7 +2023,6 @@ router.get('/api/sync/ki/status', requireApiKey, async (req, res) => {
 // dieser eine, gezielt abgerufene Pfad, kein Massen-Download aller Fotos).
 router.get('/api/sync/file', requireApiKey, (req, res) => {
   const rel = String(req.query.path || '');
-  if (rel.includes('_signaturen')) return res.status(403).json({ error: 'Zugriff auf Signaturen nicht erlaubt' });
   const ziel = safeFilePath(rel);
   if (!ziel || !fs.existsSync(ziel)) return res.status(404).json({ error: 'Datei nicht gefunden' });
   res.sendFile(ziel);

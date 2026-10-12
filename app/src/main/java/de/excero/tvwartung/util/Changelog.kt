@@ -6,6 +6,9 @@ package de.excero.tvwartung.util
  */
 object Changelog {
     val EINTRAEGE: List<Pair<String, List<String>>> = listOf(
+        "2.0-beta36" to listOf(
+            "Unterschriften werden jetzt zwischen Geräten synchronisiert",
+        ),
         "2.0-beta35" to listOf(
             "Stundenzettel-PDF: Anfahrt/Fahrtzeit und Zeitraum entfernt, Datum reicht",
             "Stundenzettel-PDF: Freenet-Datum bei jeder Leistung sichtbar",
