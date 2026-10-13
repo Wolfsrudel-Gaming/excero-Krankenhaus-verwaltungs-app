@@ -6,8 +6,12 @@ package de.excero.tvwartung.util
  */
 object Changelog {
     val EINTRAEGE: List<Pair<String, List<String>>> = listOf(
+        "2.0-beta37" to listOf(
+            "Tag aufteilen: auch für gestern und vorgestern möglich (nicht nur heute)",
+        ),
         "2.0-beta36" to listOf(
             "Unterschriften werden jetzt zwischen Geräten synchronisiert",
+            "Sync: Verlängerungen gehen nicht mehr verloren bei paralleler Arbeit",
         ),
         "2.0-beta35" to listOf(
             "Stundenzettel-PDF: Anfahrt/Fahrtzeit und Zeitraum entfernt, Datum reicht",

@@ -20,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +48,7 @@ import de.excero.tvwartung.ui.AppViewModel
 import de.excero.tvwartung.ui.theme.OkGreen
 import de.excero.tvwartung.util.Dates
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 /**
  * „Tag aufteilen": Am Feierabend die insgesamt vor Ort verbrachten Stunden
@@ -60,21 +62,32 @@ fun TagAufteilenScreen(viewModel: AppViewModel, onFertig: () -> Unit, onBack: ()
     val settings by viewModel.settings.collectAsState()
     val scope = rememberCoroutineScope()
 
+    val heute = remember { LocalDate.now() }
+    var gewaehltesDatum by remember { mutableStateOf(heute) }
     var stundenText by remember { mutableStateOf("") }
     var anfahrtText by remember { mutableStateOf("") }
     var aufteilung by remember { mutableStateOf<AppViewModel.TagAufteilung?>(null) }
     var hinweis by remember { mutableStateOf<String?>(null) }
     var rechnet by remember { mutableStateOf(false) }
 
+    val datumIso = remember(gewaehltesDatum) { gewaehltesDatum.toString() }
+    val datumLabel = remember(gewaehltesDatum) {
+        when (gewaehltesDatum) {
+            heute -> "Heute"
+            heute.minusDays(1) -> "Gestern"
+            else -> Dates.isoToGerman(gewaehltesDatum.toString())
+        }
+    }
+
     fun berechne() {
         val std = Dates.stundenWert(stundenText)
         if (std <= 0) { hinweis = "Bitte zuerst die Gesamtstunden eingeben."; aufteilung = null; return }
         rechnet = true
         scope.launch {
-            val ergebnis = viewModel.berechneTagAufteilung(std, Dates.stundenWert(anfahrtText))
+            val ergebnis = viewModel.berechneTagAufteilung(std, Dates.stundenWert(anfahrtText), datumIso)
             rechnet = false
             if (ergebnis.posten.isEmpty()) {
-                hinweis = "Heute wurden noch keine Prüfungen erfasst – es gibt nichts zu verteilen."
+                hinweis = "Am ${Dates.isoToGerman(datumIso)} wurden keine Prüfungen erfasst – es gibt nichts zu verteilen."
                 aufteilung = null
             } else {
                 hinweis = null
@@ -89,7 +102,7 @@ fun TagAufteilenScreen(viewModel: AppViewModel, onFertig: () -> Unit, onBack: ()
                 Column {
                     Text("Tag aufteilen", fontWeight = FontWeight.Bold)
                     Text(
-                        "Stunden automatisch auf die Stationen verteilen",
+                        "$datumLabel · Stunden auf Stationen verteilen",
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
@@ -113,14 +126,32 @@ fun TagAufteilenScreen(viewModel: AppViewModel, onFertig: () -> Unit, onBack: ()
         ) {
             Card(elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Wie lange heute vor Ort?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Stunden aufteilen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
                         "Gesamte Arbeitszeit (ohne Anfahrt) eingeben. Die App teilt sie nach " +
-                            "Arbeitsaufwand auf die heute bearbeiteten Stationen auf; die Anfahrt " +
+                            "Arbeitsaufwand auf die bearbeiteten Stationen auf; die Anfahrt " +
                             "kommt auf die zuerst besuchte Station.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Tag:", style = MaterialTheme.typography.labelLarge)
+                        FilterChip(
+                            selected = gewaehltesDatum == heute,
+                            onClick = { gewaehltesDatum = heute; aufteilung = null },
+                            label = { Text("Heute") }
+                        )
+                        FilterChip(
+                            selected = gewaehltesDatum == heute.minusDays(1),
+                            onClick = { gewaehltesDatum = heute.minusDays(1); aufteilung = null },
+                            label = { Text("Gestern") }
+                        )
+                        FilterChip(
+                            selected = gewaehltesDatum == heute.minusDays(2),
+                            onClick = { gewaehltesDatum = heute.minusDays(2); aufteilung = null },
+                            label = { Text("Vorgestern") }
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = stundenText,
