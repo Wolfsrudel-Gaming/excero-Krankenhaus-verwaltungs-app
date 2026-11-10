@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 import db
+import fotofilter
 import worker
 
 app = FastAPI(title="KKH KI-Service", docs_url=None, redoc_url=None)
@@ -19,9 +20,43 @@ app = FastAPI(title="KKH KI-Service", docs_url=None, redoc_url=None)
 @app.on_event("startup")
 def startup():
     db.init_schema()
+    _bereinige_altanalysen()
     _stelle_fehlende_fotos_ein()
     worker.starte_worker()
     print("KI-Service bereit – Worker läuft")
+
+
+def _bereinige_altanalysen():
+    """Ergebnisse aus der Zeit vor dem Wasserzeichen-/Fernbedienungsfilter korrigieren.
+
+    Betroffene Fotos werden neu eingereiht und die daraus entstandenen
+    Trainingslabels entfernt. Idempotent: nach der Neuanalyse trifft nichts mehr zu.
+    """
+    neu = labels = 0
+    for a in db.query(
+            """SELECT id, pfad, bildtyp, felder FROM foto_analysen
+               WHERE status NOT IN ('wartet','laeuft')"""):
+        pfad, felder = a["pfad"], a["felder"] or {}
+        if fotofilter.ist_fernbedienung(pfad):
+            labels += db.execute(
+                """DELETE FROM ki_labels WHERE pfad=%s
+                   AND feld IN ('bildtyp','seriennummer','freenet_id','gueltig_bis')""", (pfad,))
+            betroffen = a["bildtyp"] != "fernbedienung"
+        else:
+            _, stempel = fotofilter.trenne_wasserzeichen(felder.get("_ocr") or [])
+            falsch = fotofilter.stempel_daten(stempel, pfad)
+            for l in db.query(
+                    "SELECT id, wert FROM ki_labels WHERE pfad=%s AND feld='gueltig_bis'", (pfad,)):
+                if fotofilter.daten_in(l["wert"]) & falsch:
+                    labels += db.execute("DELETE FROM ki_labels WHERE id=%s", (l["id"],))
+            # Nur neu einreihen, wenn das Ergebnis wirklich vom Stempel stammt –
+            # bereits bestätigte, korrekte Analysen bleiben unangetastet.
+            betroffen = (felder.get("gueltig_bis") or {}).get("wert") in falsch
+        if betroffen:
+            neu += db.execute(
+                "UPDATE foto_analysen SET status='wartet', fehler='' WHERE id=%s", (a["id"],))
+    if neu or labels:
+        print(f"Altanalysen bereinigt: {neu} Foto(s) neu eingereiht, {labels} Label(s) entfernt")
 
 
 def _stelle_fehlende_fotos_ein():

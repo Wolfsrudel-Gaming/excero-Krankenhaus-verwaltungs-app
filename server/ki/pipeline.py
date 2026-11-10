@@ -13,6 +13,7 @@ import re
 from PIL import Image, ImageOps
 
 import db
+import fotofilter
 from models.klassifikator import Klassifikator
 from models.feldnetz import FeldExtraktor
 
@@ -103,7 +104,8 @@ def _abgleich(felder, zimmer, tv_typ_erkannt):
 
 def _auto_labels(pfad, felder, abgleich, bildtyp):
     """Selbst-Matching: Übereinstimmungen mit Stammdaten sind sichere Labels."""
-    db.setze_auto_label(pfad, "bildtyp", bildtyp)
+    if bildtyp != "fernbedienung":   # steht im Dateinamen, kein Trainingsziel
+        db.setze_auto_label(pfad, "bildtyp", bildtyp)
     for feld, a in abgleich.items():
         if a.get("passt") is True:
             db.setze_auto_label(pfad, feld, a["stammdaten"])
@@ -117,12 +119,21 @@ def analysiere_foto(pfad_rel: str, room_id: str):
 
     bildtyp, bt_konf, tv_typ, tv_konf = klassifikator.klassifiziere(voll)
 
-    zeilen = ocr_zeilen(voll)
-    # Übersichtsfotos zeigen das laufende TV-Bild – dort erkannte Zahlen sind
-    # Zufallstreffer (Senderlogos, Laufschriften). Felder nur aus Menü-/
-    # Geräte-Nahaufnahmen extrahieren.
-    felder = feld_extraktor.extrahiere(zeilen) if bildtyp != "uebersicht" else {}
-    felder["_ocr"] = zeilen             # Rohtext fürs spätere Training aufheben
+    if fotofilter.ist_fernbedienung(pfad_rel):
+        # Auf der Fernbedienung steht nichts über Seriennummer, Freenet-ID oder
+        # Gültigkeit des Fernsehers – höchstens der Typ lässt sich ableiten.
+        bildtyp = "fernbedienung"
+        zeilen, stempel, felder = [], [], {}
+    else:
+        zeilen, stempel = fotofilter.trenne_wasserzeichen(ocr_zeilen(voll))
+        # Übersichtsfotos zeigen das laufende TV-Bild – dort erkannte Zahlen sind
+        # Zufallstreffer (Senderlogos, Laufschriften). Felder nur aus Menü-/
+        # Geräte-Nahaufnahmen extrahieren.
+        felder = feld_extraktor.extrahiere(zeilen) if bildtyp != "uebersicht" else {}
+        # Das Aufnahmedatum ist nie die Freenet-Gültigkeit.
+        if felder.get("gueltig_bis", {}).get("wert") in fotofilter.stempel_daten(stempel, pfad_rel):
+            del felder["gueltig_bis"]
+    felder["_ocr"] = zeilen             # Rohtext (ohne Wasserzeichen) fürs Training
     felder["_bildtyp_konfidenz"] = round(bt_konf, 3)
     if tv_typ and tv_konf >= 0.6:
         felder["tv_typ"] = {"wert": tv_typ, "konfidenz": round(tv_konf, 3), "quelle": "netz"}
@@ -131,7 +142,9 @@ def analysiere_foto(pfad_rel: str, room_id: str):
     abgleich = _abgleich(felder, zimmer, felder.get("tv_typ", {}).get("wert", ""))
 
     inhaltsfelder = [k for k in felder if not k.startswith("_")]
-    if not inhaltsfelder and not zeilen:
+    if not inhaltsfelder and bildtyp == "fernbedienung":
+        status = "uebereinstimmung"
+    elif not inhaltsfelder and not zeilen:
         status = "unlesbar"
     elif not inhaltsfelder:
         # Text erkannt, aber keine verwertbaren Felder (typisch: Übersichtsfoto)

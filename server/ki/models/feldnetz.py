@@ -40,6 +40,8 @@ _NEGATIV = {
 }
 
 RE_DATUM = re.compile(r"\b(\d{1,2})[./-](\d{1,2})[./-](20\d{2})\b|\b(20\d{2})-(\d{2})-(\d{2})\b")
+# Datum mit Uhrzeit dahinter = Zeitstempel (Aufnahme, Systemuhr), keine Gültigkeit
+RE_DATUM_MIT_ZEIT = re.compile(r"20\d{2}\D{1,3}\d{1,2}[:.]\d{2}\b")
 RE_11_ZIFFERN = re.compile(r"\b\d{11}\b")
 RE_9_14_ZIFFERN = re.compile(r"\b\d{9,14}\b")
 RE_ALNUM_SN = re.compile(r"\b(?=[A-Z0-9]{8,20}\b)(?=\w*[A-Z])(?=\w*\d)[A-Z0-9]+\b")
@@ -110,7 +112,7 @@ def _regel_extraktion(text: str):
     if m and erlaubt("freenet_id"):
         treffer["freenet_id"] = m.group(0)
     m = RE_DATUM.search(text)
-    if m:
+    if m and not RE_DATUM_MIT_ZEIT.search(text[m.start():]):
         if m.group(1):
             treffer["gueltig_bis"] = f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
         else:
