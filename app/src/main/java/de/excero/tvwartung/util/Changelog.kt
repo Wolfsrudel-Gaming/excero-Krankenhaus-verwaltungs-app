@@ -6,6 +6,9 @@ package de.excero.tvwartung.util
  */
 object Changelog {
     val EINTRAEGE: List<Pair<String, List<String>>> = listOf(
+        "2.0-beta39" to listOf(
+            "Prüfbericht-PDF: Fernbedienungstyp steht jetzt neben dem TV-Typ",
+        ),
         "2.0-beta38" to listOf(
             "Neu: Fernbedienungstyp je Zimmer – im Prüfbogen und in den Stammdaten erfassbar, mit Vorschlägen passend zum TV-Typ",
             "Fernbedienungstyp in Suche, Excel-Export und Weboberfläche (Spalte + Filter für die Nachbestellung)",

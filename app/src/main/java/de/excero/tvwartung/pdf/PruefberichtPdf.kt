@@ -192,7 +192,8 @@ object PruefberichtPdf {
             canvas.drawText(v.ifBlank { "–" }, x + 12f, yy + 13f, value)
         }
         info(MARGIN, iy, "Station / Zimmer", "${room.station} / ${room.zimmer}")
-        info(col2, iy, "TV-Typ", room.tvTyp)
+        if (room.fernbedienung.isBlank()) info(col2, iy, "TV-Typ", room.tvTyp)
+        else info(col2, iy, "TV-Typ · Fernbedienung", "${room.tvTyp.ifBlank { "–" }} · ${room.fernbedienung}")
         iy += 32f
         info(MARGIN, iy, "TV Seriennummer", room.seriennummer)
         info(col2, iy, "Freenet-ID · gültig bis", buildString {
