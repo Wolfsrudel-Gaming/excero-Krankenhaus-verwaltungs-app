@@ -93,7 +93,7 @@ async function ladeKiAnalysen() {
                style="width:72px;height:54px;object-fit:cover;border-radius:6px" alt="">` },
         { key: 'room_id', label: 'Zimmer', sort: true },
         { key: 'bildtyp', label: 'Bildtyp', sort: true, render: (v) => v
-          ? badge({ menue: 'CI-Menü', geraet: 'Gerät', uebersicht: 'Übersicht' }[v] || v, 'teal') : '–' },
+          ? badge({ menue: 'CI-Menü', geraet: 'Gerät', uebersicht: 'Übersicht', fernbedienung: 'Fernbedienung' }[v] || v, 'teal') : '–' },
         { key: 'erkannt', label: 'Erkannte Werte' },
         { key: 'status', label: 'Status', sort: true,
           render: (v) => (KI_STATUS_BADGE[v] || (() => escH(v)))() },
