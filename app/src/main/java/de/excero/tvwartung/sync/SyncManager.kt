@@ -96,7 +96,8 @@ class SyncManager(
                 freenetId = o.optString("freenetId"),
                 gueltigBis = o.optString("gueltigBis"),
                 inaktiv = o.optBoolean("inaktiv"),
-                updatedAt = o.optString("updatedAt")
+                updatedAt = o.optString("updatedAt"),
+                fernbedienung = o.optString("fernbedienung")
             )
             val eigenes = lokal[id]
             if (eigenes == null) {
@@ -109,6 +110,7 @@ class SyncManager(
                     tvTyp = server.tvTyp.ifBlank { eigenes.tvTyp },
                     seriennummer = server.seriennummer.ifBlank { eigenes.seriennummer },
                     freenetId = server.freenetId.ifBlank { eigenes.freenetId },
+                    fernbedienung = server.fernbedienung.ifBlank { eigenes.fernbedienung },
                     gueltigBis = maxOf(server.gueltigBis, eigenes.gueltigBis),
                 ))
                 empfangen++
@@ -119,6 +121,7 @@ class SyncManager(
                     tvTyp = eigenes.tvTyp.ifBlank { server.tvTyp },
                     seriennummer = eigenes.seriennummer.ifBlank { server.seriennummer },
                     freenetId = eigenes.freenetId.ifBlank { server.freenetId },
+                    fernbedienung = eigenes.fernbedienung.ifBlank { server.fernbedienung },
                     gueltigBis = maxOf(server.gueltigBis, eigenes.gueltigBis),
                 )
                 if (merged != eigenes) { uebernehmen.add(merged); empfangen++ }
@@ -136,6 +139,7 @@ class SyncManager(
                 put("tvTyp", r.tvTyp); put("seriennummer", r.seriennummer)
                 put("freenetId", r.freenetId); put("gueltigBis", r.gueltigBis)
                 put("inaktiv", r.inaktiv); put("updatedAt", r.updatedAt)
+                put("fernbedienung", r.fernbedienung)
             })
         }
         val roomsAntwort = httpJson(

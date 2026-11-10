@@ -13,7 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Material::class, CustomPruefpunkt::class, StundenzettelEntity::class,
         StundenzettelEintrag::class, Einsatz::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -188,6 +188,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v12 → v13: Fernbedienungstyp je Zimmer (für die Nachbestellung). */
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tv_rooms ADD COLUMN fernbedienung TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -201,7 +208,8 @@ abstract class AppDatabase : RoomDatabase() {
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4,
                         MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
-                        MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12
+                        MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
+                        MIGRATION_12_13
                     )
                     .build()
                     .also { instance = it }

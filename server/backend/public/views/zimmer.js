@@ -6,6 +6,17 @@
 
 let zimmerDaten = [];
 
+// Bereits erfasste Fernbedienungstypen (für Filter und Eingabevorschläge)
+function fernbedienungsTypen() {
+  return [...new Set(zimmerDaten.map((r) => r.fernbedienung).filter(Boolean))].sort();
+}
+
+function fernbedienungFeld(wert) {
+  return `<div class="form-group"><label class="form-label">Fernbedienung (Typ/Modell)</label>
+        <input class="form-control" id="m-fb" list="m-fb-liste" value="${escH(wert || '')}">
+        <datalist id="m-fb-liste">${fernbedienungsTypen().map((t) => `<option value="${escH(t)}">`).join('')}</datalist></div>`;
+}
+
 async function viewZimmer() {
   const el = document.getElementById('content-area');
   el.innerHTML = `
@@ -31,6 +42,11 @@ async function viewZimmer() {
           <option value="bald">Läuft bald ab (90 Tage)</option>
           <option value="ok">OK</option>
         </select></div>
+      <div class="filter-group"><label>Fernbedienung</label>
+        <select class="form-control form-control-sm" id="z-fb">
+          <option value="">Alle</option>
+          <option value="__leer">Nicht erfasst</option>
+        </select></div>
     </div>
     <div id="zimmer-container"><div class="loading">Wird geladen…</div></div>
   `;
@@ -43,12 +59,18 @@ async function viewZimmer() {
 
   const stationen = [...new Set(zimmerDaten.map((r) => r.station))].sort();
   const sel = document.getElementById('z-station');
+  sel.length = 1;   // doppeltes Laden der Ansicht darf keine doppelten Einträge erzeugen
   stationen.forEach((s) => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+
+  const fbSel = document.getElementById('z-fb');
+  fbSel.length = 2;
+  fernbedienungsTypen().forEach((t) => { const o = document.createElement('option'); o.value = t; o.textContent = t; fbSel.appendChild(o); });
 
   const heuteDt = heute();
   const in90Dt = new Date(Date.now() + 90 * 86400e3).toISOString().slice(0, 10);
 
   function filtered() {
+    const fb = fbSel.value;
     const sta = document.getElementById('z-station').value;
     const akt = document.getElementById('z-aktiv').value;
     const fn = document.getElementById('z-freenet').value;
@@ -59,6 +81,8 @@ async function viewZimmer() {
       if (fn === 'abgelaufen' && !(r.gueltigBis && r.gueltigBis < heuteDt)) return false;
       if (fn === 'bald' && !(r.gueltigBis && r.gueltigBis >= heuteDt && r.gueltigBis <= in90Dt)) return false;
       if (fn === 'ok' && !(r.gueltigBis && r.gueltigBis > in90Dt)) return false;
+      if (fb === '__leer' && r.fernbedienung) return false;
+      if (fb && fb !== '__leer' && r.fernbedienung !== fb) return false;
       return true;
     }).map((r) => ({
       ...r,
@@ -74,12 +98,14 @@ async function viewZimmer() {
     if (!grid) {
       grid = new DataGrid(container, {
         data: rows,
-        filterKeys: ['station', 'zimmer', 'tvTyp', 'seriennummer', 'freenetId'],
+        filterKeys: ['station', 'zimmer', 'tvTyp', 'fernbedienung', 'seriennummer', 'freenetId'],
         columns: [
           { key: 'station', label: 'Station', sort: true, width: '90px',
             render: (v) => badge(v || '–', 'teal') },
           { key: 'zimmer', label: 'Zimmer', sort: true, width: '80px' },
           { key: 'tvTyp', label: 'TV-Typ', sort: true, width: '120px' },
+          { key: 'fernbedienung', label: 'Fernbedienung', sort: true, width: '140px',
+            render: (v) => v ? escH(v) : '–' },
           { key: 'seriennummer', label: 'Seriennummer', sort: true,
             render: (v) => `<code class="mono">${escH(v || '–')}</code>` },
           { key: 'freenetId', label: 'Freenet-ID', sort: true,
@@ -99,7 +125,7 @@ async function viewZimmer() {
   }
 
   render();
-  ['z-station', 'z-aktiv', 'z-freenet'].forEach((id) =>
+  ['z-station', 'z-aktiv', 'z-freenet', 'z-fb'].forEach((id) =>
     document.getElementById(id)?.addEventListener('change', render));
 
   // Zimmer-Detail-Request via Navigation (aus Prüfungen-View)
@@ -143,6 +169,7 @@ async function viewZimmerDetail(id) {
 
     <div class="detail-grid" style="margin-bottom:20px">
       <div class="detail-field"><label>TV-Typ</label><div class="val">${escH(r.tvTyp || '–')}</div></div>
+      <div class="detail-field"><label>Fernbedienung</label><div class="val">${escH(r.fernbedienung || '–')}</div></div>
       <div class="detail-field"><label>Seriennummer</label><div class="val mono">${escH(r.seriennummer || '–')}</div></div>
       <div class="detail-field"><label>Freenet-ID</label><div class="val mono">${escH(r.freenetId || '–')}</div></div>
       <div class="detail-field"><label>Freenet gültig bis</label><div class="val">${freenetBadge(r.gueltigBis)}</div></div>
@@ -233,6 +260,7 @@ async function modalZimmerNeu() {
         <input class="form-control" id="m-zimmer" placeholder="z.B. 01a"></div>
       <div class="form-group"><label class="form-label">TV-Typ</label>
         <input class="form-control" id="m-tv" placeholder="z.B. Samsung 43 Zoll"></div>
+      ${fernbedienungFeld('')}
       <div class="form-group"><label class="form-label">Seriennummer</label>
         <input class="form-control" id="m-sn"></div>
       <div class="form-group"><label class="form-label">Freenet-ID</label>
@@ -249,6 +277,7 @@ async function modalZimmerNeu() {
     await api('/kkh/api/web/rooms', { method: 'POST', body: {
       station, zimmer,
       tvTyp: mf(res, 'm-tv') || '',
+      fernbedienung: (mf(res, 'm-fb') || '').trim(),
       seriennummer: mf(res, 'm-sn') || '',
       freenetId: mf(res, 'm-fn') || '',
       gueltigBis: mf(res, 'm-gb') || '',
@@ -262,6 +291,7 @@ async function modalZimmerBearbeiten(r, id) {
     <div class="form-grid">
       <div class="form-group"><label class="form-label">TV-Typ</label>
         <input class="form-control" id="m-tv" value="${escH(r.tvTyp || '')}"></div>
+      ${fernbedienungFeld(r.fernbedienung)}
       <div class="form-group"><label class="form-label">Seriennummer</label>
         <input class="form-control" id="m-sn" value="${escH(r.seriennummer || '')}"></div>
       <div class="form-group"><label class="form-label">Freenet-ID</label>
@@ -276,6 +306,7 @@ async function modalZimmerBearbeiten(r, id) {
   try {
     await api(`/kkh/api/web/rooms/${encodeURIComponent(id)}`, { method: 'PATCH', body: {
       tvTyp: mf(res, 'm-tv') || '',
+      fernbedienung: (mf(res, 'm-fb') || '').trim(),
       seriennummer: mf(res, 'm-sn') || '',
       freenetId: mf(res, 'm-fn') || '',
       gueltigBis: mf(res, 'm-gb') || '',

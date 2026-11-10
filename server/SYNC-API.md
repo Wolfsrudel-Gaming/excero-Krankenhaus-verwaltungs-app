@@ -15,7 +15,8 @@ Konfliktlösung: last-write-wins über `updatedAt` (String-Vergleich).
 Antwort: `{ "rooms": [Room] }`
 ```
 Room = { id, station, zimmer, lebenslauf, letztePruefung, tvTyp,
-         seriennummer, freenetId, gueltigBis, inaktiv:bool, updatedAt }
+         seriennummer, freenetId, gueltigBis, inaktiv:bool, updatedAt,
+         fernbedienung }   // Typ/Modell der Fernbedienung; leer = unbekannt, überschreibt nie einen Wert
 ```
 Die App übernimmt Server-Zeilen, deren `updatedAt` neuer ist als ihr lokaler
 Stand (so kommen Web-Änderungen aufs Handy).

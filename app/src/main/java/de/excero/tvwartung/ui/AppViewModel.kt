@@ -391,6 +391,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun bekannteTvTypen(): List<String> =
         rooms.value.map { it.tvTyp.trim() }.filter { it.isNotBlank() }.distinct().sorted()
 
+    /**
+     * Bereits erfasste Fernbedienungstypen für die Schnellauswahl – zuerst die,
+     * die bei Zimmern mit demselben [tvTyp] hinterlegt sind.
+     */
+    fun bekannteFernbedienungen(tvTyp: String = ""): List<String> {
+        val mitTyp = rooms.value.filter { it.fernbedienung.isNotBlank() }
+        val passend = mitTyp.filter { tvTyp.isNotBlank() && it.tvTyp.trim().equals(tvTyp.trim(), true) }
+            .map { it.fernbedienung.trim() }.distinct().sorted()
+        return passend + mitTyp.map { it.fernbedienung.trim() }.distinct().sorted().filter { it !in passend }
+    }
+
     /** Zimmer (außer [exceptRoomId]), bei denen dieselbe Freenet-ID hinterlegt ist. */
     fun freenetIdDuplikate(freenetId: String, exceptRoomId: String): List<String> {
         val id = freenetId.trim()
@@ -435,13 +446,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         neuesGueltigBis: String? = null,
         neueSeriennummer: String? = null,
         neueFreenetId: String? = null,
-        neuerTvTyp: String? = null
+        neuerTvTyp: String? = null,
+        neueFernbedienung: String? = null
     ) {
         viewModelScope.launch {
             repository.saveInspection(
                 inspection.copy(mitarbeiter = settings.value.mitarbeiter),
                 lebenslaufEintrag, neuesGueltigBis,
-                neueSeriennummer, neueFreenetId, neuerTvTyp
+                neueSeriennummer, neueFreenetId, neuerTvTyp, neueFernbedienung
             )
             withContext(Dispatchers.IO) {
                 aktualisiereBerichtPdfIntern(inspection.roomId, Dates.isoToFolder(inspection.datum))

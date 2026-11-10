@@ -162,7 +162,8 @@ object XlsxReader {
                     tvTyp = text(5),
                     seriennummer = number(6),
                     freenetId = number(7),
-                    gueltigBis = date(8)
+                    gueltigBis = date(8),
+                    fernbedienung = text(9)
                 )
             )
         }

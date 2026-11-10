@@ -324,6 +324,7 @@ private fun StammdatenCard(
 ) {
     var editing by remember(room.id) { mutableStateOf(false) }
     var tvTyp by remember(room) { mutableStateOf(room.tvTyp) }
+    var fernbedienung by remember(room) { mutableStateOf(room.fernbedienung) }
     var seriennummer by remember(room) { mutableStateOf(room.seriennummer) }
     var freenetId by remember(room) { mutableStateOf(room.freenetId) }
     var gueltigBis by remember(room) { mutableStateOf(Dates.isoToGerman(room.gueltigBis)) }
@@ -361,6 +362,12 @@ private fun StammdatenCard(
                     onValueChange = { tvTyp = it },
                     bekannteTypen = viewModel.bekannteTvTypen()
                 )
+                TvTypAuswahl(
+                    value = fernbedienung,
+                    onValueChange = { fernbedienung = it },
+                    bekannteTypen = viewModel.bekannteFernbedienungen(tvTyp),
+                    label = "Fernbedienung (Typ/Modell)"
+                )
                 OutlinedTextField(
                     value = seriennummer, onValueChange = { seriennummer = it },
                     label = { Text("TV Seriennummer") }, singleLine = true,
@@ -397,6 +404,7 @@ private fun StammdatenCard(
                             onSave(
                                 room.copy(
                                     tvTyp = tvTyp.trim(),
+                                    fernbedienung = fernbedienung.trim(),
                                     seriennummer = seriennummer.trim(),
                                     freenetId = freenetId.trim(),
                                     gueltigBis = iso
@@ -412,6 +420,7 @@ private fun StammdatenCard(
                     TextButton(onClick = {
                         editing = false
                         tvTyp = room.tvTyp
+                        fernbedienung = room.fernbedienung
                         seriennummer = room.seriennummer
                         freenetId = room.freenetId
                         gueltigBis = Dates.isoToGerman(room.gueltigBis)
@@ -420,6 +429,7 @@ private fun StammdatenCard(
                 }
             } else {
                 InfoRow("TV-Typ", room.tvTyp)
+                InfoRow("Fernbedienung", room.fernbedienung)
                 InfoRow("TV Seriennummer", room.seriennummer, mono = true)
                 if (serialDups.isNotEmpty()) {
                     DuplicateWarning("Seriennummer auch hinterlegt bei: ${serialDups.joinToString()}")

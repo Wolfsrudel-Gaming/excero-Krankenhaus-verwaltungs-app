@@ -162,6 +162,7 @@ const roomToJson = (r) => ({
   id: r.id, station: r.station, zimmer: r.zimmer, lebenslauf: r.lebenslauf,
   letztePruefung: r.letzte_pruefung, tvTyp: r.tv_typ, seriennummer: r.seriennummer,
   freenetId: r.freenet_id, gueltigBis: r.gueltig_bis, inaktiv: r.inaktiv,
+  fernbedienung: r.fernbedienung || '',
   updatedAt: r.updated_at,
 });
 
@@ -171,8 +172,8 @@ async function upsertRoomLww(r) {
   // wenn Gerät B den selben Raum mit neuerer updatedAt synct.
   const res = await pool.query(
     `INSERT INTO rooms (id, station, zimmer, lebenslauf, letzte_pruefung, tv_typ,
-                        seriennummer, freenet_id, gueltig_bis, inaktiv, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                        seriennummer, freenet_id, gueltig_bis, inaktiv, updated_at, fernbedienung)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (id) DO UPDATE SET
        station=EXCLUDED.station, zimmer=EXCLUDED.zimmer,
        lebenslauf = CASE WHEN length(EXCLUDED.lebenslauf) > length(rooms.lebenslauf)
@@ -185,11 +186,15 @@ async function upsertRoomLww(r) {
        gueltig_bis = CASE WHEN EXCLUDED.gueltig_bis > rooms.gueltig_bis
                           THEN EXCLUDED.gueltig_bis ELSE rooms.gueltig_bis END,
        inaktiv = CASE WHEN EXCLUDED.updated_at > rooms.updated_at THEN EXCLUDED.inaktiv ELSE rooms.inaktiv END,
+       -- Ältere App-Versionen kennen das Feld nicht und schicken es leer: nie mit leer überschreiben
+       fernbedienung = CASE WHEN EXCLUDED.fernbedienung <> ''
+                             AND (rooms.fernbedienung = '' OR EXCLUDED.updated_at >= rooms.updated_at)
+                            THEN EXCLUDED.fernbedienung ELSE rooms.fernbedienung END,
        updated_at = GREATEST(EXCLUDED.updated_at, rooms.updated_at)
      RETURNING id`,
     [r.id, r.station || '', r.zimmer || '', r.lebenslauf || '', r.letztePruefung || '',
      r.tvTyp || '', r.seriennummer || '', r.freenetId || '', r.gueltigBis || '',
-     !!r.inaktiv, r.updatedAt || '']
+     !!r.inaktiv, r.updatedAt || '', String(r.fernbedienung || '').trim()]
   );
   return res.rowCount > 0;
 }
@@ -484,6 +489,7 @@ router.post('/api/web/rooms', requireWebAuth, express.json(), async (req, res) =
     lebenslauf: `${heute}: Zimmer über die Weboberfläche angelegt`,
     tvTyp: b.tvTyp || '', seriennummer: b.seriennummer || '',
     freenetId: b.freenetId || '', gueltigBis: b.gueltigBis || '',
+    fernbedienung: b.fernbedienung || '',
     inaktiv: false, updatedAt: nowIso(),
   });
   res.json({ ok: true, id });
@@ -505,6 +511,7 @@ router.patch('/api/web/rooms/:id', requireWebAuth, express.json(), async (req, r
   await upsertRoomLww({
     ...alt,
     tvTyp: b.tvTyp !== undefined ? b.tvTyp : alt.tvTyp,
+    fernbedienung: b.fernbedienung !== undefined ? b.fernbedienung : alt.fernbedienung,
     seriennummer: b.seriennummer !== undefined ? b.seriennummer : alt.seriennummer,
     freenetId: b.freenetId !== undefined ? b.freenetId : alt.freenetId,
     gueltigBis: b.gueltigBis !== undefined ? b.gueltigBis : alt.gueltigBis,
@@ -1745,8 +1752,8 @@ function sendeCsv(res, dateiname, headers, rows) {
 
 router.get('/api/web/export/zimmer.:fmt', requireWebAuth, async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM rooms ORDER BY station, zimmer');
-  const headers = ['Station','Zimmer','TV-Typ','Seriennummer','Freenet-ID','Gültig bis','Letzte Prüfung','Inaktiv'];
-  const dataRows = rows.map((r) => [r.station, r.zimmer, r.tv_typ, r.seriennummer, r.freenet_id,
+  const headers = ['Station','Zimmer','TV-Typ','Fernbedienung','Seriennummer','Freenet-ID','Gültig bis','Letzte Prüfung','Inaktiv'];
+  const dataRows = rows.map((r) => [r.station, r.zimmer, r.tv_typ, r.fernbedienung, r.seriennummer, r.freenet_id,
     r.gueltig_bis, r.letzte_pruefung, r.inaktiv ? 'Ja' : '']);
   if (req.params.fmt === 'csv') return sendeCsv(res, 'KKH-Zimmer.csv', headers, dataRows);
   await sendeXlsx(res, 'KKH-Zimmer.xlsx', [{ name: 'Zimmer',
