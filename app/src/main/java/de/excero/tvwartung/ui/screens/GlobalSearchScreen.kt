@@ -100,7 +100,7 @@ fun GlobalSearchScreen(
     val zimmerTreffer = remember(q, rooms) {
         if (q.isBlank()) emptyList() else rooms.filter {
             it.id.contains(q, true) || it.station.contains(q, true) || it.zimmer.contains(q, true) ||
-                it.tvTyp.contains(q, true) || it.seriennummer.contains(q, true) || it.freenetId.contains(q, true)
+                it.tvTyp.contains(q, true) || it.fernbedienung.contains(q, true) || it.seriennummer.contains(q, true) || it.freenetId.contains(q, true)
         }.take(20).map {
             Treffer.Zimmer("${it.station} · Zimmer ${it.zimmer}",
                 listOfNotNull(it.tvTyp.ifBlank { null }, it.seriennummer.ifBlank { null }?.let { s -> "SN $s" })

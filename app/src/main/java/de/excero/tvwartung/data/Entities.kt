@@ -24,7 +24,9 @@ data class TvRoom(
     @ColumnInfo(defaultValue = "0")
     val inaktiv: Boolean = false,        // Zimmer aufgelöst/TV abgebaut – bleibt mit Historie erhalten
     @ColumnInfo(defaultValue = "")
-    val updatedAt: String = ""           // letzte Änderung (ISO-Datum+Zeit) für die Server-Synchronisation
+    val updatedAt: String = "",          // letzte Änderung (ISO-Datum+Zeit) für die Server-Synchronisation
+    @ColumnInfo(defaultValue = "")
+    val fernbedienung: String = ""       // Typ/Modell der Fernbedienung (für die Nachbestellung)
 )
 
 /**

@@ -93,7 +93,7 @@ object XlsxWriter {
         append("<col min=\"1\" max=\"1\" width=\"10\" customWidth=\"1\"/>")
         append("<col min=\"2\" max=\"3\" width=\"8\" customWidth=\"1\"/>")
         append("<col min=\"4\" max=\"4\" width=\"70\" customWidth=\"1\"/>")
-        append("<col min=\"5\" max=\"9\" width=\"16\" customWidth=\"1\"/>")
+        append("<col min=\"5\" max=\"10\" width=\"16\" customWidth=\"1\"/>")
         append("</cols>")
         append("<sheetData>")
         append(
@@ -101,7 +101,7 @@ object XlsxWriter {
                 1,
                 listOf(
                     "ID", "Station", "Zimmer", "Lebenslauf", "letzte Prüfung",
-                    "TV-Typ", "TV Seriennummer", "Freenet-ID", "Gültig bis"
+                    "TV-Typ", "TV Seriennummer", "Freenet-ID", "Gültig bis", "Fernbedienung"
                 )
             )
         )
@@ -117,6 +117,7 @@ object XlsxWriter {
             append(textCell(6, r, room.seriennummer))
             append(textCell(7, r, room.freenetId))
             append(dateCell(8, r, room.gueltigBis))
+            append(textCell(9, r, room.fernbedienung))
             append("</row>")
         }
         append("</sheetData></worksheet>")

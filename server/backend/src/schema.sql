@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS app_aktivitaet (
 );
 
 -- v1.9: Mehrbenutzer & Team-Stundenzettel
+-- Typ/Modell der Fernbedienung je Zimmer (für die Nachbestellung)
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS fernbedienung TEXT NOT NULL DEFAULT '';
 ALTER TABLE inspections ADD COLUMN IF NOT EXISTS mitarbeiter TEXT NOT NULL DEFAULT '';
 ALTER TABLE inspections ADD COLUMN IF NOT EXISTS geloescht BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_inspections_created ON inspections(created_at);

@@ -116,6 +116,7 @@ fun PruefbogenScreen(
         )
     }
     var tvTyp by remember(current.id) { mutableStateOf(current.tvTyp) }
+    var fernbedienung by remember(current.id) { mutableStateOf(current.fernbedienung) }
     var neuesGueltigBis by remember(current.id) { mutableStateOf("") }
     var gueltigBisKorrektur by remember(current.id) { mutableStateOf("") }
     var dateError by remember { mutableStateOf(false) }
@@ -152,6 +153,8 @@ fun PruefbogenScreen(
 
     val freenetVerlaengert = punkte[7].ergebnis == true
     val tvTypGeaendert = tvTyp.trim() != current.tvTyp.trim() && tvTyp.isNotBlank()
+    val fernbedienungGeaendert =
+        fernbedienung.trim() != current.fernbedienung.trim() && fernbedienung.isNotBlank()
 
     // Alle durchgeführten Arbeiten inkl. Freenet-Verlängerung und Freitext
     val alleArbeiten: List<String> = buildList {
@@ -181,6 +184,10 @@ fun PruefbogenScreen(
             }
         }
         if (tvTypGeaendert) append(", TV-Typ angepasst")
+        if (fernbedienungGeaendert) append(
+            if (current.fernbedienung.isBlank()) ", Fernbedienung erfasst (${fernbedienung.trim()})"
+            else ", Fernbedienung geändert (${fernbedienung.trim()})"
+        )
         if (gueltigBisKorrektur.isNotBlank() && !freenetVerlaengert) append(", Gültigkeitsdatum korrigiert")
         ausgewaehlteArbeiten.forEach { append(", $it") }
         arbeitSonstige.split(",").map { it.trim() }.filter { it.isNotEmpty() }
@@ -233,6 +240,12 @@ fun PruefbogenScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    TvTypAuswahl(
+                        value = fernbedienung,
+                        onValueChange = { fernbedienung = it },
+                        bekannteTypen = viewModel.bekannteFernbedienungen(tvTyp),
+                        label = "Fernbedienung (Typ/Modell)"
+                    )
                 }
             }
 
@@ -545,7 +558,8 @@ fun PruefbogenScreen(
                         neuesGueltigBis = isoNeu,
                         neueSeriennummer = if (serienUebernehmen) punkte[1].bemerkung.trim() else null,
                         neueFreenetId = if (freenetIdUebernehmen) punkte[2].bemerkung.trim() else null,
-                        neuerTvTyp = if (tvTypGeaendert) tvTyp.trim() else null
+                        neuerTvTyp = if (tvTypGeaendert) tvTyp.trim() else null,
+                        neueFernbedienung = if (fernbedienungGeaendert) fernbedienung.trim() else null
                     )
                     onDone()
                 },

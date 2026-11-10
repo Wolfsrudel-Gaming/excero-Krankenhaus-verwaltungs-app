@@ -370,7 +370,8 @@ class Repository(private val db: AppDatabase) {
         neuesGueltigBis: String? = null,
         neueSeriennummer: String? = null,
         neueFreenetId: String? = null,
-        neuerTvTyp: String? = null
+        neuerTvTyp: String? = null,
+        neueFernbedienung: String? = null
     ) {
         db.withTransaction {
             val mitUuid = if (inspection.uuid.isBlank())
@@ -391,6 +392,7 @@ class Repository(private val db: AppDatabase) {
                     seriennummer = neueSeriennummer?.takeIf { it.isNotBlank() } ?: room.seriennummer,
                     freenetId = neueFreenetId?.takeIf { it.isNotBlank() } ?: room.freenetId,
                     tvTyp = neuerTvTyp?.takeIf { it.isNotBlank() } ?: room.tvTyp,
+                    fernbedienung = neueFernbedienung?.takeIf { it.isNotBlank() } ?: room.fernbedienung,
                     updatedAt = Dates.nowIsoDateTime()
                 )
             )

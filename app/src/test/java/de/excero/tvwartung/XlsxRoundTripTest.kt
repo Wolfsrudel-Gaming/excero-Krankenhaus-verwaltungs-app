@@ -15,7 +15,8 @@ class XlsxRoundTripTest {
             id = "A4_01a", station = "A4", zimmer = "01a",
             lebenslauf = "01.10.2020: Prüfung; Sprache neu\n02.02.2026: TV überprüft, Freenet verlängert & Co. <Test>",
             letztePruefung = "2026-02-02", tvTyp = "Lenco",
-            seriennummer = "170302795", freenetId = "64473038863", gueltigBis = "2027-03-19"
+            seriennummer = "170302795", freenetId = "64473038863", gueltigBis = "2027-03-19",
+            fernbedienung = "Lenco RC-01"
         ),
         TvRoom(
             id = "B5_SZ", station = "B5", zimmer = "SZ",
@@ -52,6 +53,7 @@ class XlsxRoundTripTest {
             assertEquals(expected.seriennummer, actual.seriennummer)
             assertEquals(expected.freenetId, actual.freenetId)
             assertEquals(expected.gueltigBis, actual.gueltigBis)
+            assertEquals(expected.fernbedienung, actual.fernbedienung)
         }
 
         // Datei für externe Validierung (z. B. openpyxl) aufheben

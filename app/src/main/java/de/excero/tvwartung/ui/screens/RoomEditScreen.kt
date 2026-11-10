@@ -58,6 +58,7 @@ fun RoomEditScreen(
     var station by remember { mutableStateOf("") }
     var zimmer by remember { mutableStateOf("") }
     var tvTyp by remember { mutableStateOf("") }
+    var fernbedienung by remember { mutableStateOf("") }
     var seriennummer by remember { mutableStateOf("") }
     var freenetId by remember { mutableStateOf("") }
     var gueltigBis by remember { mutableStateOf("") }
@@ -121,6 +122,12 @@ fun RoomEditScreen(
                         onValueChange = { tvTyp = it },
                         bekannteTypen = viewModel.bekannteTvTypen()
                     )
+                    TvTypAuswahl(
+                        value = fernbedienung,
+                        onValueChange = { fernbedienung = it },
+                        bekannteTypen = viewModel.bekannteFernbedienungen(tvTyp),
+                        label = "Fernbedienung (Typ/Modell)"
+                    )
                     OutlinedTextField(
                         value = seriennummer, onValueChange = { seriennummer = it },
                         label = { Text("TV Seriennummer") }, singleLine = true,
@@ -160,7 +167,8 @@ fun RoomEditScreen(
                             tvTyp = tvTyp.trim(),
                             seriennummer = seriennummer.trim(),
                             freenetId = freenetId.trim(),
-                            gueltigBis = iso
+                            gueltigBis = iso,
+                            fernbedienung = fernbedienung.trim()
                         )
                     ) { onCreated(it) }
                 },
