@@ -6,6 +6,9 @@ package de.excero.tvwartung.util
  */
 object Changelog {
     val EINTRAEGE: List<Pair<String, List<String>>> = listOf(
+        "2.0-beta40" to listOf(
+            "Foto-Stempel zeigt nur noch Zimmer und Datum, keine Uhrzeit mehr",
+        ),
         "2.0-beta39" to listOf(
             "Prüfbericht-PDF: Fernbedienungstyp steht jetzt neben dem TV-Typ",
         ),

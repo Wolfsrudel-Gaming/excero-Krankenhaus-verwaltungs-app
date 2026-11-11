@@ -426,14 +426,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Neu aufgenommenes Kamerafoto verarbeiten: Wasserzeichen (Station/Zimmer +
-     * Zeitstempel) einbrennen, protokollieren, Prüfbericht-PDF aktualisieren.
+     * Datum, bewusst ohne Uhrzeit) einbrennen, protokollieren, Prüfbericht-PDF aktualisieren.
      */
     fun verarbeiteNeuesFoto(roomId: String, datei: java.io.File, dateFolder: String, onDone: () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             val room = repository.getRoom(roomId)
             val ort = if (room != null) "${room.station} · Zimmer ${room.zimmer}" else roomId
-            val zeit = Dates.nowStempel()
-            photoStore.applyWatermark(datei, listOf(ort, zeit))
+            photoStore.applyWatermark(datei, listOf(ort, Dates.todayGerman()))
             repository.logAction(roomId, "Foto aufgenommen")
             aktualisiereBerichtPdfIntern(roomId, dateFolder)
             withContext(Dispatchers.Main) { onDone() }
