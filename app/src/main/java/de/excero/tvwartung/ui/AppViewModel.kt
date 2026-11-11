@@ -420,8 +420,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repository.updateRoom(room, logAktion) }
     }
 
-    fun logAction(roomId: String, aktion: String) {
-        viewModelScope.launch { repository.logAction(roomId, aktion) }
+    fun logAction(roomId: String, aktion: String, ohneUhrzeit: Boolean = false) {
+        viewModelScope.launch { repository.logAction(roomId, aktion, ohneUhrzeit) }
     }
 
     /**
@@ -433,7 +433,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val room = repository.getRoom(roomId)
             val ort = if (room != null) "${room.station} · Zimmer ${room.zimmer}" else roomId
             photoStore.applyWatermark(datei, listOf(ort, Dates.todayGerman()))
-            repository.logAction(roomId, "Foto aufgenommen")
+            repository.logAction(roomId, "Foto aufgenommen", ohneUhrzeit = true)
             aktualisiereBerichtPdfIntern(roomId, dateFolder)
             withContext(Dispatchers.Main) { onDone() }
         }
@@ -472,7 +472,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val imported = uris.count { photoStore.importFromGallery(roomId, it, dateFolder) != null }
             if (imported > 0) {
-                repository.logAction(roomId, "$imported Foto(s) aus Galerie hinzugefügt")
+                repository.logAction(roomId, "$imported Foto(s) aus Galerie hinzugefügt", ohneUhrzeit = true)
                 aktualisiereBerichtPdfIntern(roomId, dateFolder)
             }
             _message.value = when {

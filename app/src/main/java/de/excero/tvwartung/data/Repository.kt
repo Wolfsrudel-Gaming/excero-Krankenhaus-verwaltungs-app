@@ -120,9 +120,13 @@ class Repository(private val db: AppDatabase) {
     suspend fun getAllActivity(): List<ActivityLog> = db.activityLogDao().getAll()
 
     /** Interne Protokollierung: wann wurde welches Zimmer bearbeitet (wird nie exportiert). */
-    suspend fun logAction(roomId: String, aktion: String) {
+    suspend fun logAction(roomId: String, aktion: String, ohneUhrzeit: Boolean = false) {
         db.activityLogDao().insert(
-            ActivityLog(roomId = roomId, zeitpunkt = Dates.nowIsoDateTime(), aktion = aktion)
+            ActivityLog(
+                roomId = roomId,
+                zeitpunkt = if (ohneUhrzeit) Dates.todayIso() else Dates.nowIsoDateTime(),
+                aktion = aktion
+            )
         )
     }
 

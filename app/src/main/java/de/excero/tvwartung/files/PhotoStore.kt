@@ -13,8 +13,6 @@ import androidx.core.content.FileProvider
 import de.excero.tvwartung.util.Dates
 import java.io.File
 import java.io.FileOutputStream
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 
 /**
  * Verwaltet die Zimmerfotos im app-eigenen externen Speicher unter
@@ -23,7 +21,7 @@ import java.time.format.DateTimeFormatter
  */
 class PhotoStore(private val context: Context) {
 
-    private val timeFormat = DateTimeFormatter.ofPattern("HHmmss")
+    private val KUERZEL_ZEICHEN = "abcdefghijklmnopqrstuvwxyz0123456789"
     private val bildEndungen = setOf("jpg", "jpeg", "png")
 
     private fun istBild(f: File): Boolean =
@@ -37,14 +35,13 @@ class PhotoStore(private val context: Context) {
 
     /** Legt die Zieldatei für ein neues Foto an ("fern", "nah" oder "galerie"). */
     fun newPhotoFile(roomId: String, label: String, dateFolder: String = Dates.todayFolder()): File {
-        val time = LocalTime.now().format(timeFormat)
         val dir = dirFor(roomId, dateFolder)
-        var file = File(dir, "${roomId}_${dateFolder}_${label}_$time.jpg")
-        var suffix = 1
-        while (file.exists()) {
-            file = File(dir, "${roomId}_${dateFolder}_${label}_${time}_$suffix.jpg")
-            suffix++
-        }
+        val vorhandene = dir.list()?.toList() ?: emptyList()
+        var file: File
+        do {
+            val kuerzel = (1..4).map { KUERZEL_ZEICHEN.random() }.joinToString("")
+            file = File(dir, PhotoNamen.neuerName(roomId, dateFolder, label, vorhandene, kuerzel))
+        } while (file.exists())
         return file
     }
 
@@ -74,7 +71,7 @@ class PhotoStore(private val context: Context) {
         if (dateFolder.isBlank()) return emptyList()
         return File(rootDir(), "$roomId/$dateFolder")
             .listFiles { f -> istBild(f) }
-            ?.sortedBy { it.name } ?: emptyList()
+            ?.sortedWith(compareBy(PhotoNamen.nachAlter) { it.name }) ?: emptyList()
     }
 
     /**

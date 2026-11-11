@@ -305,18 +305,9 @@ object PruefberichtPdf {
         }
     }
 
-    /** "A4_01a_20260714_fern_101530.jpg" → "Fern · 10:15:30" */
-    private fun photoLabel(file: File): String {
-        val parts = file.nameWithoutExtension.split("_")
-        // Uhrzeit ist der letzte 6-stellige Ziffernblock, das Label steht davor
-        val timeIndex = parts.indexOfLast { it.length == 6 && it.all { c -> c.isDigit() } }
-        if (timeIndex >= 1) {
-            val time = parts[timeIndex]
-            val label = lesbaresLabel(parts[timeIndex - 1])
-            return "$label · ${time.substring(0, 2)}:${time.substring(2, 4)}:${time.substring(4, 6)}"
-        }
-        return file.name
-    }
+    /** Bildunterschrift: nur die Art des Fotos, bewusst ohne Uhrzeit. */
+    private fun photoLabel(file: File): String =
+        de.excero.tvwartung.files.PhotoNamen.label(file.name)?.let { lesbaresLabel(it) } ?: file.name
 
     /** Interne Foto-Kürzel in verständliche Beschriftungen übersetzen. */
     private fun lesbaresLabel(label: String): String = when (label) {

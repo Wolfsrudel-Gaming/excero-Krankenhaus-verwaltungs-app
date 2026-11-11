@@ -16,10 +16,10 @@ object Dates {
 
     fun nowIsoDateTime(): String = java.time.LocalDateTime.now().withNano(0).format(dateTime)
 
-    /** ISO-Datum+Zeit → "14.07.2026 10:32". */
+    /** ISO-Datum+Zeit → "14.07.2026 10:32"; reines ISO-Datum (Foto-Einträge) → "14.07.2026". */
     fun isoDateTimeToGerman(value: String): String =
         runCatching { java.time.LocalDateTime.parse(value, dateTime).format(germanDateTime) }
-            .getOrDefault(value)
+            .getOrElse { isoToGerman(value) }
 
     /** Stundenzahl als deutscher Text ohne überflüssige Nullen, z. B. 3.25 → "3,25". */
     fun stundenText(stunden: Double): String =

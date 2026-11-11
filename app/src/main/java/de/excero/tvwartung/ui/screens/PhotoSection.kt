@@ -98,7 +98,7 @@ fun PhotoSection(
     }
     fun loesche(file: File) {
         viewModel.photoStore.delete(file)
-        viewModel.logAction(roomId, "Foto gelöscht")
+        viewModel.logAction(roomId, "Foto gelöscht", ohneUhrzeit = true)
         viewModel.aktualisiereBerichtPdf(roomId, dateFolder)
         refresh++
     }
@@ -134,7 +134,8 @@ fun PhotoSection(
     }
     // Neuestes Foto zu einem Feld (Label steckt im Dateinamen: …_<label>_<zeit>.jpg)
     fun fotoFuer(label: String): File? =
-        photos.filter { it.name.contains("_${label}_") }.maxByOrNull { it.name }
+        photos.filter { it.name.contains("_${label}_") }
+            .maxWithOrNull(compareBy(de.excero.tvwartung.files.PhotoNamen.nachAlter) { it.name })
     val feldFotos = felder.mapNotNull { fotoFuer(it.first) }.toSet()
     val weitereFotos = photos.filterNot { it in feldFotos }
 
